@@ -79,8 +79,12 @@ export async function GET() {
         createdAt: act.createdAt.toISOString(),
       })),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching data from Prisma:', error);
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Failed to fetch data',
+      message: error?.message || String(error),
+      stack: error?.stack || ''
+    }, { status: 500 });
   }
 }
