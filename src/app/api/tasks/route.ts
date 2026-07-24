@@ -1,8 +1,39 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+function checkAuth(req: Request, allowedRoles: string[]): boolean {
+  const userRoleHeader = req.headers.get('X-User-Role') || '';
+  if (!userRoleHeader) return true; // Fallback if header is omitted
+  const roles = userRoleHeader.split(',').map((r) => r.trim());
+  if (roles.includes('Admin') || roles.includes('Owner')) return true;
+  return roles.some((role) => allowedRoles.includes(role));
+}
+
+async function syncClientPoints(clientId: string) {
+  try {
+    const tasks = await prisma.task.findMany({ where: { clientId } });
+    const usedPoint = tasks.reduce((sum, t) => sum + (t.score || 0), 0);
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (client) {
+      await prisma.client.update({
+        where: { id: clientId },
+        data: {
+          usedPoint,
+          remainingPoint: client.monthlyPointBudget - usedPoint,
+        },
+      });
+    }
+  } catch (err) {
+    console.error('Error syncing client points:', err);
+  }
+}
+
 export async function POST(req: Request) {
   try {
+    if (!checkAuth(req, ['Strategist'])) {
+      return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 });
+    }
+
     const body = await req.json();
     const task = await prisma.task.create({
       data: {
@@ -15,6 +46,7 @@ export async function POST(req: Request) {
         priority: body.priority || 'Medium',
         status: body.status || 'Brief',
         clientId: body.clientId,
+        workspaceId: body.workspaceId || null,
         postingDate: body.postingDate ? new Date(body.postingDate) : null,
         deadline: new Date(body.deadline || Date.now()),
         assignedUserIds: JSON.stringify(body.assignedUserIds || []),
@@ -24,8 +56,11 @@ export async function POST(req: Request) {
         previewLink: body.previewLink || '',
         checklist: JSON.stringify(body.checklist || []),
         comments: JSON.stringify(body.comments || []),
+        stages: body.stages ? JSON.stringify(body.stages) : null,
       },
     });
+
+    await syncClientPoints(body.clientId);
 
     return NextResponse.json(task);
   } catch (e) {
@@ -36,6 +71,10 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    if (!checkAuth(req, ['Strategist', 'Editor', 'Production Assistant', 'Scheduler'])) {
+      return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
@@ -52,6 +91,7 @@ export async function PATCH(req: Request) {
     if (body.priority !== undefined) updateData.priority = body.priority;
     if (body.status !== undefined) updateData.status = body.status;
     if (body.clientId !== undefined) updateData.clientId = body.clientId;
+    if (body.workspaceId !== undefined) updateData.workspaceId = body.workspaceId || null;
     
     if (body.postingDate !== undefined) {
       updateData.postingDate = body.postingDate ? new Date(body.postingDate) : null;
@@ -74,11 +114,24 @@ export async function PATCH(req: Request) {
     if (body.comments !== undefined) {
       updateData.comments = JSON.stringify(body.comments);
     }
+    if (body.stages !== undefined) {
+      updateData.stages = JSON.stringify(body.stages);
+    }
+
+    // Get old clientId before update
+    const oldTask = await prisma.task.findUnique({ where: { id } });
 
     const updated = await prisma.task.update({
       where: { id },
       data: updateData,
     });
+
+    if (oldTask) {
+      await syncClientPoints(oldTask.clientId);
+      if (body.clientId && body.clientId !== oldTask.clientId) {
+        await syncClientPoints(body.clientId);
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (e) {
@@ -89,11 +142,22 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    if (!checkAuth(req, [])) { // Only Admin or Owner allowed
+      return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
 
+    const oldTask = await prisma.task.findUnique({ where: { id } });
+
     await prisma.task.delete({ where: { id } });
+
+    if (oldTask) {
+      await syncClientPoints(oldTask.clientId);
+    }
+
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error('Error deleting task:', e);

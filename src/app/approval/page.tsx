@@ -3,26 +3,39 @@
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
-import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink } from 'lucide-react';
-import { hasPermission } from '@/lib/rbac';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function ApprovalPage() {
   const { currentUser } = useUser();
-  const { tasks, approveTask, updateTaskStatus } = useData();
+  const { tasks, clients, approveTask, updateTaskStatus } = useData();
+  const { workspaces } = useWorkspace();
 
+  const [viewType, setViewType] = useState<'card' | 'table'>('card');
   const [revisionNotes, setRevisionNotes] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const approvalQueue = tasks.filter((t) => t.status === 'Approval');
-  const canApprove = hasPermission(currentUser, 'APPROVE_TASKS');
+  // Authenticated review checks
+  const isAnggi = currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi';
+  const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+  const canApprove = isAnggi || isAdmin;
+
+  // Filter tasks in Approval stage
+  const rawQueue = tasks.filter((t) => t.status === 'Approval');
+
+  // Filter Approval Queue based on assignment (Requirement 2)
+  const approvalQueue = rawQueue.filter((t) => {
+    if (isAdmin || isAnggi) return true; // Admins and Anggi can see/approve everything
+    return false; // Other users see nothing in their queue
+  });
 
   const handleApprove = (taskId: string) => {
     try {
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
     } catch (e) {}
 
-    approveTask(taskId, 'Scheduling', currentUser.id);
+    approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
     alert('Task approved! Moved to Scheduling pipeline stage.');
   };
 
@@ -40,78 +53,210 @@ export default function ApprovalPage() {
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
-            Approval Queue <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Strategist → Owner → Approved</span>
+            Approval Queue <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Review Gate</span>
           </h1>
-          <p className="text-xs text-neutral-500">Review creative assets, grant final approval, or request revisions.</p>
+          <p className="text-xs text-neutral-500">
+            Anggi is responsible for approvals. Admins can view and override queue approvals.
+          </p>
+        </div>
+
+        {/* View Switcher */}
+        <div className="flex bg-neutral-100 p-0.5 rounded-lg border border-neutral-200 text-xs font-semibold">
+          <button
+            onClick={() => setViewType('card')}
+            className={`px-3 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+              viewType === 'card' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" /> Card View
+          </button>
+          <button
+            onClick={() => setViewType('table')}
+            className={`px-3 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+              viewType === 'table' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" /> Table View
+          </button>
         </div>
       </div>
 
-      {/* Queue Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {approvalQueue.map((t) => (
-          <div key={t.id} className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-4 shadow-xs">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-neutral-100 text-neutral-800 border border-neutral-200 font-mono">
-                  {t.clientName}
-                </span>
-                <h3 className="text-base font-bold text-neutral-900 mt-2">{t.title}</h3>
-                <p className="text-xs text-neutral-500 mt-0.5">{t.category} • {t.format}</p>
-              </div>
+      {/* Role Alert */}
+      {!canApprove && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2.5 font-semibold">
+          <ShieldAlert className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+          <div>
+            <p>Access Restricted</p>
+            <p className="font-normal text-amber-700 mt-1">
+              Only Anggi or Admins are allowed to approve contents. Select Anggi or Devi in the user switcher above.
+            </p>
+          </div>
+        </div>
+      )}
 
-              <span className="text-xs font-mono font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                {t.score} pts
-              </span>
-            </div>
+      {/* Queue Views */}
+      {approvalQueue.length > 0 ? (
+        viewType === 'card' ? (
+          /* CARD VIEW */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {approvalQueue.map((t) => {
+              const uniqueUserNames = t.stages
+                ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName)))
+                : [];
 
-            {t.previewLink && (
-              <div className="rounded-xl overflow-hidden border border-neutral-200 max-h-48 bg-neutral-50">
-                <img src={t.previewLink} alt={t.title} className="w-full h-full object-cover" />
-              </div>
-            )}
+              return (
+                <div key={t.id} className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-4 shadow-xs flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded border"
+                          style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor, borderColor: `${t.clientColor}30` }}
+                        >
+                          {t.clientName}
+                        </span>
+                        <h3 className="text-base font-bold text-neutral-900 mt-2">{t.title}</h3>
+                        <p className="text-xs text-neutral-500 mt-0.5">PICs: {uniqueUserNames.join(', ') || 'Unassigned'}</p>
+                      </div>
 
-            {t.driveLink && (
-              <a
-                href={t.driveLink}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-xs text-neutral-900 font-semibold hover:underline bg-neutral-50 p-2.5 rounded-xl border border-neutral-200"
-              >
-                <ExternalLink className="w-4 h-4" /> Review Drive Master Asset
-              </a>
-            )}
+                      <span className="text-xs font-mono font-bold text-neutral-800 bg-neutral-100 px-2 py-1 rounded border border-neutral-200">
+                        {t.score} pts
+                      </span>
+                    </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center justify-between pt-4 border-t border-neutral-100">
-              <button
-                onClick={() => setSelectedTaskId(t.id)}
-                className="bg-white hover:bg-neutral-50 border border-neutral-200 text-red-600 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> Request Revision
-              </button>
+                    {t.previewLink && (
+                      <div className="rounded-xl overflow-hidden border border-neutral-200 max-h-48 bg-neutral-50 flex items-center justify-center">
+                        <img src={t.previewLink} alt={t.title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
 
-              <button
-                onClick={() => handleApprove(t.id)}
-                disabled={!canApprove}
-                className="bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition"
-              >
-                <CheckCircle className="w-4 h-4" /> Approve Content
-              </button>
+                    {t.driveLink && (
+                      <a
+                        href={t.driveLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between text-xs text-neutral-900 font-semibold hover:bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 transition"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ExternalLink className="w-4 h-4 text-neutral-500" /> Review Drive Master Asset
+                        </span>
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Actions (Only enable if Anggi or Admin) */}
+                  {canApprove && (
+                    <div className="flex items-center justify-between pt-4 border-t border-neutral-100 mt-4">
+                      <button
+                        onClick={() => setSelectedTaskId(t.id)}
+                        className="bg-white hover:bg-neutral-50 border border-neutral-200 text-red-655 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Request Revision
+                      </button>
+
+                      <button
+                        onClick={() => handleApprove(t.id)}
+                        className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-5 py-2 rounded-lg shadow-xs flex items-center gap-1.5 transition"
+                      >
+                        <CheckCircle className="w-4 h-4" /> Approve Content
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* TABLE VIEW (Requirement 12) */
+          <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs whitespace-nowrap">
+                <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
+                  <tr>
+                    <th className="px-4 py-3.5">Content</th>
+                    <th className="px-4 py-3.5">Client</th>
+                    <th className="px-4 py-3.5">Assignee</th>
+                    <th className="px-4 py-3.5">Deadline</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5">Priority</th>
+                    <th className="px-4 py-3.5">Workspace</th>
+                    <th className="px-4 py-3.5">Approval Date (Last Update)</th>
+                    <th className="px-4 py-3.5 font-bold">Reviewer</th>
+                    {canApprove && <th className="px-4 py-3.5 text-center">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                  {approvalQueue.map((t) => {
+                    const uniqueUserNames = t.stages
+                      ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName)))
+                      : [];
+
+                    const wsName = workspaces.find((w) => w.id === t.workspaceId)?.name || 'Main Workspace';
+
+                    // Reviewer Logic
+                    const reviewer = isAnggi ? 'Anggi' : isAdmin ? `Devi (Admin Override)` : 'Anggi';
+
+                    return (
+                      <tr key={t.id} className="hover:bg-neutral-50 transition">
+                        <td className="px-4 py-3.5 font-bold text-neutral-900">{t.title}</td>
+                        <td className="px-4 py-3.5 font-semibold">
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px]"
+                            style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor }}
+                          >
+                            {t.clientName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 font-semibold text-neutral-600">
+                          {uniqueUserNames.join(', ') || 'Unassigned'}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-500 font-bold">{t.deadline}</td>
+                        <td className="px-4 py-3.5">
+                          <span className="badge-waiting text-[10px] px-2 py-0.5 rounded border border-amber-200 font-bold">
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-neutral-800">{t.priority}</td>
+                        <td className="px-4 py-3.5 font-semibold text-neutral-500">{wsName}</td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-500">{t.updatedAt ? t.updatedAt.substring(0, 10) : 'Pending'}</td>
+                        <td className="px-4 py-3.5 font-bold text-neutral-900">{reviewer}</td>
+                        {canApprove && (
+                          <td className="px-4 py-3.5 text-center flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setSelectedTaskId(t.id)}
+                              className="p-1.5 rounded hover:bg-neutral-100 text-red-655"
+                              title="Request Revision"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleApprove(t.id)}
+                              className="p-1.5 rounded hover:bg-neutral-100 text-emerald-700"
+                              title="Approve Content"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-        ))}
-
-        {approvalQueue.length === 0 && (
-          <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-neutral-200/80 shadow-xs">
-            <ShieldCheck className="w-12 h-12 text-emerald-700 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-neutral-900">Approval Queue is Clear</h3>
-            <p className="text-xs text-neutral-500 mt-1">All production assets have been reviewed and approved.</p>
-          </div>
-        )}
-      </div>
+        )
+      ) : (
+        /* CLEAR QUEUE */
+        <div className="py-16 text-center bg-white rounded-2xl border border-neutral-200/80 shadow-xs">
+          <ShieldCheck className="w-12 h-12 text-emerald-700 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-neutral-900">Approval Queue is Clear</h3>
+          <p className="text-xs text-neutral-500 mt-1">All production assets have been reviewed and approved.</p>
+        </div>
+      )}
 
       {/* Revision Modal */}
       {selectedTaskId && (
@@ -128,13 +273,13 @@ export default function ApprovalPage() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setSelectedTaskId(null)}
-                className="px-4 py-2 rounded-lg text-xs text-neutral-600 hover:bg-neutral-100"
+                className="px-4 py-2 rounded-lg text-xs text-neutral-500 hover:bg-neutral-100 font-semibold"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRequestRevision(selectedTaskId)}
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-4 py-2 rounded-lg"
+                className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg"
               >
                 Send Revision
               </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState } from 'react';
-import { WorkspaceItem, DEFAULT_WORKSPACE } from '@/lib/services/workspace-service';
+import { WorkspaceItem, DEFAULT_WORKSPACE, WORKSPACES } from '@/lib/services/workspace-service';
 
 interface WorkspaceContextType {
   currentWorkspace: WorkspaceItem;
@@ -13,9 +13,7 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([
-    DEFAULT_WORKSPACE,
-  ]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>(WORKSPACES);
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceItem>(DEFAULT_WORKSPACE);
 
   const switchWorkspace = (workspaceId: string) => {

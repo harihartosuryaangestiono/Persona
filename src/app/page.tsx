@@ -3,6 +3,7 @@
 import React from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import {
   DollarSign,
   Award,
@@ -13,64 +14,89 @@ import {
   Users,
   ExternalLink,
   Zap,
+  Calendar as CalendarIcon,
+  Briefcase,
+  AlertTriangle,
+  FolderOpen
 } from 'lucide-react';
 import { formatRupiah, getCapacityHealth } from '@/lib/score-calculator';
 
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
-  const { tasks, worklogs } = useData();
+  const { tasks, worklogs, clients, attendances } = useData();
+  const { currentWorkspace } = useWorkspace();
 
   // Role Checks
-  const isOwner = currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin');
-  const isStrategist = currentUser.roles.includes('Strategist') && !isOwner;
-  const isEditorOnly = currentUser.roles.includes('Editor') && !isOwner && !currentUser.roles.includes('Scheduler');
-  const isHybridScheduler = currentUser.roles.includes('Scheduler') && !isOwner;
-  const isPAOnly = currentUser.roles.includes('Production Assistant') && !currentUser.roles.includes('Editor') && !isOwner;
+  const isOwner = currentUser?.roles.includes('Owner') || currentUser?.roles.includes('Admin');
+  const isStrategist = currentUser?.roles.includes('Strategist');
+  const isEditor = currentUser?.roles.includes('Editor');
+  const isScheduler = currentUser?.roles.includes('Scheduler');
+  const isPA = currentUser?.roles.includes('Production Assistant');
 
-  // Filter Tasks for current user
-  const userWorklogs = worklogs.filter((w) => w.userName === currentUser.name || w.userId === currentUser.id);
-  const userTotalPoints = userWorklogs.reduce((sum, w) => sum + w.score, 0);
-  const userCOGS = userTotalPoints * 250;
-  const capacityHealth = getCapacityHealth(userTotalPoints, currentUser.monthlyCapacity || 12000);
+  // Filter Tasks for current user's workspace
+  const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id);
 
-  // Executive Metrics
+  // Recalculate employee workload score from stages (Requirement 19)
+  const userTotalPoints = worklogs.reduce((sum, w) => {
+    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+    if (logStages.length > 0) {
+      const userStagePoints = logStages
+        .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
+        .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+      return sum + userStagePoints;
+    } else {
+      const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
+      return sum + (isUserLog ? w.score : 0);
+    }
+  }, 0);
+
+  const capacityHealth = getCapacityHealth(userTotalPoints, currentUser?.monthlyCapacity || 12000);
+
+  // Executive Metrics (Admins)
   const totalAgencyPoints = worklogs.reduce((sum, w) => sum + w.score, 0);
-  const totalAgencyCOGS = totalAgencyPoints * 250;
+  const totalAgencyCOGS = totalAgencyPoints * 250; // Employee Point COGS: Rp250 / point
+
+  // Filter pending approvals for Admin
+  const pendingApprovals = tasks.filter((t) => t.status === 'Approval');
+
+  // Filter today's attendance
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayAttendances = attendances.filter((a) => a.date.startsWith(todayStr));
 
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
-      {/* Personalized Minimal Greeting Header */}
+      {/* Personalized Greeting Header */}
       <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          {currentUser.avatar && currentUser.avatar.trim() !== '' ? (
+          {currentUser?.avatar ? (
             <img
               src={currentUser.avatar}
               alt={currentUser.name}
               className="w-12 h-12 rounded-xl object-cover border border-neutral-200"
             />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white font-bold text-lg flex items-center justify-center shadow-xs border border-neutral-200">
-              {currentUser.name.charAt(0)}
+            <div className="w-12 h-12 rounded-xl bg-neutral-900 text-white font-bold text-lg flex items-center justify-center border border-neutral-200">
+              {currentUser?.name.charAt(0)}
             </div>
           )}
           <div>
             <h1 className="text-xl font-bold tracking-tight text-neutral-900">
-              Good Morning, {currentUser.name}
+              Good Morning, {currentUser?.name}
             </h1>
-            <p className="text-xs text-neutral-500 font-medium mt-0.5 flex items-center gap-2">
-              <span>{currentUser.roles.join(' • ')}</span>
+            <p className="text-xs text-neutral-500 font-semibold mt-0.5 flex items-center gap-2">
+              <span>{currentUser?.roles.join(' • ')}</span>
               <span>•</span>
-              <span>Workspace Overview</span>
+              <span>Workspace: {currentWorkspace.name}</span>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 bg-neutral-50 border border-neutral-200 px-4 py-2 rounded-xl">
           <div className="text-right">
-            <p className="text-[10px] text-neutral-500 font-semibold uppercase">Capacity Health</p>
-            <p className="text-xs font-bold font-mono text-neutral-900">{userTotalPoints} / 12,000 pts ({capacityHealth.percent}%)</p>
+            <p className="text-[10px] text-neutral-500 font-bold uppercase">Your Workload Capacity</p>
+            <p className="text-xs font-bold font-mono text-neutral-900">{userTotalPoints.toLocaleString()} / 12,000 pts</p>
           </div>
-          <div className="w-8 h-8 rounded-full border border-neutral-300 flex items-center justify-center font-bold text-[10px] text-neutral-900 font-mono bg-white">
+          <div className="w-8 h-8 rounded-full border border-neutral-300 flex items-center justify-center font-bold text-[10px] text-neutral-900 font-mono bg-white shadow-2xs">
             {capacityHealth.percent}%
           </div>
         </div>
@@ -79,260 +105,268 @@ export default function DynamicDashboardPage() {
       {/* ---------------- DEVI (OWNER & EXECUTIVE DASHBOARD) ---------------- */}
       {isOwner && (
         <div className="space-y-6">
-          {/* Financials Banner — Monochrome Metric Blocks */}
+          {/* Financials Banner */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-2">
-              <p className="text-xs font-medium text-neutral-500 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-neutral-700" /> Production Value (COGS)
+            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-neutral-500 flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-neutral-700" /> Agency Payroll Burn (COGS)
               </p>
               <p className="text-2xl font-bold text-neutral-900 font-mono">{formatRupiah(totalAgencyCOGS)}</p>
-              <p className="text-[10px] text-neutral-500 font-mono">+24.5% vs last cycle</p>
+              <p className="text-[10px] text-neutral-400">Calculated at Rp250 / Employee Point</p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-2">
-              <p className="text-xs font-medium text-neutral-500 flex items-center gap-2">
-                <Award className="w-4 h-4 text-neutral-700" /> Total Points Generated
+            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-neutral-500 flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-neutral-700" /> Total Roster Workload
               </p>
-              <p className="text-2xl font-bold text-neutral-900 font-mono">{totalAgencyPoints} pts</p>
-              <p className="text-[10px] text-neutral-500 font-mono">6 Master Clients</p>
+              <p className="text-2xl font-bold text-neutral-900 font-mono">{totalAgencyPoints.toLocaleString()} pts</p>
+              <p className="text-[10px] text-neutral-400">Total logged workload points</p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-2">
-              <p className="text-xs font-medium text-neutral-500 flex items-center gap-2">
+            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-neutral-500 flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-neutral-700" /> Pending Approvals
               </p>
-              <p className="text-2xl font-bold text-neutral-900 font-mono">{tasks.filter((t) => t.status === 'Approval').length} Items</p>
-              <p className="text-[10px] text-amber-700 font-mono">Requires Action</p>
+              <p className="text-2xl font-bold text-neutral-900 font-mono">{pendingApprovals.length} Items</p>
+              <p className="text-[10px] text-amber-700 font-semibold font-mono">Needs Anggi's review</p>
             </div>
 
-            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-2">
-              <p className="text-xs font-medium text-neutral-500 flex items-center gap-2">
-                <Users className="w-4 h-4 text-neutral-700" /> Active Roster
+            <div className="p-5 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-1.5">
+              <p className="text-xs font-semibold text-neutral-500 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-neutral-700" /> Today's Attendance
               </p>
-              <p className="text-2xl font-bold text-neutral-900 font-mono">6 Employees</p>
-              <p className="text-[10px] text-emerald-700 font-mono">100% Attendance</p>
+              <p className="text-2xl font-bold text-neutral-900 font-mono">{todayAttendances.length} Active</p>
+              <p className="text-[10px] text-emerald-700 font-semibold">In office or remote clock-in</p>
             </div>
           </div>
 
-          {/* Executive Approval Queue Table */}
-          <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-neutral-700" /> Owner Approval Queue ({tasks.filter((t) => t.status === 'Approval').length})
-              </span>
-            </h3>
-
-            <div className="space-y-2.5">
-              {tasks
-                .filter((t) => t.status === 'Approval')
-                .map((task) => (
-                  <div
-                    key={task.id}
-                    className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <p className="font-semibold text-neutral-900">{task.title}</p>
-                      <p className="text-[11px] text-neutral-500 font-mono mt-0.5">{task.clientName || 'Samazama Japan'} • {task.format} • {task.score} pts</p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {task.previewLink && (
-                        <a
-                          href={task.previewLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 font-semibold flex items-center gap-1"
-                        >
-                          Preview <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                      <button className="px-3.5 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white font-semibold shadow-xs">
-                        Approve Task
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- ANGGI / GIGIE (STRATEGIST DASHBOARD) ---------------- */}
-      {isStrategist && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Today's Brief & Proposals */}
-            <div className="md:col-span-2 p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-neutral-700" /> Content Proposals & Strategic Briefs
-              </h3>
-
-              <div className="space-y-2 text-xs">
-                {tasks
-                  .filter((t) => t.status === 'Brief' || t.status === 'Content Proposal' || t.category === 'Strategic')
-                  .slice(0, 5)
-                  .map((t) => (
-                    <div key={t.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-neutral-900">{t.title}</p>
-                        <p className="text-[11px] text-neutral-500 font-mono mt-0.5">{t.category} • Deadline: {t.deadline}</p>
-                      </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-neutral-200 text-neutral-800">
-                        {t.status}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* Strategist Output */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Client Budgets Overview */}
             <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
               <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-                <Award className="w-4 h-4 text-neutral-700" /> Strategic Output
+                <Briefcase className="w-4 h-4 text-neutral-700" /> Client Point Budgets Burn
               </h3>
-
               <div className="space-y-3 text-xs">
-                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 space-y-1">
-                  <p className="text-neutral-500">Content Plans Created</p>
-                  <p className="text-xl font-bold text-neutral-900 font-mono">8 Proposals</p>
-                </div>
-                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 space-y-1">
-                  <p className="text-neutral-500">Client Approval Success Rate</p>
-                  <p className="text-xl font-bold text-emerald-700 font-mono">98.2%</p>
-                </div>
+                {clients.slice(0, 4).map((c) => {
+                  const percent = c.monthlyPointBudget > 0 ? Math.round((c.usedPoint / c.monthlyPointBudget) * 100) : 0;
+                  const isOver = c.usedPoint > c.monthlyPointBudget;
+
+                  return (
+                    <div key={c.id} className="space-y-1">
+                      <div className="flex justify-between font-semibold">
+                        <span>{c.name}</span>
+                        <span className={isOver ? 'text-red-600 font-bold' : 'text-neutral-700'}>
+                          {c.usedPoint} / {c.monthlyPointBudget} pts ({percent}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.min(100, percent)}%`,
+                            backgroundColor: isOver ? '#EF4444' : c.clientColor,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* ---------------- JABIN (EDITOR DASHBOARD) ---------------- */}
-      {isEditorOnly && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Editing Queue */}
-            <div className="md:col-span-2 p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+            {/* Approval Queue Overview */}
+            <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
               <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
                 <span className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-neutral-700" /> Active Editing Queue
-                </span>
-                <span className="text-xs font-mono text-neutral-600 bg-neutral-100 px-2.5 py-0.5 rounded-full border border-neutral-200">
-                  {userWorklogs.length} Tasks Logged
+                  <CheckCircle2 className="w-4 h-4 text-neutral-700" /> Approval Queue ({pendingApprovals.length})
                 </span>
               </h3>
-
-              <div className="space-y-2 text-xs">
-                {userWorklogs.slice(0, 6).map((w) => (
-                  <div key={w.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                {pendingApprovals.slice(0, 3).map((task) => (
+                  <div key={task.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs">
                     <div>
-                      <p className="font-semibold text-neutral-900">{w.contentTitle}</p>
-                      <p className="text-[11px] text-neutral-500 font-mono mt-0.5">{w.clientName} • {w.format} • {w.score} pts</p>
+                      <p className="font-semibold text-neutral-900">{task.title}</p>
+                      <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{task.clientName} • {task.score} pts</p>
                     </div>
-                    <span
-                      className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
-                        w.status === 'Posted'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}
-                    >
-                      {w.status}
-                    </span>
+                    {task.previewLink && (
+                      <a
+                        href={task.previewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 font-semibold flex items-center gap-1"
+                      >
+                        Review <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Jabin's Performance */}
-            <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-                <Award className="w-4 h-4 text-neutral-700" /> Editor Performance
-              </h3>
-
-              <div className="space-y-3 text-xs">
-                <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-1">
-                  <p className="text-neutral-500 font-medium">Points Earned This Month</p>
-                  <p className="text-2xl font-bold text-neutral-900 font-mono">{userTotalPoints} pts</p>
-                </div>
-                <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-1">
-                  <p className="text-neutral-500 font-medium">COGS Contribution</p>
-                  <p className="text-xl font-bold text-emerald-700 font-mono">{formatRupiah(userCOGS)}</p>
-                </div>
+                {pendingApprovals.length === 0 && (
+                  <p className="text-xs text-neutral-400 italic text-center py-6">Approval queue is clear.</p>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ---------------- DINDONG (HYBRID EDITOR/SCHEDULER DASHBOARD) ---------------- */}
-      {isHybridScheduler && (
+      {/* ---------------- STRATEGIST DASHBOARD SECTION ---------------- */}
+      {!isOwner && isStrategist && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Approval Queue Overview (if Anggi) */}
+          {(currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi') && (
             <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-neutral-700" /> Scheduling & Posting Queue
+              <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-neutral-700" /> Approval Queue ({pendingApprovals.length})
+                </span>
               </h3>
-
-              <div className="space-y-2 text-xs">
-                {tasks
-                  .filter((t) => t.status === 'Scheduling' || t.category === 'Scheduler')
-                  .slice(0, 5)
-                  .map((t) => (
-                    <div key={t.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-neutral-900">{t.title}</p>
-                        <p className="text-[11px] text-neutral-500 font-mono mt-0.5">{t.clientName} • Posting: {t.postingDate}</p>
-                      </div>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200">
-                        Ready to Schedule
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-                <Video className="w-4 h-4 text-neutral-700" /> Editing Tasks Assigned
-              </h3>
-
-              <div className="space-y-2 text-xs">
-                {userWorklogs.slice(0, 5).map((w) => (
-                  <div key={w.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                {pendingApprovals.slice(0, 3).map((task) => (
+                  <div key={task.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs">
                     <div>
-                      <p className="font-semibold text-neutral-900">{w.contentTitle}</p>
-                      <p className="text-[11px] text-neutral-500 font-mono mt-0.5">{w.clientName} • {w.score} pts</p>
+                      <p className="font-semibold text-neutral-900">{task.title}</p>
+                      <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{task.clientName} • {task.score} pts</p>
                     </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-800">
-                      {w.status}
-                    </span>
+                    {task.previewLink && (
+                      <a
+                        href={task.previewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 font-semibold flex items-center gap-1"
+                      >
+                        Review <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 ))}
+                {pendingApprovals.length === 0 && (
+                  <p className="text-xs text-neutral-400 italic text-center py-6">Approval queue is clear.</p>
+                )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ---------------- PRISKA (PRODUCTION ASSISTANT DASHBOARD) ---------------- */}
-      {isPAOnly && (
-        <div className="space-y-6">
           <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
             <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-              <Video className="w-4 h-4 text-neutral-700" /> Production & Shoot Schedule
+              <FileText className="w-4 h-4 text-neutral-700" /> Strategic Tasks & Content Proposals Queue
             </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {workspaceTasks
+              .filter((t) => t.category === 'Strategic' && t.status !== 'Posted')
+              .slice(0, 4)
+              .map((t) => (
+                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
+                    <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
+                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.taskType} ({t.format}) • Deadline: {t.deadline}</p>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
+                    <span className="font-semibold text-amber-700">Stage: {t.status}</span>
+                    <span className="font-mono font-bold">{t.score} pts</span>
+                  </div>
+                </div>
+              ))}
+            {workspaceTasks.filter((t) => t.category === 'Strategic' && t.status !== 'Posted').length === 0 && (
+              <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active strategic proposals queued.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-2">
-                <p className="font-bold text-neutral-900">BE Citra 8 Shoot</p>
-                <p className="text-[11px] text-neutral-500">Location: Citra 8 Ruko Outlet</p>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">Equipment Checked</span>
-              </div>
-              <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-2">
-                <p className="font-bold text-neutral-900">Karihome Campaign Shoot</p>
-                <p className="text-[11px] text-neutral-500">Location: Studio BSD</p>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">Crew Confirmed</span>
-              </div>
-            </div>
+      {/* ---------------- PRODUCTION ASSISTANT DASHBOARD SECTION ---------------- */}
+      {!isOwner && isPA && (
+        <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+          <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+            <Video className="w-4 h-4 text-neutral-700" /> Today's Shoots & Production Tasks
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {workspaceTasks
+              .filter((t) => t.status === 'Shooting' || t.category === 'Assistant')
+              .slice(0, 4)
+              .map((t) => (
+                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
+                    <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
+                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.taskType} • Deadline: {t.deadline}</p>
+                  </div>
+                  {t.driveLink && (
+                    <a
+                      href={t.driveLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-650 hover:underline flex items-center gap-1 text-[10px] font-semibold"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" /> Open Drive Assets
+                    </a>
+                  )}
+                </div>
+              ))}
+            {workspaceTasks.filter((t) => t.status === 'Shooting' || t.category === 'Assistant').length === 0 && (
+              <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active production tasks.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- EDITOR DASHBOARD SECTION ---------------- */}
+      {!isOwner && isEditor && (
+        <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+          <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+            <Video className="w-4 h-4 text-neutral-700" /> Active Editing & Revision Queue
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {workspaceTasks
+              .filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor')
+              .slice(0, 4)
+              .map((t) => (
+                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
+                    <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
+                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.format} • Status: <strong className="text-amber-700">{t.status}</strong></p>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
+                    <span>Deadline: <strong className="text-neutral-700">{t.deadline}</strong></span>
+                    <span className="font-mono font-bold">{t.score} pts</span>
+                  </div>
+                </div>
+              ))}
+            {workspaceTasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor').length === 0 && (
+              <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active editing or revisions queued.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- SCHEDULER DASHBOARD SECTION ---------------- */}
+      {!isOwner && isScheduler && (
+        <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+          <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-neutral-700" /> Content Ready to Post & Scheduling Calendar
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {workspaceTasks
+              .filter((t) => t.status === 'Scheduling')
+              .slice(0, 4)
+              .map((t) => (
+                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
+                    <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
+                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.format} • Posting Date: <strong className="text-neutral-700">{t.postingDate || t.deadline}</strong></p>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
+                    <span className="font-bold text-purple-700 uppercase font-mono">{t.status}</span>
+                    <span className="font-mono font-bold">{t.score} pts</span>
+                  </div>
+                </div>
+              ))}
+            {workspaceTasks.filter((t) => t.status === 'Scheduling').length === 0 && (
+              <p className="col-span-2 text-neutral-400 text-center py-8 italic">No contents ready to post.</p>
+            )}
           </div>
         </div>
       )}

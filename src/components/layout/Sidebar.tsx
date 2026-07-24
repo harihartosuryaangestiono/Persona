@@ -32,8 +32,9 @@ import {
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { UserRole } from '@/lib/types';
-
+ 
 interface NavItem {
   name: string;
   href: string;
@@ -41,42 +42,44 @@ interface NavItem {
   allowedRoles?: UserRole[];
   badgeKey?: string;
 }
-
+ 
 const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Clients', href: '/clients', icon: Users, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
+  { name: 'Clients', href: '/clients', icon: Users, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Projects', href: '/projects', icon: Briefcase, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant'] },
-  { name: 'Editorial Calendar', href: '/calendar', icon: Calendar },
-  { name: 'Kanban Pipeline', href: '/kanban', icon: Kanban },
-  { name: 'Production & Shoot', href: '/production', icon: Video, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'] },
-  { name: 'Worklog', href: '/worklog', icon: FileText },
-  { name: 'To Do List', href: '/todo', icon: ListTodo },
-  { name: 'Brand Hub', href: '/brand-hub', icon: Palette, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Editor'] },
-  { name: 'Asset Library (DAM)', href: '/assets', icon: FolderKanban, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Editor', 'Production Assistant'] },
-  { name: 'Content Vault', href: '/content-db', icon: Database, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Scheduler', 'Editor'] },
-  { name: 'SOP Center', href: '/sop', icon: BookOpen },
-  { name: 'Knowledge Base', href: '/knowledge', icon: Library },
-  { name: 'Resource Planner', href: '/resource-planner', icon: CalendarRange, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
-  { name: 'Visual Automations', href: '/automations', icon: Zap, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Editorial Calendar', href: '/calendar', icon: Calendar, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
+  { name: 'Kanban Pipeline', href: '/kanban', icon: Kanban, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Editor', 'Production Assistant', 'Scheduler'] },
+  { name: 'Production & Shoot', href: '/production', icon: Video, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Strategist'] },
+  { name: 'Worklog', href: '/worklog', icon: FileText, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'] },
+  { name: 'To Do List', href: '/todo', icon: ListTodo, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Brand Hub', href: '/brand-hub', icon: Palette, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Asset Library (DAM)', href: '/assets', icon: FolderKanban, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Resource Planner', href: '/resource-planner', icon: CalendarRange, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Approval Queue', href: '/approval', icon: CheckCircle, badgeKey: 'approval', allowedRoles: ['Admin', 'Owner', 'Strategist'] },
-  { name: 'Scheduling', href: '/scheduling', icon: Clock, allowedRoles: ['Admin', 'Owner', 'Scheduler', 'Editor'] },
+  { name: 'Scheduling', href: '/scheduling', icon: Clock, allowedRoles: ['Admin', 'Owner', 'Scheduler'] },
   { name: 'Attendance', href: '/attendance', icon: UserCheck, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Editor', 'Scheduler'] },
   { name: 'Leave Request', href: '/leave-request', icon: CalendarOff },
-  { name: 'Score Summary', href: '/score-summary', icon: Award, allowedRoles: ['Admin', 'Owner', 'Editor', 'Production Assistant', 'Scheduler'] },
-  { name: 'Client Budget', href: '/client-budget', icon: DollarSign, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
-  { name: 'Advanced Analytics', href: '/analytics', icon: PieChart, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
-  { name: 'Reports', href: '/reports', icon: BarChart3, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
+  { name: 'Score Summary', href: '/score-summary', icon: Award, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Client Budget', href: '/client-budget', icon: DollarSign, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Advanced Analytics', href: '/analytics', icon: PieChart, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Reports', href: '/reports', icon: BarChart3, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Settings', href: '/settings', icon: Settings, allowedRoles: ['Admin', 'Owner'] },
 ];
-
+ 
 export function Sidebar() {
   const pathname = usePathname();
   const { tasks } = useData();
   const { currentUser } = useUser();
-
+  const { currentWorkspace } = useWorkspace();
+ 
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
-
+ 
   const navItems = ALL_NAV_ITEMS.filter((item) => {
+    // Hide Production & Shoot if not in Team Anggi's workspace
+    if (item.href === '/production' && currentWorkspace.id !== 'ws-team-anggi') {
+      return false;
+    }
+ 
     if (!item.allowedRoles) return true;
     if (currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin')) return true;
     return item.allowedRoles.some((role) => currentUser.roles.includes(role));

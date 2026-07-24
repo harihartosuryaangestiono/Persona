@@ -22,12 +22,15 @@ export interface ClientItem {
   id: string;
   name: string;
   code: string;
+  workspaceId: string;
   monthlyPointBudget: number;
   remainingPoint: number;
   usedPoint: number;
   clientColor: string;
   logo?: string;
   active: boolean;
+  status?: string;
+  notes?: string;
 }
 
 export interface MasterScoreItem {
@@ -44,6 +47,7 @@ export interface TaskItem {
   clientId: string;
   clientName?: string;
   clientColor?: string;
+  workspaceId: string;
   title: string;
   description?: string;
   category: 'Editor' | 'Strategic' | 'Assistant' | 'Scheduler';
@@ -71,6 +75,7 @@ export interface TaskItem {
   previewLink?: string;
   score: number;
   cogs: number;
+  stages?: any;
   checklist?: { id: string; label: string; done: boolean }[];
   comments?: { id: string; userName: string; userAvatar?: string; text: string; createdAt: string }[];
   createdAt: string;
@@ -93,6 +98,7 @@ export interface WorklogItem {
   cogs: number;
   status: string;
   source: 'Manual' | 'Imported' | 'Automated';
+  stages?: any;
   deadline?: string;
   previewLink?: string;
 }

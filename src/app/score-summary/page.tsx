@@ -39,9 +39,18 @@ export default function ScoreSummaryPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {allUsers.map((usr) => {
-                const userPoints = worklogs
-                  .filter((w) => w.userName === usr.name || w.userId === usr.id)
-                  .reduce((sum, w) => sum + w.score, 0);
+                const userPoints = worklogs.reduce((sum, w) => {
+                  const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+                  if (logStages.length > 0) {
+                    const userStagePoints = logStages
+                      .filter((s: any) => s.userId === usr.id || s.userName === usr.name)
+                      .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+                    return sum + userStagePoints;
+                  } else {
+                    const isUserLog = w.userName === usr.name || w.userId === usr.id;
+                    return sum + (isUserLog ? w.score : 0);
+                  }
+                }, 0);
 
                 const capacity = 12000;
                 const remaining = Math.max(0, capacity - userPoints);

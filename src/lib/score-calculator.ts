@@ -42,9 +42,21 @@ export function calculateTaskScore(
   return baseScore * (qty > 0 ? qty : 1);
 }
 
+export const EMPLOYEE_POINT_VALUE_IDR = 250;
+export const CLIENT_POINT_VALUE_IDR = 1500;
+
 export function calculateCOGS(score: number, costPerPoint: number = 250): number {
   return score * costPerPoint;
 }
+
+export function calculateEmployeePayroll(points: number): number {
+  return points * EMPLOYEE_POINT_VALUE_IDR;
+}
+
+export function calculateClientBudgetValue(points: number): number {
+  return points * CLIENT_POINT_VALUE_IDR;
+}
+
 
 export function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {

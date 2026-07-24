@@ -79,6 +79,9 @@ model Client {
   active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  status             String   @default("Active")
+  notes              String?
+
 
   budgets            ClientMonthlyBudget[]
   campaigns          Campaign[]
@@ -199,6 +202,8 @@ model Task {
   comments        String?  // JSON stringified comments
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  stages          String?  // JSON stringified array of stages
+
 
   subtasks        Subtask[]
   recurringRules  RecurringTaskRule[]
@@ -340,6 +345,8 @@ model Worklog {
   previewLink  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  stages       String?  // JSON stringified array of stages
+
 }
 
 model Attendance {

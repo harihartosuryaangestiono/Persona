@@ -3,72 +3,113 @@
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
-import { Building, Smartphone, MapPin } from 'lucide-react';
+import { Building, Smartphone, MapPin, AlertCircle } from 'lucide-react';
 
 export default function AttendancePage() {
   const { currentUser } = useUser();
   const { attendances, clockIn, clockOut } = useData();
 
   const [locationMode, setLocationMode] = useState<'OFFICE' | 'REMOTE' | 'GPS'>('OFFICE');
+  const [gpsCoords, setGpsCoords] = useState<string>('');
+  const [gpsError, setGpsError] = useState<string>('');
 
   const todayAtt = attendances.find(
     (a) =>
-      a.userId === currentUser.id &&
+      a.userId === currentUser?.id &&
       new Date(a.date).toDateString() === new Date().toDateString()
   );
 
+  const handleModeChange = (mode: 'OFFICE' | 'REMOTE' | 'GPS') => {
+    setLocationMode(mode);
+    setGpsError('');
+    if (mode === 'GPS') {
+      if (typeof window !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const lat = position.coords.latitude.toFixed(5);
+            const lng = position.coords.longitude.toFixed(5);
+            setGpsCoords(`GPS (${lat}, ${lng})`);
+          },
+          (err) => {
+            setGpsError('Geolocation denied or unavailable. Falling back to default GPS mode.');
+            setGpsCoords('GPS (Location Denied)');
+          }
+        );
+      } else {
+        setGpsCoords('GPS (Not Supported)');
+      }
+    } else {
+      setGpsCoords('');
+    }
+  };
+
+  const handleClockIn = () => {
+    const finalMode = locationMode === 'GPS' ? (gpsCoords || 'GPS') : locationMode;
+    clockIn(currentUser?.id || 'u-system', finalMode as any);
+  };
+
   return (
-    <div className="space-y-6 animate-fadeIn text-neutral-900">
+    <div className="space-y-6 text-neutral-900 animate-fadeIn">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
             Attendance & Work Hours <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">GPS & Office Modes</span>
           </h1>
-          <p className="text-xs text-neutral-500">Clock in/out tracking with automated working hours & late detection.</p>
+          <p className="text-xs text-neutral-500 font-medium">Clock in/out tracking with automated working hours & late detection.</p>
         </div>
       </div>
 
-      {/* Clock In / Out Action Widget */}
-      <div className="bg-white p-8 rounded-2xl border border-neutral-200/80 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs">
-        <div className="space-y-2">
-          <span className="text-xs font-mono text-neutral-500 font-semibold uppercase tracking-wider">
+      {/* Clock widget */}
+      <div className="bg-white p-8 rounded-2xl border border-neutral-200/80 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xs select-none">
+        <div className="space-y-2 text-center md:text-left">
+          <span className="text-xs font-mono text-neutral-500 font-bold uppercase tracking-wider">
             {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
           </span>
           <h2 className="text-xl font-bold text-neutral-900">
-            Attendance Status for {currentUser.name}
+            Attendance Status for {currentUser?.name}
           </h2>
           <p className="text-xs text-neutral-500">
             Current Status:{' '}
-            <span className="font-semibold text-neutral-900">
+            <span className="font-bold text-neutral-900">
               {todayAtt ? (todayAtt.clockOut ? 'Clocked Out' : 'Active Working') : 'Not Clocked In'}
             </span>
           </p>
+          {locationMode === 'GPS' && gpsCoords && (
+            <p className="text-[11px] text-emerald-700 font-mono font-bold flex items-center gap-1">
+              📍 Coordinates verified: {gpsCoords}
+            </p>
+          )}
+          {gpsError && (
+            <p className="text-[11px] text-red-600 flex items-center gap-1 font-semibold">
+              <AlertCircle className="w-3.5 h-3.5" /> {gpsError}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-3">
           {/* Location Mode Selector */}
           <div className="flex items-center gap-1 bg-neutral-50 p-1.5 rounded-xl border border-neutral-200 text-xs">
             <button
-              onClick={() => setLocationMode('OFFICE')}
+              onClick={() => handleModeChange('OFFICE')}
               className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition ${
-                locationMode === 'OFFICE' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-600'
+                locationMode === 'OFFICE' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-500'
               }`}
             >
               <Building className="w-3.5 h-3.5" /> Office
             </button>
             <button
-              onClick={() => setLocationMode('REMOTE')}
+              onClick={() => handleModeChange('REMOTE')}
               className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition ${
-                locationMode === 'REMOTE' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-600'
+                locationMode === 'REMOTE' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-505'
               }`}
             >
               <Smartphone className="w-3.5 h-3.5" /> Remote
             </button>
             <button
-              onClick={() => setLocationMode('GPS')}
+              onClick={() => handleModeChange('GPS')}
               className={`px-3 py-1 rounded-lg flex items-center gap-1.5 transition ${
-                locationMode === 'GPS' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-600'
+                locationMode === 'GPS' ? 'bg-neutral-900 text-white font-semibold' : 'text-neutral-505'
               }`}
             >
               <MapPin className="w-3.5 h-3.5" /> GPS Verified
@@ -78,20 +119,20 @@ export default function AttendancePage() {
           {/* Main Clock Button */}
           {!todayAtt ? (
             <button
-              onClick={() => clockIn(currentUser.id, locationMode)}
-              className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-8 py-2.5 rounded-lg shadow-xs transition"
+              onClick={handleClockIn}
+              className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs px-8 py-2.5 rounded-lg shadow-xs transition"
             >
               Clock In Now
             </button>
           ) : !todayAtt.clockOut ? (
             <button
-              onClick={() => clockOut(currentUser.id)}
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs px-8 py-2.5 rounded-lg shadow-xs transition"
+              onClick={() => clockOut(currentUser?.id || 'u-system')}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-8 py-2.5 rounded-lg shadow-xs transition animate-pulse"
             >
               Clock Out Now
             </button>
           ) : (
-            <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-700 text-center font-mono">
+            <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-700 text-center font-mono font-bold">
               ✅ Work Shift Completed ({todayAtt.workingHours} hrs)
             </div>
           )}
@@ -100,11 +141,11 @@ export default function AttendancePage() {
 
       {/* Attendance History Table */}
       <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-neutral-100 font-semibold text-xs text-neutral-900">
+        <div className="p-4 border-b border-neutral-100 font-bold text-xs text-neutral-900">
           Recent Agency Attendance Records
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
               <tr>
                 <th className="px-4 py-3">Employee</th>
@@ -119,7 +160,7 @@ export default function AttendancePage() {
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {attendances.map((a) => (
                 <tr key={a.id} className="hover:bg-neutral-50 transition">
-                  <td className="px-4 py-3 font-semibold text-neutral-900">{a.userName}</td>
+                  <td className="px-4 py-3 font-semibold text-neutral-900">{a.userName || 'Unknown User'}</td>
                   <td className="px-4 py-3 font-mono text-neutral-500">
                     {new Date(a.date).toLocaleDateString()}
                   </td>
@@ -131,11 +172,11 @@ export default function AttendancePage() {
                       ? new Date(a.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                       : 'Active'}
                   </td>
-                  <td className="px-4 py-3 font-mono text-neutral-600">{a.locationMode}</td>
+                  <td className="px-4 py-3 font-mono text-neutral-600 font-bold">{a.locationMode}</td>
                   <td className="px-4 py-3 font-mono font-bold text-neutral-900">{a.workingHours} hrs</td>
                   <td className="px-4 py-3 text-center">
                     <span
-                      className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
+                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                         a.status === 'ON_TIME'
                           ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                           : 'bg-red-50 text-red-800 border border-red-200'

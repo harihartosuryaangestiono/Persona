@@ -29,7 +29,8 @@ interface DataContextType {
   updateTaskStatus: (taskId: string, newStatus: TaskItem['status']) => void;
   updateTask: (taskId: string, updates: Partial<TaskItem>) => void;
   deleteTask: (taskId: string) => void;
-  addWorklog: (log: Partial<WorklogItem>) => void;
+  addWorklog: (log: Partial<WorklogItem>) => Promise<void>;
+  deleteWorklog: (worklogId: string) => Promise<void>;
   importWorklogs: (logs: Partial<WorklogItem>[]) => void;
   clockIn: (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => void;
   clockOut: (userId: string) => void;
@@ -52,11 +53,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [masterScores, setMasterScores] = useState<MasterScoreItem[]>([]);
   const [activities, setActivities] = useState<ActivityLogItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { syncUsers } = useUser();
+  const { syncUsers, currentUser } = useUser();
 
   const fetchInitialData = async () => {
     try {
-      const res = await fetch('/api/data');
+      const headers: HeadersInit = {};
+      if (currentUser) {
+        headers['X-User-Id'] = currentUser.id;
+        headers['X-User-Role'] = currentUser.roles.join(',');
+      }
+      const res = await fetch('/api/data', { headers });
       if (res.ok) {
         const json = await res.json();
         syncUsers(json.users || []);
@@ -78,16 +84,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [currentUser]);
+
+  const getTaskScore = (t: Partial<TaskItem>) => {
+    if (t.stages && Array.isArray(t.stages) && t.stages.length > 0) {
+      return t.stages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0);
+    }
+    return Number(t.score) || 10;
+  };
 
   const addTask = async (newTaskData: Partial<TaskItem>): Promise<TaskItem> => {
-    const score = newTaskData.score || 100;
+    const score = getTaskScore(newTaskData);
     const cogs = calculateCOGS(score);
+    const clientObj = clients.find((c) => c.id === newTaskData.clientId) || clients[0];
     const created: TaskItem = {
       id: `task-${Date.now()}`,
-      clientId: newTaskData.clientId || clients[0]?.id || 'client-1',
-      clientName: newTaskData.clientName || 'Baking Empire Gading Serpong',
-      clientColor: newTaskData.clientColor || '#3B82F6',
+      clientId: newTaskData.clientId || clientObj?.id || 'client-1',
+      clientName: newTaskData.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
+      clientColor: newTaskData.clientColor || clientObj?.clientColor || '#3B82F6',
+      workspaceId: newTaskData.workspaceId || clientObj?.workspaceId || 'ws-team-anggi',
       title: newTaskData.title || 'Untitled Task',
       description: newTaskData.description || '',
       category: newTaskData.category || 'Editor',
@@ -105,33 +120,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       previewLink: newTaskData.previewLink || '',
       checklist: newTaskData.checklist || [],
       comments: newTaskData.comments || [],
+      stages: newTaskData.stages || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     setTasks((prev) => [created, ...prev]);
 
-    // Update Client Budget remaining
+    // Update Client Budget remaining (allow negative)
     setClients((prev) =>
       prev.map((c) =>
         c.id === created.clientId
           ? {
               ...c,
               usedPoint: c.usedPoint + score,
-              remainingPoint: Math.max(0, c.remainingPoint - score),
+              remainingPoint: c.monthlyPointBudget - (c.usedPoint + score),
             }
           : c
       )
     );
 
-    addActivity('u-system', 'TASK', created.id, 'CREATED', `Created task "${created.title}"`);
+    addActivity(currentUser?.id || 'u-system', 'TASK', created.id, 'CREATED', `Created task "${created.title}"`);
 
     // Sync to backend asynchronously
-    fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(created),
-    }).catch(console.error);
+    if (currentUser) {
+      fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id,
+          'X-User-Role': currentUser.roles.join(','),
+        },
+        body: JSON.stringify(created),
+      }).catch(console.error);
+    }
 
     return created;
   };
@@ -140,39 +162,124 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t))
     );
-    addActivity('u-system', 'TASK', taskId, 'MOVED', `Moved task to stage ${newStatus}`);
+    addActivity(currentUser?.id || 'u-system', 'TASK', taskId, 'MOVED', `Moved task to stage ${newStatus}`);
 
-    fetch(`/api/tasks?id=${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    }).catch(console.error);
+    if (currentUser) {
+      fetch(`/api/tasks?id=${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id,
+          'X-User-Role': currentUser.roles.join(','),
+        },
+        body: JSON.stringify({ status: newStatus }),
+      }).catch(console.error);
+    }
   };
 
   const updateTask = (taskId: string, updates: Partial<TaskItem>) => {
+    const oldTask = tasks.find((t) => t.id === taskId);
+    if (oldTask) {
+      const oldScore = oldTask.score || 0;
+      const newScore = updates.stages ? getTaskScore(updates) : (updates.score !== undefined ? Number(updates.score) : oldScore);
+      const scoreDiff = newScore - oldScore;
+      const oldClientId = oldTask.clientId;
+      const newClientId = updates.clientId || oldClientId;
+
+      // Adjust client usage
+      setClients((prev) =>
+        prev.map((c) => {
+          if (oldClientId === newClientId) {
+            if (c.id === oldClientId) {
+              const updatedUsed = c.usedPoint + scoreDiff;
+              return {
+                ...c,
+                usedPoint: updatedUsed,
+                remainingPoint: c.monthlyPointBudget - updatedUsed,
+              };
+            }
+          } else {
+            if (c.id === oldClientId) {
+              const updatedUsed = c.usedPoint - oldScore;
+              return {
+                ...c,
+                usedPoint: updatedUsed,
+                remainingPoint: c.monthlyPointBudget - updatedUsed,
+              };
+            }
+            if (c.id === newClientId) {
+              const updatedUsed = c.usedPoint + newScore;
+              return {
+                ...c,
+                usedPoint: updatedUsed,
+                remainingPoint: c.monthlyPointBudget - updatedUsed,
+              };
+            }
+          }
+          return c;
+        })
+      );
+    }
+
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
     );
-    fetch(`/api/tasks?id=${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }).catch(console.error);
+
+    if (currentUser) {
+      fetch(`/api/tasks?id=${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser.id,
+          'X-User-Role': currentUser.roles.join(','),
+        },
+        body: JSON.stringify({
+          ...updates,
+          score: updates.stages ? getTaskScore(updates) : updates.score,
+        }),
+      }).catch(console.error);
+    }
   };
 
   const deleteTask = (taskId: string) => {
+    const oldTask = tasks.find((t) => t.id === taskId);
+    if (oldTask) {
+      const score = oldTask.score || 0;
+      setClients((prev) =>
+        prev.map((c) =>
+          c.id === oldTask.clientId
+            ? {
+                ...c,
+                usedPoint: c.usedPoint - score,
+                remainingPoint: c.monthlyPointBudget - (c.usedPoint - score),
+              }
+            : c
+        )
+      );
+    }
+
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' }).catch(console.error);
+
+    if (currentUser) {
+      fetch(`/api/tasks?id=${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-User-Id': currentUser.id,
+          'X-User-Role': currentUser.roles.join(','),
+        },
+      }).catch(console.error);
+    }
   };
 
-  const addWorklog = (log: Partial<WorklogItem>) => {
+  const addWorklog = async (log: Partial<WorklogItem>) => {
     const score = log.score || 10;
+    const clientObj = clients.find((c) => c.id === log.clientId) || clients[0];
     const item: WorklogItem = {
       id: `wl-${Date.now()}-${Math.random()}`,
       date: log.date || new Date().toISOString(),
       userId: log.userId || 'u-jabin',
-      clientId: log.clientId || clients[0]?.id || '',
-      clientName: log.clientName || 'Baking Empire Gading Serpong',
+      clientId: log.clientId || clientObj?.id || '',
+      clientName: log.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
       contentTitle: log.contentTitle || 'Untitled Content',
       taskType: log.taskType || 'Editing',
       format: log.format || 'Single Foto',
@@ -182,12 +289,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       status: 'Completed',
       source: log.source || 'Manual',
       previewLink: log.previewLink || '',
+      stages: log.stages || null,
     };
 
     setWorklogs((prev) => [item, ...prev]);
+
+    try {
+      await fetch('/api/worklogs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+    } catch (e) {
+      console.error('Failed to sync worklog to database:', e);
+    }
   };
 
-  const importWorklogs = (newLogs: Partial<WorklogItem>[]) => {
+  const deleteWorklog = async (worklogId: string) => {
+    setWorklogs((prev) => prev.filter((w) => w.id !== worklogId));
+    try {
+      await fetch(`/api/worklogs?id=${worklogId}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.error('Failed to delete worklog:', e);
+    }
+  };
+
+  const importWorklogs = async (newLogs: Partial<WorklogItem>[]) => {
     const formatted: WorklogItem[] = newLogs.map((log, i) => {
       const score = log.score || 10;
       return {
@@ -205,42 +334,64 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         status: 'Completed',
         source: 'Imported',
         previewLink: log.previewLink || '',
+        stages: log.stages || null,
       };
     });
 
     setWorklogs((prev) => [...formatted, ...prev]);
+
+    for (const log of formatted) {
+      try {
+        await fetch('/api/worklogs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(log),
+        });
+      } catch (err) {
+        console.error('Failed to save imported worklog:', err);
+      }
+    }
   };
 
-  const clockIn = (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => {
-    const now = new Date();
-    const isLate = now.getHours() >= 9 && now.getMinutes() > 0;
-    const newAtt: AttendanceItem = {
-      id: `att-${Date.now()}`,
-      userId,
-      date: now.toISOString(),
-      clockIn: now.toISOString(),
-      locationMode,
-      status: isLate ? 'LATE' : 'ON_TIME',
-      workingHours: 0,
-    };
-    setAttendances((prev) => [newAtt, ...prev.filter((a) => a.userId !== userId || new Date(a.date).toDateString() !== now.toDateString())]);
+  const clockIn = async (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => {
+    try {
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, locationMode }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setAttendances((prev) => [
+          saved,
+          ...prev.filter((a) => a.userId !== userId || new Date(a.date).toDateString() !== new Date(saved.date).toDateString())
+        ]);
+      } else {
+        console.error('Failed to Clock In on server');
+      }
+    } catch (e) {
+      console.error('Error clocking in:', e);
+    }
   };
 
-  const clockOut = (userId: string) => {
-    const now = new Date();
-    setAttendances((prev) =>
-      prev.map((a) => {
-        if (a.userId === userId && !a.clockOut) {
-          const hours = (now.getTime() - new Date(a.clockIn).getTime()) / (1000 * 60 * 60);
-          return {
-            ...a,
-            clockOut: now.toISOString(),
-            workingHours: Math.min(12, Math.round(hours * 10) / 10),
-          };
-        }
-        return a;
-      })
-    );
+  const clockOut = async (userId: string) => {
+    try {
+      const res = await fetch('/api/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setAttendances((prev) =>
+          prev.map((a) => (a.userId === userId && new Date(a.date).toDateString() === new Date(saved.date).toDateString() ? saved : a))
+        );
+      } else {
+        console.error('Failed to Clock Out on server');
+      }
+    } catch (e) {
+      console.error('Error clocking out:', e);
+    }
   };
 
   const submitLeave = (leave: Partial<LeaveRequestItem>) => {
@@ -315,6 +466,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateTask,
         deleteTask,
         addWorklog,
+        deleteWorklog,
         importWorklogs,
         clockIn,
         clockOut,

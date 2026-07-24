@@ -110,7 +110,7 @@ export default function ClientBudgetPage() {
           </button>
         </div>
 
-        <span className="text-xs text-neutral-500 font-mono">1 pt = Rp250 COGS</span>
+        <span className="text-xs text-neutral-500 font-mono">Client Point: 1 Point = Rp1.500 Budget</span>
       </div>
 
       {/* Official Table Matching User Format */}
@@ -139,9 +139,18 @@ export default function ClientBudgetPage() {
                   <tr key={b.id} className="hover:bg-neutral-50/80 transition">
                     <td className="px-4 py-3.5 font-bold text-neutral-900">{b.clientName}</td>
                     <td className="px-4 py-3.5 font-mono text-neutral-600 font-semibold">{monthDisplay}</td>
-                    <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{b.budget.toLocaleString()}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-amber-600 font-semibold">{b.used.toLocaleString()}</td>
-                    <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-600">{b.remaining.toLocaleString()}</td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="font-mono font-bold text-neutral-900">{b.budget.toLocaleString()} pts</div>
+                      <div className="text-[10px] text-neutral-500 font-mono">Rp {(b.budget * 1500).toLocaleString()}</div>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="font-mono text-amber-600 font-bold">{b.used.toLocaleString()} pts</div>
+                      <div className="text-[10px] text-neutral-500 font-mono">Rp {(b.used * 1500).toLocaleString()}</div>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="font-mono font-bold text-emerald-600">{b.remaining.toLocaleString()} pts</div>
+                      <div className="text-[10px] text-emerald-600 font-mono font-bold">Rp {(b.remaining * 1500).toLocaleString()}</div>
+                    </td>
                     <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-800">{pct}%</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       <span

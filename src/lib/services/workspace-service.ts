@@ -11,22 +11,35 @@ export interface WorkspaceItem {
   createdAt: string;
 }
 
-export const DEFAULT_WORKSPACE: WorkspaceItem = {
-  id: 'ws-persona',
-  name: 'Persona OS Agency',
-  slug: 'persona-os',
-  logo: 'https://avatar.vercel.sh/persona-os',
-  ownerId: 'u-devi',
-  billingPlan: 'ENTERPRISE',
-  createdAt: new Date().toISOString(),
-};
+export const WORKSPACES: WorkspaceItem[] = [
+  {
+    id: 'ws-team-anggi',
+    name: 'Persona OS - Team Anggi',
+    slug: 'persona-os-team-anggi',
+    logo: 'https://avatar.vercel.sh/team-anggi',
+    ownerId: 'u-devi',
+    billingPlan: 'ENTERPRISE',
+    createdAt: new Date('2026-07-24T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'ws-inhouse',
+    name: 'Persona OS - Inhouse',
+    slug: 'persona-os-inhouse',
+    logo: 'https://avatar.vercel.sh/inhouse',
+    ownerId: 'u-devi',
+    billingPlan: 'ENTERPRISE',
+    createdAt: new Date('2026-07-24T00:00:00Z').toISOString(),
+  },
+];
+
+export const DEFAULT_WORKSPACE = WORKSPACES[0];
 
 export class WorkspaceService {
   static async getWorkspacesForUser(userId: string): Promise<WorkspaceItem[]> {
     try {
       const dbWorkspaces = await prisma.workspace.findMany();
       if (dbWorkspaces.length === 0) {
-        return [DEFAULT_WORKSPACE];
+        return WORKSPACES;
       }
       return dbWorkspaces.map((w) => ({
         ...w,
@@ -34,7 +47,7 @@ export class WorkspaceService {
         createdAt: w.createdAt.toISOString(),
       }));
     } catch (e) {
-      return [DEFAULT_WORKSPACE];
+      return WORKSPACES;
     }
   }
 

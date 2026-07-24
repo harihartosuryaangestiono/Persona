@@ -33,9 +33,18 @@ export default function ReportsPage() {
 
   // User Productivity Data for Chart
   const userProductivityData = allUsers.map((u) => {
-    const pts = worklogs
-      .filter((w) => w.userName === u.name || w.userId === u.id)
-      .reduce((sum, w) => sum + w.score, 0);
+    const pts = worklogs.reduce((sum, w) => {
+      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+      if (logStages.length > 0) {
+        const userStagePoints = logStages
+          .filter((s: any) => s.userId === u.id || s.userName === u.name)
+          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+        return sum + userStagePoints;
+      } else {
+        const isUserLog = w.userName === u.name || w.userId === u.id;
+        return sum + (isUserLog ? w.score : 0);
+      }
+    }, 0);
     return {
       name: u.name,
       Points: pts,
@@ -53,7 +62,7 @@ export default function ReportsPage() {
       'Monthly Point Budget': c.monthlyPointBudget,
       'Used Points': c.usedPoint,
       'Remaining Points': c.remainingPoint,
-      'Total COGS (Rp)': c.usedPoint * 250,
+      'Total Client Value (Rp)': c.usedPoint * 1500,
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);

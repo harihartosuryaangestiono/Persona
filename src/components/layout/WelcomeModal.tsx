@@ -80,12 +80,19 @@ export function WelcomeModal() {
   );
 
   useEffect(() => {
+    // Admin / Owner is never blocked by the clock-in modal
+    const isAdminOrOwner = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+    if (isAdminOrOwner) {
+      setIsOpen(false);
+      return;
+    }
+
     // Only show if not seen today
     const lastSeenDate = localStorage.getItem(`persona_last_greeting_date_${currentUser.id}`);
     if (lastSeenDate !== todayStr && !hasSeenWelcomeToday) {
       setIsOpen(true);
     }
-  }, [currentUser.id, todayStr, hasSeenWelcomeToday]);
+  }, [currentUser, todayStr, hasSeenWelcomeToday]);
 
   if (!isOpen) return null;
 

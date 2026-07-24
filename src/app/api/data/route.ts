@@ -23,6 +23,7 @@ export async function GET() {
       budgets,
       masterScores,
       activities,
+      workspaces,
     ] = await Promise.all([
       prisma.user.findMany(),
       prisma.client.findMany(),
@@ -33,6 +34,7 @@ export async function GET() {
       prisma.clientMonthlyBudget.findMany(),
       prisma.masterScore.findMany(),
       prisma.activityLog.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }),
+      prisma.workspace.findMany(),
     ]);
 
     // Parse JSON fields in tasks
@@ -44,6 +46,7 @@ export async function GET() {
       files: t.files ? JSON.parse(t.files) : [],
       checklist: t.checklist ? JSON.parse(t.checklist) : [],
       comments: t.comments ? JSON.parse(t.comments) : [],
+      stages: t.stages ? JSON.parse(t.stages) : null,
       postingDate: t.postingDate ? t.postingDate.toISOString().split('T')[0] : null,
       deadline: t.deadline.toISOString().split('T')[0],
       createdAt: t.createdAt.toISOString(),
@@ -55,6 +58,7 @@ export async function GET() {
       clientName: clients.find((c: Client) => c.id === w.clientId)?.name || 'Unknown Client',
       userName: users.find((u: User) => u.id === w.userId)?.name || 'Unknown User',
       date: w.date.toISOString(),
+      stages: w.stages ? JSON.parse(w.stages) : null,
     }));
 
     const formattedBudgets = budgets.map((b: ClientMonthlyBudget) => ({
@@ -87,6 +91,11 @@ export async function GET() {
         ...act,
         userName: users.find((u: User) => u.id === act.userId)?.name || 'System',
         createdAt: act.createdAt.toISOString(),
+      })),
+      workspaces: workspaces.map((w) => ({
+        ...w,
+        createdAt: w.createdAt.toISOString(),
+        updatedAt: w.updatedAt.toISOString(),
       })),
     });
   } catch (error: any) {

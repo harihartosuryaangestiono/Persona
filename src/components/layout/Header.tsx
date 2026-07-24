@@ -86,12 +86,6 @@ export function Header() {
                     </button>
                   ))}
 
-                  <button
-                    onClick={handleCreateNewWs}
-                    className="w-full flex items-center gap-2 p-2 rounded-lg text-xs text-neutral-800 hover:bg-neutral-100 font-semibold transition mt-2 border border-dashed border-neutral-300"
-                  >
-                    <Plus className="w-4 h-4" /> Create Workspace
-                  </button>
                 </div>
               </div>
             )}
