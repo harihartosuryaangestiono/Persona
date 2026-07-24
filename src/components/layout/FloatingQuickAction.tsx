@@ -1,47 +1,49 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUser } from '@/context/UserContext';
 import { Plus, Upload, CheckCircle2, Video, Clock, DollarSign, X } from 'lucide-react';
 
 export function FloatingQuickAction() {
   const { currentUser } = useUser();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   const getQuickActions = () => {
-    const roles = currentUser.roles;
+    const roles = currentUser?.roles || [];
     const actions: { label: string; icon: any; onClick: () => void }[] = [];
 
     if (roles.includes('Owner') || roles.includes('Admin')) {
       actions.push(
-        { label: 'Approve Pending Tasks', icon: CheckCircle2, onClick: () => alert('Opening Executive Approval Queue...') },
-        { label: 'Adjust Client Budget', icon: DollarSign, onClick: () => alert('Opening Budget Adjustment...') }
+        { label: 'Approve Pending Tasks', icon: CheckCircle2, onClick: () => router.push('/approval') },
+        { label: 'Adjust Client Budget', icon: DollarSign, onClick: () => router.push('/client-budget') }
       );
     }
 
     if (roles.includes('Strategist')) {
       actions.push(
-        { label: 'Create Strategic Brief', icon: Plus, onClick: () => alert('Opening Brief Creation...') },
-        { label: 'Create Content Proposal', icon: Plus, onClick: () => alert('Opening Proposal Wizard...') }
+        { label: 'Create Strategic Brief', icon: Plus, onClick: () => router.push('/kanban') },
+        { label: 'Create Content Proposal', icon: Plus, onClick: () => router.push('/kanban') }
       );
     }
 
     if (roles.includes('Editor')) {
       actions.push(
-        { label: 'Upload Preview Link', icon: Upload, onClick: () => alert('Opening Preview Upload Modal...') },
-        { label: 'Submit Revision', icon: CheckCircle2, onClick: () => alert('Submitting Revision...') }
+        { label: 'Upload Preview Link', icon: Upload, onClick: () => router.push('/kanban') },
+        { label: 'Submit Revision', icon: CheckCircle2, onClick: () => router.push('/kanban') }
       );
     }
 
     if (roles.includes('Scheduler')) {
       actions.push(
-        { label: 'Schedule Post', icon: Clock, onClick: () => alert('Opening Posting Schedule Tool...') }
+        { label: 'Schedule Post', icon: Clock, onClick: () => router.push('/scheduling') }
       );
     }
 
     if (roles.includes('Production Assistant')) {
       actions.push(
-        { label: 'Start Shooting', icon: Video, onClick: () => alert('Starting Production Shoot Mode...') }
+        { label: 'Start Shooting', icon: Video, onClick: () => router.push('/production') }
       );
     }
 
