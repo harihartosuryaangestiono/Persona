@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import {
+  User,
+  Client,
+  Task,
+  Worklog,
+  Attendance,
+  LeaveRequest,
+  ClientMonthlyBudget,
+  ActivityLog,
+} from '@prisma/client';
 
 export async function GET() {
   try {
@@ -26,10 +36,10 @@ export async function GET() {
     ]);
 
     // Parse JSON fields in tasks
-    const formattedTasks = tasks.map((t) => ({
+    const formattedTasks = tasks.map((t: Task) => ({
       ...t,
-      clientName: clients.find((c) => c.id === t.clientId)?.name || 'Unknown Client',
-      clientColor: clients.find((c) => c.id === t.clientId)?.clientColor || '#3B82F6',
+      clientName: clients.find((c: Client) => c.id === t.clientId)?.name || 'Unknown Client',
+      clientColor: clients.find((c: Client) => c.id === t.clientId)?.clientColor || '#3B82F6',
       assignedUserIds: t.assignedUserIds ? JSON.parse(t.assignedUserIds) : [],
       files: t.files ? JSON.parse(t.files) : [],
       checklist: t.checklist ? JSON.parse(t.checklist) : [],
@@ -40,42 +50,42 @@ export async function GET() {
       updatedAt: t.updatedAt.toISOString(),
     }));
 
-    const formattedWorklogs = worklogs.map((w) => ({
+    const formattedWorklogs = worklogs.map((w: Worklog) => ({
       ...w,
-      clientName: clients.find((c) => c.id === w.clientId)?.name || 'Unknown Client',
-      userName: users.find((u) => u.id === w.userId)?.name || 'Unknown User',
+      clientName: clients.find((c: Client) => c.id === w.clientId)?.name || 'Unknown Client',
+      userName: users.find((u: User) => u.id === w.userId)?.name || 'Unknown User',
       date: w.date.toISOString(),
     }));
 
-    const formattedBudgets = budgets.map((b) => ({
+    const formattedBudgets = budgets.map((b: ClientMonthlyBudget) => ({
       ...b,
-      clientName: clients.find((c) => c.id === b.clientId)?.name || 'Unknown Client',
+      clientName: clients.find((c: Client) => c.id === b.clientId)?.name || 'Unknown Client',
     }));
 
     return NextResponse.json({
-      users: users.map((u) => ({ ...u, roles: JSON.parse(u.roles) })),
+      users: users.map((u: User) => ({ ...u, roles: JSON.parse(u.roles) })),
       clients,
       tasks: formattedTasks,
       worklogs: formattedWorklogs,
-      attendances: attendances.map((a) => ({
+      attendances: attendances.map((a: Attendance) => ({
         ...a,
-        userName: users.find((u) => u.id === a.userId)?.name || 'Unknown User',
+        userName: users.find((u: User) => u.id === a.userId)?.name || 'Unknown User',
         date: a.date.toISOString(),
         clockIn: a.clockIn.toISOString(),
         clockOut: a.clockOut ? a.clockOut.toISOString() : null,
       })),
-      leaveRequests: leaveRequests.map((l) => ({
+      leaveRequests: leaveRequests.map((l: LeaveRequest) => ({
         ...l,
-        userName: users.find((u) => u.id === l.userId)?.name || 'Unknown User',
+        userName: users.find((u: User) => u.id === l.userId)?.name || 'Unknown User',
         startDate: l.startDate.toISOString().split('T')[0],
         endDate: l.endDate.toISOString().split('T')[0],
         createdAt: l.createdAt.toISOString(),
       })),
       budgets: formattedBudgets,
       masterScores,
-      activities: activities.map((act) => ({
+      activities: activities.map((act: ActivityLog) => ({
         ...act,
-        userName: users.find((u) => u.id === act.userId)?.name || 'System',
+        userName: users.find((u: User) => u.id === act.userId)?.name || 'System',
         createdAt: act.createdAt.toISOString(),
       })),
     });
