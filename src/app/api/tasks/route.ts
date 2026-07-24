@@ -42,9 +42,38 @@ export async function PATCH(req: Request) {
 
     const body = await req.json();
     const updateData: any = {};
-    if (body.status) updateData.status = body.status;
-    if (body.title) updateData.title = body.title;
-    if (body.priority) updateData.priority = body.priority;
+    
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.category !== undefined) updateData.category = body.category;
+    if (body.taskType !== undefined) updateData.taskType = body.taskType;
+    if (body.format !== undefined) updateData.format = body.format;
+    if (body.qty !== undefined) updateData.qty = Number(body.qty);
+    if (body.priority !== undefined) updateData.priority = body.priority;
+    if (body.status !== undefined) updateData.status = body.status;
+    if (body.clientId !== undefined) updateData.clientId = body.clientId;
+    
+    if (body.postingDate !== undefined) {
+      updateData.postingDate = body.postingDate ? new Date(body.postingDate) : null;
+    }
+    if (body.deadline !== undefined) {
+      updateData.deadline = new Date(body.deadline);
+    }
+    if (body.assignedUserIds !== undefined) {
+      updateData.assignedUserIds = JSON.stringify(body.assignedUserIds);
+    }
+    
+    if (body.score !== undefined) updateData.score = Number(body.score);
+    if (body.cogs !== undefined) updateData.cogs = Number(body.cogs);
+    if (body.driveLink !== undefined) updateData.driveLink = body.driveLink;
+    if (body.previewLink !== undefined) updateData.previewLink = body.previewLink;
+    
+    if (body.checklist !== undefined) {
+      updateData.checklist = JSON.stringify(body.checklist);
+    }
+    if (body.comments !== undefined) {
+      updateData.comments = JSON.stringify(body.comments);
+    }
 
     const updated = await prisma.task.update({
       where: { id },

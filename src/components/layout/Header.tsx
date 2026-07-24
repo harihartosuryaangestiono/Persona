@@ -12,11 +12,12 @@ import {
   Zap,
   Building2,
   Plus,
+  LogOut,
 } from 'lucide-react';
 import { GlobalSearchModal } from '@/components/search/GlobalSearchModal';
 
 export function Header() {
-  const { currentUser, switchUserByName, allUsers } = useUser();
+  const { currentUser, switchUserByName, allUsers, logout } = useUser();
   const { tasks } = useData();
   const { currentWorkspace, workspaces, switchWorkspace, createWorkspace } = useWorkspace();
 
@@ -216,6 +217,18 @@ export function Header() {
                       )}
                     </button>
                   ))}
+                </div>
+                <div className="pt-2 mt-2 border-t border-neutral-100">
+                  <button
+                    onClick={() => {
+                      logout();
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 p-2 hover:bg-red-50 text-red-600 hover:text-red-700 rounded-lg text-xs font-semibold transition"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out of Persona</span>
+                  </button>
                 </div>
               </div>
             )}

@@ -3,9 +3,7 @@ import './globals.css';
 import { UserProvider } from '@/context/UserContext';
 import { DataProvider } from '@/context/DataContext';
 import { WorkspaceProvider } from '@/context/WorkspaceContext';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { Header } from '@/components/layout/Header';
-import { FloatingQuickAction } from '@/components/layout/FloatingQuickAction';
+import { AuthWrapper } from '@/components/layout/AuthWrapper';
 
 export const metadata: Metadata = {
   title: 'Persona OS — Minimalist Agency Operating System',
@@ -23,16 +21,9 @@ export default function RootLayout({
         <UserProvider>
           <WorkspaceProvider>
             <DataProvider>
-              <div className="flex min-h-screen w-full relative bg-[#F8F9FB]">
-                <Sidebar />
-                <div className="flex-1 flex flex-col min-w-0">
-                  <Header />
-                  <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full space-y-8">
-                    {children}
-                  </main>
-                </div>
-                <FloatingQuickAction />
-              </div>
+              <AuthWrapper>
+                {children}
+              </AuthWrapper>
             </DataProvider>
           </WorkspaceProvider>
         </UserProvider>

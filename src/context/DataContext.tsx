@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useUser } from './UserContext';
 import {
   TaskItem,
   ClientItem,
@@ -51,12 +52,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [masterScores, setMasterScores] = useState<MasterScoreItem[]>([]);
   const [activities, setActivities] = useState<ActivityLogItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { syncUsers } = useUser();
 
   const fetchInitialData = async () => {
     try {
       const res = await fetch('/api/data');
       if (res.ok) {
         const json = await res.json();
+        syncUsers(json.users || []);
         setTasks(json.tasks || []);
         setClients(json.clients || []);
         setWorklogs(json.worklogs || []);
@@ -150,6 +153,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
     );
+    fetch(`/api/tasks?id=${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).catch(console.error);
   };
 
   const deleteTask = (taskId: string) => {
