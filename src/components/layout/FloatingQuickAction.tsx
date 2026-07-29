@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { Plus, X, Calendar as CalendarIcon, Link2, CheckCircle2 } from 'lucide-react';
 import { calculateAutoDeadline } from '@/lib/score-calculator';
 
 export function FloatingQuickAction() {
   const { currentUser, allUsers } = useUser();
   const { clients, addTask } = useData();
+  const { currentWorkspace } = useWorkspace();
   
   const [isOpen, setIsOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -167,6 +169,7 @@ export function FloatingQuickAction() {
         clientId,
         clientName: selectedClient?.name || 'Unknown Client',
         clientColor: selectedClient?.clientColor || '#3B82F6',
+        workspaceId: currentWorkspace?.id || selectedClient?.workspaceId || 'ws-team-anggi',
         category,
         taskType,
         format,

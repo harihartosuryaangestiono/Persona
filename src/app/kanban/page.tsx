@@ -162,8 +162,8 @@ export default function KanbanPage() {
     }
   }, [editPostingDate]);
 
-  // Workspace filtering
-  const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id);
+  // Workspace filtering (fallback to current workspace if workspaceId is missing)
+  const workspaceTasks = tasks.filter((t) => !t.workspaceId || t.workspaceId === currentWorkspace.id);
 
   // Board columns based on active board state
   const columns = activeBoard === 'strategic' ? STRATEGIC_COLUMNS : activeBoard === 'production' ? PRODUCTION_COLUMNS : MAIN_COLUMNS;
@@ -212,12 +212,15 @@ export default function KanbanPage() {
     const isStageAssignee = logStages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
 
     let matchesCategory = false;
-    if (currentUser.roles.includes('Strategist') && t.category === 'Strategic') matchesCategory = true;
-    if (currentUser.roles.includes('Editor') && t.category === 'Editor') matchesCategory = true;
-    if (currentUser.roles.includes('Scheduler') && t.category === 'Scheduler') matchesCategory = true;
-    if (currentUser.roles.includes('Production Assistant') && t.category === 'Assistant') matchesCategory = true;
+    const catStr = t.category as string;
+    if (currentUser.roles.includes('Strategist') && (catStr === 'Strategic' || catStr === 'Strategist')) matchesCategory = true;
+    if (currentUser.roles.includes('Editor') && (catStr === 'Editor' || catStr === 'Editing')) matchesCategory = true;
+    if (currentUser.roles.includes('Scheduler') && (catStr === 'Scheduler' || catStr === 'Scheduling')) matchesCategory = true;
+    if (currentUser.roles.includes('Production Assistant') && (catStr === 'Production' || catStr === 'Assistant')) matchesCategory = true;
 
-    return isAssigned || isStageAssignee || matchesCategory;
+    const isCreator = (t as any).createdBy === currentUser.id || (t as any).createdBy === currentUser.name;
+
+    return isAssigned || isStageAssignee || matchesCategory || isCreator;
   });
 
   // Sort tasks for table view

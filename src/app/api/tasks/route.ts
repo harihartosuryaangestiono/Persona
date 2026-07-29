@@ -36,12 +36,26 @@ export async function POST(req: Request) {
       }
     }
 
-    // Force starting status based on category (Requirement 8)
-    let defaultStatus = 'Brief';
-    if (category === 'Strategic') defaultStatus = 'Brief';
-    else if (category === 'Production') defaultStatus = 'Production';
-    else if (category === 'Editing') defaultStatus = 'Editing';
-    else if (category === 'Scheduling') defaultStatus = 'Scheduling';
+    // Respect requested status if passed; otherwise resolve default from category
+    let defaultStatus = body.status || 'Brief';
+    if (!body.status) {
+      if (category === 'Strategic') defaultStatus = 'Brief';
+      else if (category === 'Production') defaultStatus = 'Production';
+      else if (category === 'Editing' || category === 'Editor') defaultStatus = 'Editing';
+      else if (category === 'Scheduling' || category === 'Scheduler') defaultStatus = 'Scheduling';
+    }
+
+    // Resolve target workspaceId from body or client
+    let targetWorkspaceId = body.workspaceId;
+    if (!targetWorkspaceId && body.clientId) {
+      const clientObj = await prisma.client.findUnique({ where: { id: body.clientId } });
+      if (clientObj) {
+        targetWorkspaceId = clientObj.workspaceId;
+      }
+    }
+    if (!targetWorkspaceId) {
+      targetWorkspaceId = 'ws-team-anggi';
+    }
 
     const deadline = new Date(body.deadline || Date.now());
     const computedPriority = calculatePriority(deadline, defaultStatus, body.postingDate);
@@ -67,7 +81,7 @@ export async function POST(req: Request) {
           priority: computedPriority,
           status: defaultStatus,
           clientId: body.clientId,
-          workspaceId: body.workspaceId || null,
+          workspaceId: targetWorkspaceId,
           postingDate: body.postingDate ? new Date(body.postingDate) : null,
           deadline,
           assignedUserIds: JSON.stringify(body.assignedUserIds || []),

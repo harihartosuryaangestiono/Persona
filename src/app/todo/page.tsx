@@ -3,12 +3,14 @@
 import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { Search, ExternalLink, Plus, Filter, X } from 'lucide-react';
 import { calculateAutoDeadline } from '@/lib/score-calculator';
 
 export default function ToDoPage() {
   const { tasks, clients, updateTask, addTask } = useData();
   const { allUsers } = useUser();
+  const { currentWorkspace } = useWorkspace();
 
   const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,6 +47,7 @@ export default function ToDoPage() {
 
     addTask({
       clientId: newClientId || clients[0]?.id || 'c-1',
+      workspaceId: currentWorkspace?.id || 'ws-team-anggi',
       title: newTitle.trim(),
       category: newCategory,
       taskType: newTaskType,
