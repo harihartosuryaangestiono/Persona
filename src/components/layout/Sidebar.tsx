@@ -77,11 +77,6 @@ export function Sidebar() {
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
  
   const navItems = ALL_NAV_ITEMS.filter((item) => {
-    // Hide Production & Shoot if not in Team Anggi's workspace
-    if (item.href === '/production' && currentWorkspace.id !== 'ws-team-anggi') {
-      return false;
-    }
- 
     if (!item.allowedRoles) return true;
     if (currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin')) return true;
     return item.allowedRoles.some((role) => currentUser.roles.includes(role));

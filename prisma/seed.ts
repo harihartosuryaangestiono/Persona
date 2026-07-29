@@ -194,8 +194,13 @@ async function main() {
     { postingDate: '2026-08-26', pic: 'Dinda', deadline: '2026-08-23', title: 'Mbex Junior Medan Tgl 31 Juli - 2 Agust', category: 'Editor', taskType: 'Editing', format: 'Carousel', status: 'Approval', link: 'https://drive.google.com/drive/folders/19656Ve6oRPw4_z-7cXBLv_oILUbCEtGE?usp=sharing', qty: 1, client: 'Karihome' },
     { postingDate: '2026-08-27', pic: 'Dinda', deadline: '2026-08-24', title: 'Mom n Mee', category: 'Editor', taskType: 'Editing', format: 'Carousel', status: 'Approval', link: 'https://drive.google.com/drive/folders/1Sq8a1sXbm5NB_UsoYzVK6ai9-VV0smcR?usp=', qty: 1, client: 'Karihome' },
 
+    // Tasks ready for Production or active Shooting (Anggi Workspace)
+    { postingDate: '2026-07-28', pic: 'Jabin', deadline: '2026-07-25', title: 'Syuting Konten Edukasi Baking', category: 'Production', taskType: 'Production Assistant', format: '4 Jam', status: 'Shooting', link: '', qty: 1, client: 'Baking Empire Kelapa Gading' },
+    { postingDate: '2026-07-30', pic: 'Dinda', deadline: '2026-07-27', title: 'Sesi Syuting Reels Review Karihome', category: 'Production', taskType: 'Production Assistant', format: '4 Jam', status: 'Production', link: '', qty: 1, client: 'Karihome' },
+
     // MotoDW (Inhouse Workspace)
     { postingDate: '2026-07-05', pic: 'Priska', deadline: '2026-07-02', title: 'Coating Showcase MotoDW', category: 'Editor', taskType: 'Editing', format: 'Reels', status: 'Approved', link: '', qty: 1, client: 'MotoDW' },
+    { postingDate: '2026-07-29', pic: 'Jabin', deadline: '2026-07-26', title: 'Showcase Event MotoDW Moto3', category: 'Production', taskType: 'Production Assistant', format: '4 Jam', status: 'Shooting', link: '', qty: 1, client: 'MotoDW' },
 
     // Hariharigimmick (Inhouse Workspace)
     { postingDate: '2026-07-12', pic: 'Dinda', deadline: '2026-07-09', title: 'Carousel Gimmick Funfact', category: 'Editor', taskType: 'Editing', format: 'Carousel', status: 'Approval', link: '', qty: 1, client: 'Hariharigimmick' },
@@ -230,7 +235,9 @@ async function main() {
         qty: t.qty || 1,
         postingDate: new Date(t.postingDate),
         deadline: new Date(t.deadline),
-        status: t.status === 'Posted' ? 'Posted' : t.status === 'Approved' ? 'Approval' : t.status === 'Dibatalkan' ? 'Brief' : t.status === 'Approval' || t.status === 'Waiting for Approval' ? 'Approval' : t.status === 'In Progress' ? 'Editing' : 'Brief',
+        status: ['Brief', 'Content Proposal', 'Script', 'Editorial Plan', 'Production', 'Shooting', 'Editing', 'Revision', 'Approval', 'Scheduling', 'Posted'].includes(t.status)
+          ? t.status
+          : (t.status === 'Posted' ? 'Posted' : t.status === 'Approved' ? 'Approval' : t.status === 'Dibatalkan' ? 'Brief' : t.status === 'Approval' || t.status === 'Waiting for Approval' ? 'Approval' : t.status === 'In Progress' ? 'Editing' : 'Brief'),
         assignedUserIds: JSON.stringify([picObj ? picObj.id : createdUsers['Jabin'].id]),
         previewLink: t.link,
         score,
@@ -238,7 +245,7 @@ async function main() {
         stages: JSON.stringify([
           {
             id: `stg-${Date.now()}-${Math.random()}`,
-            role: t.category === 'Scheduler' ? 'Scheduler' : 'Editor',
+            role: t.category === 'Scheduler' ? 'Scheduler' : (t.category === 'Production' ? 'Production Assistant' : 'Editor'),
             userId: picObj.id,
             userName: picObj.name,
             taskType: t.taskType || 'Editing',

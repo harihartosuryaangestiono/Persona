@@ -2,12 +2,49 @@
 
 import React from 'react';
 import { useData } from '@/context/DataContext';
+import { useWorkspace } from '@/context/WorkspaceContext';
+import { useUser } from '@/context/UserContext';
 import { Video, Calendar, MapPin, Users, CheckSquare } from 'lucide-react';
 
 export default function ProductionPage() {
   const { tasks } = useData();
+  const { currentWorkspace } = useWorkspace();
+  const { currentUser } = useUser();
 
-  const shootingTasks = tasks.filter((t) => t.status === 'Shooting' || t.taskType?.includes('Production'));
+  const shootingTasks = tasks.filter((t) => {
+    if (t.isArchived) return false;
+    if (t.workspaceId !== currentWorkspace?.id) return false;
+
+    // Filter by status/category
+    const isProductionTask = 
+      t.status === 'Production' || 
+      t.status === 'Shooting' || 
+      t.category === 'Production' || 
+      t.taskType?.includes('Production') ||
+      (t.stages && (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).some((s: any) => s.role === 'Production Assistant' || s.taskType?.includes('Production')));
+
+    if (!isProductionTask) return false;
+
+    // Role-based visibility: Admin/Owner sees everything.
+    const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+    if (isAdmin) return true;
+
+    const assignedIds = t.assignedUserIds
+      ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
+      : [];
+    const isAssigned = assignedIds.includes(currentUser?.id) || assignedIds.includes(currentUser?.name);
+
+    const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+    const isStageAssignee = logStages.some((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name);
+
+    const userRoles = currentUser?.roles || [];
+    let matchesCategory = false;
+    if (userRoles.includes('Production Assistant') && t.category === 'Production') matchesCategory = true;
+    if (userRoles.includes('Editor') && t.category === 'Editor') matchesCategory = true;
+    if (userRoles.includes('Strategist') && t.category === 'Strategic') matchesCategory = true;
+
+    return isAssigned || isStageAssignee || matchesCategory;
+  });
 
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
