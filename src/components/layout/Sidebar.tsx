@@ -92,8 +92,8 @@ export function Sidebar() {
       {/* Brand Header & Workspace Switcher */}
       <div>
         <div className="flex items-center gap-3 px-3 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center text-white shadow-xs">
-            <Command className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-white border border-neutral-200/50 shadow-xs">
+            <img src="/Logo.png" alt="Persona OS Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-bold tracking-tight text-neutral-900 flex items-center gap-1.5">
