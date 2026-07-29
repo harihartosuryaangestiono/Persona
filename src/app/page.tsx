@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -33,31 +33,41 @@ export default function DynamicDashboardPage() {
   const isScheduler = currentUser?.roles.includes('Scheduler');
   const isPA = currentUser?.roles.includes('Production Assistant');
 
-  // Filter Tasks for current user's workspace
-  const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id);
+  const [selectedMonth, setSelectedMonth] = useState('July');
+  const [selectedYear, setSelectedYear] = useState(2026);
 
-  // Recalculate employee workload score from stages (Requirement 19)
-  const userTotalPoints = worklogs.reduce((sum, w) => {
-    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-    if (logStages.length > 0) {
-      const userStagePoints = logStages
-        .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
-        .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-      return sum + userStagePoints;
-    } else {
-      const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
-      return sum + (isUserLog ? w.score : 0);
-    }
-  }, 0);
+  // Filter Tasks for current user's workspace, excluding archived
+  const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id && !t.isArchived);
 
-  const capacityHealth = getCapacityHealth(userTotalPoints, currentUser?.monthlyCapacity || 12000);
+  // Recalculate employee workload score from stages (Requirement 10: July 2026 default)
+  const userTotalPoints = worklogs
+    .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
+    .reduce((sum, w) => {
+      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+      if (logStages.length > 0) {
+        const userStagePoints = logStages
+          .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
+          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+        return sum + userStagePoints;
+      } else {
+        const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
+        return sum + (isUserLog ? w.score : 0);
+      }
+    }, 0);
 
-  // Executive Metrics (Admins)
-  const totalAgencyPoints = worklogs.reduce((sum, w) => sum + w.score, 0);
+  const maxCapacity = currentUser?.monthlyCapacity || 12000;
+  const capacityHealth = getCapacityHealth(userTotalPoints, maxCapacity);
+  const remainingCapacity = maxCapacity - userTotalPoints;
+  const workloadForecast = capacityHealth.percent >= 90 ? 'Critical Overload' : (capacityHealth.percent >= 75 ? 'Busy/Full Load' : 'Healthy Capacity');
+
+  // Executive Metrics (Admins) (Requirement 10: July 2026 default)
+  const totalAgencyPoints = worklogs
+    .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
+    .reduce((sum, w) => sum + w.score, 0);
   const totalAgencyCOGS = totalAgencyPoints * 250; // Employee Point COGS: Rp250 / point
 
   // Filter pending approvals for Admin
-  const pendingApprovals = tasks.filter((t) => t.status === 'Approval');
+  const pendingApprovals = tasks.filter((t) => t.status === 'Approval' && !t.isArchived);
 
   // Filter today's attendance
   const todayStr = new Date().toISOString().split('T')[0];
@@ -66,7 +76,7 @@ export default function DynamicDashboardPage() {
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
       {/* Personalized Greeting Header */}
-      <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {currentUser?.avatar ? (
             <img
@@ -83,20 +93,47 @@ export default function DynamicDashboardPage() {
             <h1 className="text-xl font-bold tracking-tight text-neutral-900">
               Good Morning, {currentUser?.name}
             </h1>
-            <p className="text-xs text-neutral-500 font-semibold mt-0.5 flex items-center gap-2">
+            <p className="text-xs text-neutral-500 font-semibold mt-0.5 flex flex-wrap items-center gap-2">
               <span>{currentUser?.roles.join(' • ')}</span>
               <span>•</span>
               <span>Workspace: {currentWorkspace.name}</span>
             </p>
+            {/* Period Selector */}
+            <div className="flex items-center gap-2 mt-2">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1 text-[10px] font-bold focus:outline-hidden"
+              >
+                {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1 text-[10px] font-bold focus:outline-hidden font-mono"
+              >
+                {[2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 bg-neutral-50 border border-neutral-200 px-4 py-2 rounded-xl">
-          <div className="text-right">
-            <p className="text-[10px] text-neutral-500 font-bold uppercase">Your Workload Capacity</p>
-            <p className="text-xs font-bold font-mono text-neutral-900">{userTotalPoints.toLocaleString()} / 12,000 pts</p>
+        <div className="flex flex-col sm:flex-row items-center gap-3 bg-neutral-50 border border-neutral-200 px-4 py-3 rounded-2xl w-full lg:w-auto">
+          <div className="text-right text-xs w-full">
+            <p className="text-[9px] text-neutral-450 font-bold uppercase tracking-wider">
+              Forecast: <strong className={capacityHealth.percent >= 90 ? 'text-rose-600' : capacityHealth.percent >= 75 ? 'text-amber-600' : 'text-emerald-700'}>{workloadForecast} ({capacityHealth.percent}%)</strong>
+            </p>
+            <div className="text-neutral-500 font-semibold text-[10px] mt-1 space-y-0.5">
+              <p>Capacity: <strong className="text-neutral-800 font-mono">{maxCapacity.toLocaleString()} pts</strong></p>
+              <p>Used: <strong className="text-neutral-800 font-mono">{userTotalPoints.toLocaleString()} pts</strong></p>
+              <p>Remaining: <strong className="text-neutral-800 font-mono">{remainingCapacity.toLocaleString()} pts</strong></p>
+            </div>
           </div>
-          <div className="w-8 h-8 rounded-full border border-neutral-300 flex items-center justify-center font-bold text-[10px] text-neutral-900 font-mono bg-white shadow-2xs">
+          <div className="w-12 h-12 rounded-xl border border-neutral-300 flex items-center justify-center font-bold text-sm text-neutral-900 font-mono bg-white shadow-2xs shrink-0">
             {capacityHealth.percent}%
           </div>
         </div>

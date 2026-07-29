@@ -1,23 +1,48 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { formatRupiah, getCapacityHealth } from '@/lib/score-calculator';
+import { Filter, Calendar } from 'lucide-react';
 
 export default function ScoreSummaryPage() {
   const { allUsers } = useUser();
   const { worklogs } = useData();
 
+  // Period filter states defaulting to July 2026 (Requirement 10)
+  const [selectedMonth, setSelectedMonth] = useState('July');
+  const [selectedYear, setSelectedYear] = useState(2026);
+
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
             Master Score Summary & Employee Capacity <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Monthly 12,000 Pts Cap</span>
           </h1>
           <p className="text-xs text-neutral-500">Tracks employee effective workload capacity (6 hrs/day × 20 workdays = 12,000 points).</p>
+        </div>
+
+        {/* Period Selector */}
+        <div className="flex items-center gap-2.5 bg-white border border-neutral-200 p-2 rounded-xl shadow-2xs text-xs font-semibold">
+          <Calendar className="w-4 h-4 text-neutral-450" />
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden"
+          >
+            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="w-16 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-center text-neutral-800 font-mono focus:outline-hidden"
+          />
         </div>
       </div>
 
@@ -28,29 +53,32 @@ export default function ScoreSummaryPage() {
             <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
               <tr>
                 <th className="px-4 py-3.5">Employee</th>
-                <th className="px-4 py-3.5">Month</th>
+                <th className="px-4 py-3.5">Month Period</th>
                 <th className="px-4 py-3.5 text-right">Score (pts)</th>
-                <th className="px-4 py-3.5 text-right">Capacity</th>
-                <th className="px-4 py-3.5 text-right">Remaining</th>
-                <th className="px-4 py-3.5 text-center">Capacity %</th>
+                <th className="px-4 py-3.5 text-right">Capacity Limit</th>
+                <th className="px-4 py-3.5 text-right">Remaining Capacity</th>
+                <th className="px-4 py-3.5 text-center">Capacity Load %</th>
                 <th className="px-4 py-3.5 text-right">COGS (Rp250/pt)</th>
                 <th className="px-4 py-3.5">Capacity Indicator</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {allUsers.map((usr) => {
-                const userPoints = worklogs.reduce((sum, w) => {
-                  const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-                  if (logStages.length > 0) {
-                    const userStagePoints = logStages
-                      .filter((s: any) => s.userId === usr.id || s.userName === usr.name)
-                      .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-                    return sum + userStagePoints;
-                  } else {
-                    const isUserLog = w.userName === usr.name || w.userId === usr.id;
-                    return sum + (isUserLog ? w.score : 0);
-                  }
-                }, 0);
+                // Sum only worklogs matching selected period (Requirement 10)
+                const userPoints = worklogs
+                  .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
+                  .reduce((sum, w) => {
+                    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+                    if (logStages.length > 0) {
+                      const userStagePoints = logStages
+                        .filter((s: any) => s.userId === usr.id || s.userName === usr.name)
+                        .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+                      return sum + userStagePoints;
+                    } else {
+                      const isUserLog = w.userName === usr.name || w.userId === usr.id;
+                      return sum + (isUserLog ? w.score : 0);
+                    }
+                  }, 0);
 
                 const capacity = 12000;
                 const remaining = Math.max(0, capacity - userPoints);
@@ -67,7 +95,9 @@ export default function ScoreSummaryPage() {
                       </div>
                     </td>
 
-                    <td className="px-4 py-3.5 font-mono text-neutral-500">July 2026</td>
+                    <td className="px-4 py-3.5 font-semibold text-neutral-600 capitalize">
+                      {selectedMonth} {selectedYear}
+                    </td>
                     <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{userPoints} pts</td>
                     <td className="px-4 py-3.5 text-right font-mono text-neutral-500">12,000 pts</td>
                     <td className="px-4 py-3.5 text-right font-mono text-neutral-700">{remaining} pts</td>
@@ -84,7 +114,7 @@ export default function ScoreSummaryPage() {
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
                               health.status === 'RED'
-                                ? 'bg-red-600'
+                                ? 'bg-red-650 animate-pulse'
                                 : health.status === 'YELLOW'
                                 ? 'bg-amber-500'
                                 : 'bg-emerald-600'

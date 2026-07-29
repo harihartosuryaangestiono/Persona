@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
+import { useData } from '@/context/DataContext';
 import { Shield, Lock, Sliders, User, Edit3, Trash2, Plus, Upload, Save, X, Check } from 'lucide-react';
 import { MASTER_SCORES_STATIC } from '@/lib/score-calculator';
 import { hasPermission } from '@/lib/rbac';
@@ -9,6 +10,7 @@ import { UserPersona, UserRole } from '@/lib/types';
 
 export default function SettingsPage() {
   const { currentUser, allUsers, updateUser, addUser } = useUser();
+  const { companySettings, updateCompanySettings } = useData();
   const isAdmin = hasPermission(currentUser, 'EDIT_MASTER_SCORE');
 
   const [scores] = useState(MASTER_SCORES_STATIC);
@@ -193,6 +195,18 @@ export default function SettingsPage() {
         </h3>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+          <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1 col-span-2">
+            <span className="text-neutral-550 font-bold block mb-1">Archive Frequency Rule (Admin-Configurable):</span>
+            <select
+              value={companySettings?.archiveRule || 'END_OF_MONTH'}
+              onChange={(e) => updateCompanySettings({ archiveRule: e.target.value })}
+              className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 font-bold focus:outline-hidden text-xs w-full"
+            >
+              <option value="END_OF_MONTH">End of Period Month (Default)</option>
+              <option value="SEVEN_DAYS">Posted + 7 Days Rolling Archive</option>
+            </select>
+            <p className="text-[10px] text-neutral-400 mt-1">Defines the permanent database rules for automatic archiving of finished/posted contents.</p>
+          </div>
           <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1">
             <span className="text-neutral-500">Effective Hours / Day:</span>
             <p className="font-bold text-neutral-900 text-sm">6 Hours</p>

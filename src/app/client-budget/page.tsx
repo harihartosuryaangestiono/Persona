@@ -6,8 +6,20 @@ import { DollarSign, ShieldAlert, AlertTriangle, Plus, CheckCircle2, Edit3, X, S
 import { formatRupiah } from '@/lib/score-calculator';
 import { ClientMonthlyBudgetItem } from '@/lib/types';
 
+// Helper to convert task period to budget month string format (e.g. July 2026 -> 2026-07)
+const getBudgetMonthFormat = (month: string, year: number) => {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const idx = monthNames.indexOf(month);
+  if (idx === -1) return '';
+  const mStr = String(idx + 1).padStart(2, '0');
+  return `${year}-${mStr}`;
+};
+
 export default function ClientBudgetPage() {
-  const { clients, budgets, setBudgets } = useData();
+  const { clients, budgets, setBudgets, tasks } = useData();
   const [selectedMonth, setSelectedMonth] = useState('ALL');
 
   // Modal State for Add & Edit Budget
@@ -131,7 +143,13 @@ export default function ClientBudgetPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {displayedBudgets.map((b) => {
-                const pct = Math.round((b.used / b.budget) * 100);
+                // Dynamically calculate points used in specific period from tasks (Requirement 10)
+                const usedPoints = tasks
+                  .filter((t) => t.clientId === b.clientId && !t.isArchived && getBudgetMonthFormat(t.month, t.year) === b.month)
+                  .reduce((sum, t) => sum + (t.score || 0), 0);
+
+                const remainingPoints = Math.max(0, b.budget - usedPoints);
+                const pct = b.budget > 0 ? Math.round((usedPoints / b.budget) * 100) : 0;
                 const isWarning = pct >= 80;
                 const monthDisplay = b.month === '2026-07' ? 'Juli 2026' : b.month === '2026-08' ? 'Agustus 2026' : b.month;
 
@@ -144,19 +162,19 @@ export default function ClientBudgetPage() {
                       <div className="text-[10px] text-neutral-500 font-mono">Rp {(b.budget * 1500).toLocaleString()}</div>
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="font-mono text-amber-600 font-bold">{b.used.toLocaleString()} pts</div>
-                      <div className="text-[10px] text-neutral-500 font-mono">Rp {(b.used * 1500).toLocaleString()}</div>
+                      <div className="font-mono text-amber-600 font-bold">{usedPoints.toLocaleString()} pts</div>
+                      <div className="text-[10px] text-neutral-500 font-mono">Rp {(usedPoints * 1500).toLocaleString()}</div>
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="font-mono font-bold text-emerald-600">{b.remaining.toLocaleString()} pts</div>
-                      <div className="text-[10px] text-emerald-600 font-mono font-bold">Rp {(b.remaining * 1500).toLocaleString()}</div>
+                      <div className="font-mono font-bold text-emerald-600">{remainingPoints.toLocaleString()} pts</div>
+                      <div className="text-[10px] text-emerald-600 font-mono font-bold">Rp {(remainingPoints * 1500).toLocaleString()}</div>
                     </td>
                     <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-800">{pct}%</td>
                     <td className="px-4 py-3.5 text-center whitespace-nowrap">
                       <span
                         className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${
                           isWarning
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
                             : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}
                       >
@@ -166,7 +184,7 @@ export default function ClientBudgetPage() {
                     <td className="px-4 py-3.5 text-center">
                       <button
                         onClick={() => {
-                          setEditingBudget(b);
+                          setEditingBudget({ ...b, used: usedPoints, remaining: remainingPoints });
                           setIsEditModalOpen(true);
                         }}
                         className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition"

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -13,18 +13,29 @@ import {
   Calendar as CalendarIcon,
   Video,
   Clock,
-  User
+  User,
+  Edit,
+  Save,
+  CheckCircle2
 } from 'lucide-react';
 import { TaskItem } from '@/lib/types';
+import { calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 
 export default function CalendarPage() {
-  const { tasks, clients } = useData();
+  const { tasks, clients, updateTask } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
 
   const [viewMode, setViewMode] = useState<'Month' | 'Week' | 'Timeline'>('Month');
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 1)); // Default July 2026
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+
+  // Editing State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editClientId, setEditClientId] = useState('');
+  const [editPostingDate, setEditPostingDate] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
 
   // Filters State
   const [selectedClientId, setSelectedClientId] = useState('ALL');
@@ -33,14 +44,51 @@ export default function CalendarPage() {
   const [selectedRole, setSelectedRole] = useState('ALL');
   const [selectedFormat, setSelectedFormat] = useState('ALL');
 
-  // Role-based filtering (Requirement 16)
+  // Load persistent filters from localStorage (Requirement 11)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const cachedClient = localStorage.getItem('calFilterClientId');
+      const cachedStatus = localStorage.getItem('calFilterStatus');
+      const cachedPIC = localStorage.getItem('calFilterPIC');
+      const cachedRole = localStorage.getItem('calFilterRole');
+      const cachedFormat = localStorage.getItem('calFilterFormat');
+      const cachedViewMode = localStorage.getItem('calFilterViewMode');
+
+      if (cachedClient) setSelectedClientId(cachedClient);
+      if (cachedStatus) setSelectedStatus(cachedStatus);
+      if (cachedPIC) setSelectedPIC(cachedPIC);
+      if (cachedRole) setSelectedRole(cachedRole);
+      if (cachedFormat) setSelectedFormat(cachedFormat);
+      if (cachedViewMode) setViewMode(cachedViewMode as any);
+    }
+  }, []);
+
+  // Save persistent filters to localStorage (Requirement 11)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('calFilterClientId', selectedClientId);
+      localStorage.setItem('calFilterStatus', selectedStatus);
+      localStorage.setItem('calFilterPIC', selectedPIC);
+      localStorage.setItem('calFilterRole', selectedRole);
+      localStorage.setItem('calFilterFormat', selectedFormat);
+      localStorage.setItem('calFilterViewMode', viewMode);
+    }
+  }, [selectedClientId, selectedStatus, selectedPIC, selectedRole, selectedFormat, viewMode]);
+
+  // Role-based filtering
   const isExecutive = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
 
   const workspaceTasks = tasks.filter((t) => {
-    // 1. Must belong to the current workspace
+    // 1. Filter out archived tasks (Requirement 4)
+    if (t.isArchived) return false;
+
+    // 2. Must belong to the current workspace
     if (t.workspaceId !== currentWorkspace.id) return false;
 
-    // 2. Role-based view restrictions (Requirement 16)
+    // 3. Strategic tasks containing a Posting Date must automatically appear (Requirement 1)
+    if (t.category === 'Strategic' && t.postingDate) return true;
+
+    // 4. Role-based view restrictions (Requirement 16)
     if (!isExecutive && currentUser) {
       const userRoles = currentUser.roles;
       // Strategist sees Strategic category
@@ -102,7 +150,39 @@ export default function CalendarPage() {
     return `${year}-${mStr}-${dStr}`;
   };
 
-  // Status Badge Colors (Requirement 15)
+  // Set edit form values when selectedTask changes
+  useEffect(() => {
+    if (selectedTask) {
+      setEditTitle(selectedTask.title);
+      setEditClientId(selectedTask.clientId);
+      setEditPostingDate(selectedTask.postingDate ? selectedTask.postingDate.substring(0, 10) : '');
+      setEditDeadline(selectedTask.deadline ? selectedTask.deadline.substring(0, 10) : '');
+    } else {
+      setIsEditing(false);
+    }
+  }, [selectedTask]);
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask) return;
+
+    const targetClient = clients.find((c) => c.id === editClientId);
+    
+    updateTask(selectedTask.id, {
+      title: editTitle,
+      clientId: editClientId,
+      clientName: targetClient?.name,
+      clientColor: targetClient?.clientColor,
+      postingDate: editPostingDate,
+      deadline: editDeadline,
+    });
+
+    setIsEditing(false);
+    setSelectedTask(null);
+    alert('Task synchronized and updated successfully!');
+  };
+
+  // Status Badge Colors
   const getStatusColorClass = (status: string, isToday: boolean) => {
     if (isToday) return 'bg-white/20 text-white';
 
@@ -111,7 +191,10 @@ export default function CalendarPage() {
       case 'Draft':
       case 'Content Proposal':
       case 'Script':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Script & Shotlist':
+        return 'bg-gray-150 text-gray-800 border-gray-205';
+      case 'Production':
+      case 'Shooting':
       case 'Editing':
       case 'Revision':
       case 'In Progress':
@@ -124,6 +207,7 @@ export default function CalendarPage() {
       case 'Approved':
         return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'Ready To Post':
+      case 'Ready to Post':
         return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'Scheduling':
       case 'Scheduled':
@@ -147,7 +231,7 @@ export default function CalendarPage() {
             Editorial Calendar <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">{currentWorkspace.name}</span>
           </h1>
           <p className="text-xs text-neutral-500">
-            Interactive scheduling grid. Events are filtered based on your operational roles.
+            Interactive scheduling grid. All Strategic tasks with a Posting Date appear automatically.
           </p>
         </div>
 
@@ -170,7 +254,7 @@ export default function CalendarPage() {
       {/* Advanced Filters */}
       <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex flex-wrap items-center gap-4 text-xs font-medium shadow-xs">
         <div className="flex items-center gap-1">
-          <Filter className="w-3.5 h-3.5 text-neutral-400" />
+          <Filter className="w-3.5 h-3.5 text-neutral-450" />
           <span className="text-neutral-500">Filters:</span>
         </div>
 
@@ -196,12 +280,15 @@ export default function CalendarPage() {
         >
           <option value="ALL">All Statuses</option>
           <option value="Brief">Brief</option>
-          <option value="Script">Script</option>
+          <option value="Content Proposal">Content Proposal</option>
+          <option value="Script & Shotlist">Script & Shotlist</option>
+          <option value="Editorial Calendar">Editorial Calendar</option>
+          <option value="Ready for Production">Ready for Production</option>
           <option value="Production">Production</option>
           <option value="Editing">Editing</option>
           <option value="Revision">Revision</option>
           <option value="Approval">Approval</option>
-          <option value="Ready To Post">Ready To Post</option>
+          <option value="Ready to Post">Ready to Post</option>
           <option value="Scheduling">Scheduling</option>
           <option value="Posted">Posted</option>
         </select>
@@ -226,11 +313,11 @@ export default function CalendarPage() {
           onChange={(e) => setSelectedRole(e.target.value)}
           className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
         >
-          <option value="ALL">All Roles</option>
+          <option value="ALL">All Categories</option>
           <option value="Strategic">Strategic</option>
-          <option value="Editor">Editor</option>
-          <option value="Assistant">Production Assistant</option>
-          <option value="Scheduler">Scheduler</option>
+          <option value="Production">Production</option>
+          <option value="Editing">Editing</option>
+          <option value="Scheduling">Scheduling</option>
         </select>
 
         {/* Format */}
@@ -331,7 +418,7 @@ export default function CalendarPage() {
                     </span>
                     {dayTasks.length > 0 && (
                       <span className={`text-[9px] font-mono font-bold ${isToday ? 'text-neutral-300' : 'text-neutral-400'}`}>
-                        {dayTasks.length} task(s)
+                        {dayTasks.length}
                       </span>
                     )}
                   </div>
@@ -434,16 +521,20 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* Task Detail Modal */}
+      {/* Task Detail & Edit Modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl shadow-xl p-6 space-y-4">
+            
+            {/* Modal Header */}
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded bg-neutral-100 text-neutral-800 border border-neutral-200 font-mono">
                   {selectedTask.clientName}
                 </span>
-                <h3 className="text-base font-bold text-neutral-900 mt-2">{selectedTask.title}</h3>
+                <h3 className="text-base font-bold text-neutral-900 mt-2">
+                  {isEditing ? 'Edit Calendar task' : selectedTask.title}
+                </h3>
               </div>
               <button
                 onClick={() => setSelectedTask(null)}
@@ -453,44 +544,133 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs bg-neutral-50 p-3 rounded-xl border border-neutral-200 font-mono font-bold text-neutral-600">
-              <div>
-                <span className="text-neutral-400 text-[10px] block">Posting Date:</span>
-                <span className="text-neutral-900">{selectedTask.postingDate || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="text-neutral-400 text-[10px] block">Deadline (-3d):</span>
-                <span className="text-amber-800">{selectedTask.deadline}</span>
-              </div>
-              <div>
-                <span className="text-neutral-400 text-[10px] block">Format:</span>
-                <span className="text-neutral-900">{selectedTask.format}</span>
-              </div>
-              <div>
-                <span className="text-neutral-400 text-[10px] block">Points:</span>
-                <span className="text-emerald-800">{selectedTask.score} pts</span>
-              </div>
-            </div>
+            {/* Modal Body */}
+            {isEditing ? (
+              <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs text-neutral-700">
+                <div className="space-y-1">
+                  <label className="block text-neutral-605 font-bold">Content Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
+                  />
+                </div>
 
-            {selectedTask.driveLink && (
-              <a
-                href={selectedTask.driveLink}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-xs text-neutral-900 font-bold hover:underline bg-neutral-50 p-2.5 rounded-xl border border-neutral-200"
-              >
-                <ExternalLink className="w-4 h-4" /> Open Drive Folder
-              </a>
+                <div className="space-y-1">
+                  <label className="block text-neutral-605 font-bold">Client</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-neutral-900 focus:outline-hidden"
+                  >
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="block text-neutral-605 font-bold">Posting Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={editPostingDate}
+                      onChange={(e) => setEditPostingDate(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-neutral-900 focus:outline-hidden font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-neutral-605 font-bold">Deadline</label>
+                    <input
+                      type="date"
+                      required
+                      value={editDeadline}
+                      onChange={(e) => setEditDeadline(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-neutral-900 focus:outline-hidden font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-neutral-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 bg-neutral-105 hover:bg-neutral-150 rounded-lg text-neutral-600 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-neutral-900 hover:bg-neutral-850 text-white rounded-lg font-bold flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Changes
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-xs bg-neutral-50 p-3 rounded-xl border border-neutral-200 font-mono font-bold text-neutral-600">
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Posting Date:</span>
+                    <span className="text-neutral-900">{selectedTask.postingDate || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Deadline (-3d):</span>
+                    <span className="text-amber-800">{selectedTask.deadline}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Format:</span>
+                    <span className="text-neutral-900">{selectedTask.format || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Priority:</span>
+                    <span className={`capitalize ${calculatePriority(selectedTask.deadline) === 'Overdue' ? 'text-red-700' : 'text-neutral-800'}`}>
+                      {calculatePriority(selectedTask.deadline)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Stage Status:</span>
+                    <span className="text-neutral-900">{selectedTask.status}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-400 text-[10px] block">Points:</span>
+                    <span className="text-emerald-800">{selectedTask.score} pts</span>
+                  </div>
+                </div>
+
+                {selectedTask.driveLink && (
+                  <a
+                    href={selectedTask.driveLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-xs text-neutral-900 font-bold hover:underline bg-neutral-50 p-2.5 rounded-xl border border-neutral-200"
+                  >
+                    <ExternalLink className="w-4 h-4" /> Open Drive Folder
+                  </a>
+                )}
+
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-neutral-100">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-semibold text-xs px-4 py-2 rounded-lg flex items-center gap-1 transition"
+                  >
+                    <Edit className="w-3.5 h-3.5" /> Edit specifications
+                  </button>
+                  <button
+                    onClick={() => setSelectedTask(null)}
+                    className="bg-neutral-900 text-white font-semibold text-xs px-4 py-2 rounded-lg"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
             )}
-
-            <div className="pt-2 text-right">
-              <button
-                onClick={() => setSelectedTask(null)}
-                className="bg-neutral-900 text-white font-semibold text-xs px-4 py-2 rounded-lg"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}

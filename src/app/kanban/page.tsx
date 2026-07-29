@@ -21,15 +21,21 @@ import {
   FileText,
   Clock,
   ArrowRight,
-  FolderOpen
+  FolderOpen,
+  Calendar as CalendarIcon,
+  Zap,
+  Play
 } from 'lucide-react';
-import { calculateTaskScore, calculateCOGS, calculateAutoDeadline } from '@/lib/score-calculator';
-import { TaskItem, ClientItem } from '@/lib/types';
+import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
+import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 
-// Columns configurations
-const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Script', 'Editorial Plan', 'Posted'];
-const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Shooting', 'Editing', 'Revision', 'Approval', 'Scheduling', 'Posted'];
-const MAIN_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Script', 'Editorial Plan', 'Shooting', 'Editing', 'Revision', 'Approval', 'Scheduling', 'Posted'];
+// Updated column configurations (Requirement 12)
+const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed'];
+const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
+const MAIN_COLUMNS: TaskItem['status'][] = [
+  'Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed',
+  'Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
+];
 
 interface TaskStage {
   id: string;
@@ -43,7 +49,7 @@ interface TaskStage {
 }
 
 export default function KanbanPage() {
-  const { tasks, clients, worklogs, addTask, updateTask, updateTaskStatus, deleteTask, addWorklog } = useData();
+  const { tasks, clients, worklogs, addTask, updateTask, updateTaskStatus, deleteTask, addWorklog, addNotification, activities, addActivity } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
 
@@ -76,19 +82,24 @@ export default function KanbanPage() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskItem['status'] | null>(null);
 
-  // Form State - Task
+  // Form State - Task Creation
   const [newTitle, setNewTitle] = useState('');
   const [newClientId, setNewClientId] = useState('');
-  const [newPriority, setNewPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [newCategory, setNewCategory] = useState<'Strategic' | 'Production' | 'Editing' | 'Scheduling'>('Strategic');
   const [newPostingDate, setNewPostingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newDeadline, setNewDeadline] = useState(calculateAutoDeadline(new Date().toISOString().split('T')[0], -3));
+  const [newMonth, setNewMonth] = useState('July');
+  const [newYear, setNewYear] = useState(2026);
   const [newDriveLink, setNewDriveLink] = useState('');
   const [newStages, setNewStages] = useState<TaskStage[]>([]);
 
   // Form State - Edit Task
   const [editTitle, setEditTitle] = useState('');
   const [editClientId, setEditClientId] = useState('');
-  const [editPriority, setEditPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [editPostingDate, setEditPostingDate] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editMonth, setEditMonth] = useState('July');
+  const [editYear, setEditYear] = useState(2026);
   const [editDriveLink, setEditDriveLink] = useState('');
   const [editPreviewLink, setEditPreviewLink] = useState('');
   const [editStatus, setEditStatus] = useState<TaskItem['status']>('Brief');
@@ -117,6 +128,38 @@ export default function KanbanPage() {
     }
   }, [activeClients, newClientId]);
 
+  // Sync Month/Year when Posting Date changes in Create Form
+  useEffect(() => {
+    if (newPostingDate) {
+      const d = new Date(newPostingDate);
+      if (!isNaN(d.getTime())) {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        setNewMonth(monthNames[d.getMonth()]);
+        setNewYear(d.getFullYear());
+      }
+      setNewDeadline(calculateAutoDeadline(newPostingDate, -3));
+    }
+  }, [newPostingDate]);
+
+  // Sync Month/Year when Posting Date changes in Edit Form
+  useEffect(() => {
+    if (editPostingDate) {
+      const d = new Date(editPostingDate);
+      if (!isNaN(d.getTime())) {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        setEditMonth(monthNames[d.getMonth()]);
+        setEditYear(d.getFullYear());
+      }
+      setEditDeadline(calculateAutoDeadline(editPostingDate, -3));
+    }
+  }, [editPostingDate]);
+
   // Workspace filtering
   const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id);
 
@@ -125,12 +168,22 @@ export default function KanbanPage() {
 
   // Filtered tasks for presentation
   const filteredTasks = workspaceTasks.filter((t) => {
+    // Exclude archived tasks from active board (Requirement 4)
+    if (t.isArchived) return false;
+
+    // Filter by Active Board type (Requirement 5: Correct Workflow Detection based on Task Category)
+    if (activeBoard === 'strategic' && t.category !== 'Strategic') return false;
+    if (activeBoard === 'production' && t.category === 'Strategic') return false;
+
     // Client Filter
     if (selectedClientFilter !== 'ALL' && t.clientId !== selectedClientFilter) return false;
     // Status Filter (mainly for table view)
     if (selectedStatusFilter !== 'ALL' && t.status !== selectedStatusFilter) return false;
     // Priority Filter
-    if (selectedPriorityFilter !== 'ALL' && t.priority !== selectedPriorityFilter) return false;
+    if (selectedPriorityFilter !== 'ALL') {
+      const dynamicPriority = calculatePriority(t.deadline, t.status, t.postingDate);
+      if (dynamicPriority !== selectedPriorityFilter) return false;
+    }
     // PIC Filter
     if (selectedPICFilter !== 'ALL') {
       const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds;
@@ -145,11 +198,6 @@ export default function KanbanPage() {
     }
 
     // Role & Task Visibility Constraint:
-    // Admin & Owner see everything.
-    // Staff see tasks if:
-    // 1. Task category matches their active roles.
-    // 2. OR, they are in the assigned PIC list of the task.
-    // 3. OR, they are assigned to one of the stages of the task.
     const isAdmin = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (isAdmin) return true;
 
@@ -300,15 +348,36 @@ export default function KanbanPage() {
     }
   };
 
+  // Determine starting status based on category (Requirement 8)
+  const getFirstStatus = (cat: string) => {
+    if (cat === 'Strategic') return 'Brief';
+    if (cat === 'Production') return 'Production';
+    if (cat === 'Editing') return 'Editing';
+    return 'Scheduling';
+  };
+
   // Create task submit
   const handleCreateTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
+    // Permissions check (Requirement 7)
+    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
+    if (!isExecutive) {
+      if (newCategory === 'Strategic' && !currentUser.roles.includes('Strategist')) {
+        alert('Unauthorized: Only Strategists can create Strategic tasks');
+        return;
+      }
+      if (newCategory === 'Production' && currentUser.roles.includes('Scheduler')) {
+        alert('Unauthorized: Schedulers cannot create Production tasks');
+        return;
+      }
+    }
+
     const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
     const totalScore = getStagesTotalScore(newStages);
-
     const assignedIds = Array.from(new Set(newStages.map((s) => s.userId)));
+    const startingStatus = getFirstStatus(newCategory);
 
     await addTask({
       title: newTitle,
@@ -316,15 +385,18 @@ export default function KanbanPage() {
       clientName: targetClient.name,
       clientColor: targetClient.clientColor,
       workspaceId: currentWorkspace.id,
-      priority: newPriority,
       postingDate: newPostingDate,
-      deadline: calculateAutoDeadline(newPostingDate, -3),
-      status: activeBoard === 'production' ? 'Shooting' : 'Brief',
+      deadline: newDeadline,
+      status: startingStatus as any, // Correct Workflow Detection (Requirement 8)
       assignedUserIds: assignedIds,
       score: totalScore,
       cogs: totalScore * 250,
       driveLink: newDriveLink,
       stages: newStages,
+      category: newCategory,
+      month: newMonth,
+      year: newYear,
+      isArchived: false,
     });
 
     // Reset Form
@@ -339,8 +411,10 @@ export default function KanbanPage() {
     if (!selectedTaskDetail) return;
     setEditTitle(selectedTaskDetail.title);
     setEditClientId(selectedTaskDetail.clientId);
-    setEditPriority(selectedTaskDetail.priority || 'Medium');
     setEditPostingDate(selectedTaskDetail.postingDate ? selectedTaskDetail.postingDate.substring(0, 10) : new Date().toISOString().split('T')[0]);
+    setEditDeadline(selectedTaskDetail.deadline ? selectedTaskDetail.deadline.substring(0, 10) : new Date().toISOString().split('T')[0]);
+    setEditMonth(selectedTaskDetail.month || 'July');
+    setEditYear(selectedTaskDetail.year || 2026);
     setEditDriveLink(selectedTaskDetail.driveLink || '');
     setEditPreviewLink(selectedTaskDetail.previewLink || '');
     setEditStatus(selectedTaskDetail.status);
@@ -357,14 +431,25 @@ export default function KanbanPage() {
     const totalScore = getStagesTotalScore(editStages);
     const assignedIds = Array.from(new Set(editStages.map((s) => s.userId)));
 
+    // Enforce assignee restrictions (Requirement 7: PA/Editor/Scheduler cannot assign others)
+    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
+    if (!isExecutive && !currentUser.roles.includes('Strategist')) {
+      const originalAssigned = typeof selectedTaskDetail.assignedUserIds === 'string' ? JSON.parse(selectedTaskDetail.assignedUserIds) : selectedTaskDetail.assignedUserIds;
+      const isSelfAssign = assignedIds.length <= 1 && (assignedIds.length === 0 || assignedIds[0] === currentUser.id);
+      const noChange = JSON.stringify(assignedIds.sort()) === JSON.stringify(originalAssigned.sort());
+      if (!isSelfAssign && !noChange) {
+        alert('Unauthorized: You cannot assign other employees to this task.');
+        return;
+      }
+    }
+
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
       clientName: targetClient.name,
       clientColor: targetClient.clientColor,
-      priority: editPriority,
       postingDate: editPostingDate,
-      deadline: calculateAutoDeadline(editPostingDate, -3),
+      deadline: editDeadline,
       status: editStatus,
       assignedUserIds: assignedIds,
       score: totalScore,
@@ -372,16 +457,85 @@ export default function KanbanPage() {
       driveLink: editDriveLink,
       previewLink: editPreviewLink,
       stages: editStages,
+      month: editMonth,
+      year: editYear,
     };
 
     updateTask(selectedTaskDetail.id, updates);
 
-    // If status updated to Completed or Posted, automate worklog mapping
+    // If status updated to Posted, automate worklog mapping
     if (editStatus === 'Posted') {
       triggerAutomatedWorklog({ ...selectedTaskDetail, ...updates });
     }
 
     setIsEditingDetail(false);
+    setSelectedTaskDetail(null);
+  };
+
+  // Unified Single Lifecycle Handover (Requirement 1, 6, 7)
+  const handleSendToProduction = async (task: TaskItem) => {
+    const prodStages = [
+      {
+        id: `stg-${Date.now()}`,
+        role: 'Production Assistant' as const,
+        userId: 'u-jabin', // Default PA
+        userName: 'Jabin',
+        taskType: 'Production Assistant',
+        format: '4 Jam',
+        qty: 1,
+        score: 400,
+      },
+      {
+        id: `stg-${Date.now()}-2`,
+        role: 'Editor' as const,
+        userId: 'u-dindong', // Default Editor
+        userName: 'Dinda',
+        taskType: 'Editing',
+        format: 'Reels',
+        qty: 1,
+        score: 150,
+      }
+    ];
+
+    // Build timeline log event (Requirement 7)
+    const timeline = task.workflowTimeline ? JSON.parse(task.workflowTimeline) : [];
+    timeline.push({
+      status: 'Production',
+      timestamp: new Date().toISOString(),
+      userId: currentUser?.id || 'u-system',
+    });
+
+    // Update current task to transition categories instead of duplicating (Requirement 1 & 16)
+    await updateTask(task.id, {
+      category: 'Production',
+      status: 'Production',
+      assignedUserIds: ['u-jabin', 'u-dindong'],
+      score: 550,
+      cogs: 550 * 250,
+      stages: prodStages,
+      workflowTimeline: JSON.stringify(timeline),
+    } as any);
+
+    // Create Activity Log (Requirement 6 & 13)
+    addActivity(currentUser?.id || 'u-system', 'TASK', task.id, 'MOVED', `Strategic task handed over to Production (Single Lifecycle)`);
+
+    // Notify Production Team members (PA, Editor, Scheduler)
+    const productionTeam = allUsers.filter(u => {
+      const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
+      return roles.some((r: any) => ['Production Assistant', 'Editor', 'Scheduler'].includes(r));
+    });
+
+    for (const member of productionTeam) {
+      await addNotification({
+        userId: member.id,
+        type: 'ASSIGNMENT',
+        title: 'New Production Handover',
+        message: `Content "${task.title}" has been handed over to Production.`,
+        link: '/kanban',
+      });
+    }
+
+    alert('Handed over content task to Production successfully!');
     setSelectedTaskDetail(null);
   };
 
@@ -395,24 +549,25 @@ export default function KanbanPage() {
     }
   };
 
-  // Worklog automation trigger helper
+  // Worklog automation trigger helper (Upserts stage logs under a single Worklog)
   const triggerAutomatedWorklog = (task: TaskItem) => {
-    const alreadyLogged = worklogs.some((w) => w.contentTitle === task.title && w.clientId === task.clientId);
-    if (!alreadyLogged) {
-      addWorklog({
-        clientId: task.clientId,
-        clientName: task.clientName,
-        contentTitle: task.title,
-        taskType: task.taskType || 'Editing',
-        format: task.format || 'Reels',
-        qty: task.qty || 1,
-        score: task.score || 0,
-        previewLink: task.previewLink || '',
-        stages: task.stages || null,
-        date: new Date().toISOString(),
-        source: 'Automated',
-      });
-    }
+    addWorklog({
+      clientId: task.clientId,
+      clientName: task.clientName,
+      contentTitle: task.title,
+      taskType: task.taskType || 'Editing',
+      format: task.format || 'Reels',
+      qty: task.qty || 1,
+      score: task.score || 0,
+      previewLink: task.previewLink || '',
+      stages: task.stages || null,
+      date: new Date().toISOString(),
+      source: 'Automated',
+      month: task.month,
+      year: task.year,
+      contentId: task.contentId || '',
+      isArchived: false,
+    });
   };
 
   // Bulk status update helper
@@ -454,13 +609,6 @@ export default function KanbanPage() {
     }
   };
 
-  // Toggle selection helper
-  const handleSelectTask = (id: string) => {
-    setSelectedTaskIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       setSelectedTaskIds(sortedTasks.map((t) => t.id));
@@ -469,15 +617,62 @@ export default function KanbanPage() {
     }
   };
 
-  // Drag-and-drop actions
+  const handleSelectTask = (taskId: string) => {
+    setSelectedTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
+  };
+
   const handleDragStart = (taskId: string) => {
     setDraggedTaskId(taskId);
   };
 
+  // Safe drop verification (Requirement 12)
   const handleDrop = (column: TaskItem['status']) => {
-    if (draggedTaskId) {
-      handleUpdateStatusWithWorklog(draggedTaskId, column);
+    if (!draggedTaskId) return;
+    
+    const taskObj = tasks.find((t) => t.id === draggedTaskId);
+    if (!taskObj) return;
+
+    // 1. Enforce workflow category bounds
+    const isStrategicCol = STRATEGIC_COLUMNS.includes(column);
+    const isProductionCol = PRODUCTION_COLUMNS.includes(column);
+    if (taskObj.category === 'Strategic' && !isStrategicCol) {
+      alert('Cannot move a Strategic task to a Production column');
+      setDraggedTaskId(null);
+      setDragOverColumn(null);
+      return;
     }
+    if (taskObj.category !== 'Strategic' && !isProductionCol) {
+      alert('Cannot move a Production task to a Strategic column');
+      setDraggedTaskId(null);
+      setDragOverColumn(null);
+      return;
+    }
+
+    // 2. Enforce Role Permissions on moves
+    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
+    if (!isExecutive) {
+      if (taskObj.category === 'Strategic' && !currentUser.roles.includes('Strategist')) {
+        alert('Only Strategists can manage Strategic Workflow');
+        setDraggedTaskId(null);
+        setDragOverColumn(null);
+        return;
+      }
+      if (taskObj.category !== 'Strategic') {
+        const hasProdRole = currentUser.roles.some((r: any) =>
+          ['Production Assistant', 'Editor', 'Scheduler'].includes(r)
+        );
+        if (!hasProdRole) {
+          alert('Only Production, Editor, Scheduler, and Admin can manage Production Workflow');
+          setDraggedTaskId(null);
+          setDragOverColumn(null);
+          return;
+        }
+      }
+    }
+
+    handleUpdateStatusWithWorklog(draggedTaskId, column);
     setDraggedTaskId(null);
     setDragOverColumn(null);
   };
@@ -495,155 +690,148 @@ export default function KanbanPage() {
           </p>
         </div>
 
+        {/* View Switcher */}
         <div className="flex items-center gap-3">
-          {/* Board selector */}
-          {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner') || currentUser?.roles.length! > 1) && (
-            <div className="flex bg-neutral-100 p-0.5 rounded-lg border border-neutral-200 text-xs font-semibold">
-              {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
-                <button
-                  onClick={() => setActiveBoard('main')}
-                  className={`px-3 py-1 rounded-md transition ${
-                    activeBoard === 'main' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-                >
-                  Main Pipeline
-                </button>
-              )}
+          {/* Board selector tabs */}
+          <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+            {(['main', 'strategic', 'production'] as const).map((b) => (
               <button
-                onClick={() => setActiveBoard('strategic')}
-                className={`px-3 py-1 rounded-md transition ${
-                  activeBoard === 'strategic' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+                key={b}
+                onClick={() => setActiveBoard(b)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                  activeBoard === b
+                    ? 'bg-neutral-900 text-white shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900'
                 }`}
               >
-                Strategic Workflow
+                {b === 'main' ? 'All Pipelines' : `${b} Pipeline`}
               </button>
-              <button
-                onClick={() => setActiveBoard('production')}
-                className={`px-3 py-1 rounded-md transition ${
-                  activeBoard === 'production' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
-                }`}
-              >
-                Production Board
-              </button>
-            </div>
-          )}
+            ))}
+          </div>
 
-          {/* View Switcher */}
-          <div className="flex bg-neutral-100 p-0.5 rounded-lg border border-neutral-200 text-xs font-semibold">
+          <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
             <button
               onClick={() => setViewType('kanban')}
-              className={`px-3 py-1 rounded-md transition flex items-center gap-1.5 ${
-                viewType === 'kanban' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+              className={`p-1.5 rounded-lg transition ${
+                viewType === 'kanban' ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
               }`}
+              title="Kanban Board"
             >
-              <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+              <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewType('table')}
-              className={`px-3 py-1 rounded-md transition flex items-center gap-1.5 ${
-                viewType === 'table' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+              className={`p-1.5 rounded-lg transition ${
+                viewType === 'table' ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
               }`}
+              title="Table Grid"
             >
-              <CheckSquare className="w-3.5 h-3.5" /> Table
+              <ListTodo className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Create Button */}
-          {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner') || currentUser?.roles.includes('Strategist')) && (
-            <button
-              onClick={() => {
-                setNewStages([]);
-                setIsCreateModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-            >
-              <Plus className="w-4 h-4" /> Create Task
-            </button>
-          )}
+          {/* Create Task Button */}
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition shadow-xs"
+          >
+            <Plus className="w-4 h-4" /> Add Task
+          </button>
         </div>
       </div>
 
-      {/* Filter and Search Panel */}
-      <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs font-medium shadow-xs">
-        <div className="flex flex-1 items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 w-full md:max-w-sm">
-          <Search className="w-4 h-4 text-neutral-400" />
+      {/* Advanced Filters */}
+      <div className="bg-white border border-neutral-200/80 rounded-2xl p-4 flex flex-wrap items-center gap-4 text-xs font-medium shadow-xs">
+        <div className="flex items-center gap-1">
+          <Filter className="w-3.5 h-3.5 text-neutral-450" />
+          <span className="text-neutral-500">Filter By:</span>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-48">
+          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2" />
           <input
             type="text"
-            placeholder="Search content, clients..."
+            placeholder="Search content..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent focus:outline-hidden text-neutral-900 w-full font-normal"
+            className="pl-8 pr-3 py-1.5 w-full bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-800 focus:outline-hidden text-[11px]"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Client Filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-500">Client:</span>
-            <select
-              value={selectedClientFilter}
-              onChange={(e) => setSelectedClientFilter(e.target.value)}
-              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
-            >
-              <option value="ALL">All Clients</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Client */}
+        <select
+          value={selectedClientFilter}
+          onChange={(e) => setSelectedClientFilter(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+        >
+          <option value="ALL">All Clients</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
 
-          {/* PIC Filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-500">PIC:</span>
-            <select
-              value={selectedPICFilter}
-              onChange={(e) => setSelectedPICFilter(e.target.value)}
-              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
-            >
-              <option value="ALL">All PICs</option>
-              {allUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Priority Filter */}
+        <select
+          value={selectedPriorityFilter}
+          onChange={(e) => setSelectedPriorityFilter(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden font-mono"
+        >
+          <option value="ALL">All Priorities</option>
+          <option value="Low">Low</option>
+          <option value="Medium">Medium</option>
+          <option value="Urgent">Urgent</option>
+          <option value="Overdue">Overdue</option>
+        </select>
 
-          {/* Priority Filter */}
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-500">Priority:</span>
-            <select
-              value={selectedPriorityFilter}
-              onChange={(e) => setSelectedPriorityFilter(e.target.value)}
-              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
-            >
-              <option value="ALL">All Priorities</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-          </div>
-        </div>
+        {/* PIC Filter */}
+        <select
+          value={selectedPICFilter}
+          onChange={(e) => setSelectedPICFilter(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+        >
+          <option value="ALL">All PICs</option>
+          {allUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Status Filter (Table View only) */}
+        {viewType === 'table' && (
+          <select
+            value={selectedStatusFilter}
+            onChange={(e) => setSelectedStatusFilter(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+          >
+            <option value="ALL">All Stages</option>
+            {columns.map((col) => (
+              <option key={col} value={col}>
+                {col}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Bulk Action Controls */}
       {selectedTaskIds.length > 0 && (
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-center gap-2 font-bold text-neutral-800">
-            <span>{selectedTaskIds.length} tasks selected</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Bulk Move */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-4 flex items-center justify-between text-xs font-semibold animate-fadeIn shadow-2xs">
+          <span className="text-neutral-700 font-mono">
+            {selectedTaskIds.length} tasks selected
+          </span>
+          <div className="flex items-center gap-4">
+            {/* Bulk status move */}
             <div className="flex items-center gap-1.5">
               <select
                 value={bulkStageTarget}
                 onChange={(e) => setBulkStageTarget(e.target.value)}
-                className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden"
+                className="bg-white border border-neutral-200 rounded-lg px-2 py-1.5"
               >
-                <option value="">Move status to...</option>
+                <option value="">Move Stage To...</option>
                 {columns.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -653,20 +841,20 @@ export default function KanbanPage() {
               <button
                 onClick={handleBulkMove}
                 disabled={!bulkStageTarget}
-                className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition"
+                className="bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition"
               >
-                Apply
+                Go
               </button>
             </div>
 
-            {/* Bulk Assign */}
+            {/* Bulk PIC assign */}
             <div className="flex items-center gap-1.5">
               <select
                 value={bulkAssignTarget}
                 onChange={(e) => setBulkAssignTarget(e.target.value)}
-                className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 focus:outline-hidden"
+                className="bg-white border border-neutral-200 rounded-lg px-2 py-1.5"
               >
-                <option value="">Assign user...</option>
+                <option value="">Assign PIC to...</option>
                 {allUsers.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -676,7 +864,7 @@ export default function KanbanPage() {
               <button
                 onClick={handleBulkAssign}
                 disabled={!bulkAssignTarget}
-                className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition"
+                className="bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 rounded-lg transition"
               >
                 Assign
               </button>
@@ -713,7 +901,7 @@ export default function KanbanPage() {
                 }}
                 onDrop={() => handleDrop(col)}
                 className={`flex-shrink-0 w-80 rounded-2xl p-4 transition-all flex flex-col justify-between min-h-[400px] border ${
-                  isDragOver ? 'bg-neutral-100 border-neutral-400' : 'bg-neutral-50/50 border-neutral-200'
+                  isDragOver ? 'bg-neutral-100 border-neutral-450 shadow-inner' : 'bg-neutral-50/50 border-neutral-200'
                 }`}
               >
                 <div>
@@ -729,10 +917,32 @@ export default function KanbanPage() {
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                     {colTasks.map((task) => {
                       const isBeingDragged = draggedTaskId === task.id;
-                      const hasStages = task.stages && (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages).length > 0;
                       const uniqueUserNames = task.stages
                         ? Array.from(new Set((typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages).map((s: any) => s.userName)))
                         : [];
+
+                      // Calculate Dynamic Priority (Requirement 3)
+                      const dynamicPriority = calculatePriority(task.deadline, task.status, task.postingDate);
+                      const priorityColorClass = getPriorityColorClass(dynamicPriority);
+
+                      // Calculate checklist progress (Requirement 11)
+                      const checklist = task.checklist ? (typeof task.checklist === 'string' ? JSON.parse(task.checklist) : task.checklist) : [];
+                      const doneChecklist = checklist.filter((item: any) => item.done).length;
+                      const totalChecklist = checklist.length;
+
+                      let progressPercent = 0;
+                      if (totalChecklist > 0) {
+                        progressPercent = Math.round((doneChecklist / totalChecklist) * 100);
+                      } else {
+                        // calculate progress based on active workflow stages
+                        if (task.category === 'Strategic') {
+                          const idx = STRATEGIC_COLUMNS.indexOf(task.status);
+                          progressPercent = idx >= 0 ? Math.round(((idx + 1) / STRATEGIC_COLUMNS.length) * 100) : 0;
+                        } else {
+                          const idx = PRODUCTION_COLUMNS.indexOf(task.status);
+                          progressPercent = idx >= 0 ? Math.round(((idx + 1) / PRODUCTION_COLUMNS.length) * 100) : 0;
+                        }
+                      }
 
                       return (
                         <div
@@ -744,34 +954,77 @@ export default function KanbanPage() {
                             setDragOverColumn(null);
                           }}
                           onClick={() => setSelectedTaskDetail(task)}
-                          className={`bg-white border border-neutral-200/80 rounded-xl p-4 hover:border-neutral-400 hover:shadow-xs transition cursor-pointer space-y-2 relative ${
-                            isBeingDragged ? 'opacity-40 border-neutral-900' : ''
+                          className={`bg-white border border-neutral-200/80 rounded-xl p-4 hover:border-neutral-400 hover:shadow-md transition cursor-pointer space-y-3 relative ${
+                            isBeingDragged ? 'opacity-40 border-neutral-900 shadow-inner' : 'shadow-2xs'
                           }`}
                         >
-                          <div className="flex justify-between items-start">
+                          {/* Client, score, and priority tag */}
+                          <div className="flex justify-between items-center gap-2">
                             <span
-                              className="text-[9px] font-bold px-2 py-0.5 rounded"
+                              className="text-[9px] font-bold px-2 py-0.5 rounded truncate"
                               style={{ backgroundColor: `${task.clientColor}15`, color: task.clientColor }}
                             >
                               {task.clientName}
                             </span>
-                            <span className="text-[9px] font-mono text-neutral-400 font-bold">{task.score} pts</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded border font-mono ${priorityColorClass}`}>
+                                {dynamicPriority}
+                              </span>
+                              <span className="text-[9px] font-mono text-neutral-400 font-bold">{task.score} pts</span>
+                            </div>
                           </div>
 
+                          {/* Content Title */}
                           <h4 className="text-xs font-bold text-neutral-900 line-clamp-2 leading-tight">
                             {task.title}
                           </h4>
 
-                          <div className="flex items-center justify-between pt-2 border-t border-neutral-50 text-[10px] text-neutral-400">
-                            <span>PIC: <strong className="text-neutral-600">{uniqueUserNames.join(', ') || 'Unassigned'}</strong></span>
-                            <span className="font-mono">{task.deadline ? task.deadline.substring(5, 10) : ''}</span>
+                          {/* Month Period Tag & Stage */}
+                          <div className="flex items-center justify-between text-[10px] text-neutral-500 font-semibold pt-1">
+                            <span className="bg-neutral-50 border border-neutral-200 px-1.5 py-0.5 rounded font-mono text-[9px]">
+                              Period: {task.month} {task.year}
+                            </span>
+                            <span className="text-[9px] uppercase font-bold text-neutral-400">
+                              Stage: {task.status}
+                            </span>
+                          </div>
+
+                          {/* Target Posting Date & Deadline */}
+                          <div className="grid grid-cols-2 gap-2 border-t border-neutral-50 pt-2 text-[10px] font-mono text-neutral-500">
+                            <div>
+                              <span className="text-[8px] text-neutral-400 font-bold block uppercase tracking-wider">Post Date</span>
+                              <span className="text-neutral-700 font-bold">{task.postingDate ? task.postingDate.substring(0, 10) : 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[8px] text-neutral-400 font-bold block uppercase tracking-wider">Deadline</span>
+                              <span className="text-amber-800 font-bold">{task.deadline ? task.deadline.substring(0, 10) : 'N/A'}</span>
+                            </div>
+                          </div>
+
+                          {/* PIC Assignee list */}
+                          <div className="border-t border-neutral-50 pt-2 text-[10px] text-neutral-500">
+                            <span className="font-semibold text-neutral-400">Assignee:</span> <strong className="text-neutral-700">{uniqueUserNames.join(', ') || 'Unassigned'}</strong>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="space-y-1 pt-1.5">
+                            <div className="flex justify-between text-[9px] font-bold text-neutral-550">
+                              <span>Progress</span>
+                              <span>{progressPercent}%</span>
+                            </div>
+                            <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden border border-neutral-200">
+                              <div
+                                className="bg-neutral-900 h-full rounded-full transition-all duration-300"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
                       );
                     })}
 
                     {colTasks.length === 0 && (
-                      <div className="text-center py-8 text-neutral-400 text-xs italic">
+                      <div className="text-center py-8 text-neutral-400 text-xs italic bg-neutral-50/20 border border-neutral-200 border-dashed rounded-xl">
                         Empty column
                       </div>
                     )}
@@ -798,57 +1051,49 @@ export default function KanbanPage() {
                   </th>
                   <th className="px-4 py-3.5">Content</th>
                   <th className="px-4 py-3.5">Client</th>
-                  <th className="px-4 py-3.5">Assignees</th>
+                  <th className="px-4 py-3.5">Stage</th>
+                  <th className="px-4 py-3.5">Reporting Period</th>
+                  <th className="px-4 py-3.5 text-center">Priority</th>
+                  <th className="px-4 py-3.5">Posting Date</th>
                   <th className="px-4 py-3.5">Deadline</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5">Priority</th>
-                  <th className="px-4 py-3.5 text-right">Score</th>
-                  <th className="px-4 py-3.5 text-center">Actions</th>
+                  <th className="px-4 py-3.5 text-right">Points</th>
+                  <th className="px-4 py-3.5 text-center">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 text-neutral-700">
                 {sortedTasks.map((t) => {
-                  const uniqueUserNames = t.stages
-                    ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName)))
-                    : [];
+                  const isChecked = selectedTaskIds.includes(t.id);
+                  const dynamicPriority = calculatePriority(t.deadline, t.status, t.postingDate);
+                  const priorityColorClass = getPriorityColorClass(dynamicPriority);
 
                   return (
-                    <tr key={t.id} className="hover:bg-neutral-50/50 transition">
+                    <tr key={t.id} className="hover:bg-neutral-50 transition">
                       <td className="px-4 py-3.5">
                         <input
                           type="checkbox"
-                          checked={selectedTaskIds.includes(t.id)}
+                          checked={isChecked}
                           onChange={() => handleSelectTask(t.id)}
                           className="rounded border-neutral-300 text-neutral-900 focus:ring-neutral-950"
                         />
                       </td>
-                      <td className="px-4 py-3.5 font-bold text-neutral-900">{t.title}</td>
-                      <td className="px-4 py-3.5 font-semibold text-neutral-800">
-                        <span
-                          className="px-2 py-0.5 rounded text-[10px]"
-                          style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor }}
-                        >
-                          {t.clientName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-neutral-600 font-semibold">
-                        {uniqueUserNames.join(', ') || 'Unassigned'}
-                      </td>
-                      <td className="px-4 py-3.5 font-mono text-neutral-500 font-semibold">{t.deadline}</td>
                       <td className="px-4 py-3.5">
-                        <span className="badge-draft text-[10px] px-2 py-0.5 rounded border border-neutral-200 font-bold">
+                        <span className="font-bold text-neutral-900">{t.title}</span>
+                        <span className="text-[10px] text-neutral-400 font-mono block mt-0.5">{t.category} workflow</span>
+                      </td>
+                      <td className="px-4 py-3.5 font-semibold">{t.clientName}</td>
+                      <td className="px-4 py-3.5">
+                        <span className="font-mono text-neutral-700 font-bold bg-neutral-100 border px-2 py-0.5 rounded-lg">
                           {t.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={`text-[10px] font-bold ${
-                            t.priority === 'High' ? 'text-rose-600' : t.priority === 'Medium' ? 'text-amber-600' : 'text-neutral-500'
-                          }`}
-                        >
-                          {t.priority}
+                      <td className="px-4 py-3.5 font-semibold text-neutral-600">{t.month} {t.year}</td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border font-mono ${priorityColorClass}`}>
+                          {dynamicPriority}
                         </span>
                       </td>
+                      <td className="px-4 py-3.5 font-mono font-semibold">{t.postingDate ? t.postingDate.substring(0, 10) : 'N/A'}</td>
+                      <td className="px-4 py-3.5 font-mono text-amber-800 font-bold">{t.deadline ? t.deadline.substring(0, 10) : 'N/A'}</td>
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{t.score}</td>
                       <td className="px-4 py-3.5 text-center">
                         <button
@@ -908,15 +1153,16 @@ export default function KanbanPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-neutral-700 font-semibold">Priority</label>
+                  <label className="block text-neutral-700 font-semibold">Task Category (Workflow)</label>
                   <select
-                    value={newPriority}
-                    onChange={(e) => setNewPriority(e.target.value as any)}
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value as any)}
                     className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
                   >
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
+                    <option value="Strategic">Strategic</option>
+                    <option value="Production">Production</option>
+                    <option value="Editing">Editing</option>
+                    <option value="Scheduling">Scheduling</option>
                   </select>
                 </div>
 
@@ -927,6 +1173,30 @@ export default function KanbanPage() {
                     value={newPostingDate}
                     onChange={(e) => setNewPostingDate(e.target.value)}
                     className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Period selection */}
+                <div className="space-y-1">
+                  <label className="block text-neutral-700 font-semibold">Month Period</label>
+                  <select
+                    value={newMonth}
+                    onChange={(e) => setNewMonth(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-bold"
+                  >
+                    {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-neutral-700 font-semibold">Year Period</label>
+                  <input
+                    type="number"
+                    value={newYear}
+                    onChange={(e) => setNewYear(Number(e.target.value))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-mono font-bold"
                   />
                 </div>
               </div>
@@ -1050,44 +1320,36 @@ export default function KanbanPage() {
                           />
                         </div>
 
-                        {/* Display Score */}
-                        <div className="w-16 text-right font-mono font-bold text-neutral-800">
-                          {stage.score} pts
-                        </div>
-
-                        {/* Remove */}
+                        {/* Delete Stage */}
                         <button
                           type="button"
                           onClick={() => handleRemoveStage(stage.id, false)}
-                          className="text-red-500 hover:text-red-700"
+                          className="p-1 hover:bg-red-50 text-red-500 rounded-lg transition"
                         >
-                          ✕
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     );
                   })}
-
                   {newStages.length === 0 && (
-                    <div className="text-center py-4 text-neutral-400 italic">
-                      No stages added. Add a work stage to calculate points.
-                    </div>
+                    <p className="text-center text-neutral-400 py-4 italic">No work stages allocated. Click "+ Add Stage" above.</p>
                   )}
                 </div>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-neutral-100">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-neutral-100">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-850 font-semibold px-4 py-2 rounded-lg transition"
+                  className="px-4 py-2 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
+                  className="px-5 py-2 bg-neutral-900 text-white font-semibold rounded-lg hover:bg-neutral-800 transition"
                 >
-                  Save Task
+                  Create Task
                 </button>
               </div>
             </form>
@@ -1145,19 +1407,6 @@ export default function KanbanPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-neutral-700 font-semibold">Priority</label>
-                    <select
-                      value={editPriority}
-                      onChange={(e) => setEditPriority(e.target.value as any)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
-                    >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
                     <label className="block text-neutral-700 font-semibold">Target Posting Date</label>
                     <input
                       type="date"
@@ -1181,11 +1430,34 @@ export default function KanbanPage() {
                       ))}
                     </select>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-neutral-700 font-semibold">Month Period</label>
+                    <select
+                      value={editMonth}
+                      onChange={(e) => setEditMonth(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-bold"
+                    >
+                      {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-neutral-700 font-semibold">Year Period</label>
+                    <input
+                      type="number"
+                      value={editYear}
+                      onChange={(e) => setEditYear(Number(e.target.value))}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-mono font-bold"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="block text-neutral-700 font-semibold">Drive Link</label>
+                    <label className="block text-neutral-700 font-semibold">Drive link</label>
                     <input
                       type="url"
                       value={editDriveLink}
@@ -1195,7 +1467,7 @@ export default function KanbanPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-neutral-700 font-semibold">Preview Link</label>
+                    <label className="block text-neutral-700 font-semibold">Preview link</label>
                     <input
                       type="url"
                       value={editPreviewLink}
@@ -1205,7 +1477,7 @@ export default function KanbanPage() {
                   </div>
                 </div>
 
-                {/* Stages List Editor */}
+                {/* Edit Stages List */}
                 <div className="space-y-2 pt-2 border-t border-neutral-100">
                   <div className="flex items-center justify-between">
                     <label className="text-neutral-800 font-bold flex items-center gap-1.5">
@@ -1217,33 +1489,31 @@ export default function KanbanPage() {
                     <button
                       type="button"
                       onClick={() => handleAddStage(true)}
-                      className="text-neutral-900 hover:text-neutral-700 font-semibold text-[10px] flex items-center gap-0.5"
+                      className="text-neutral-900 hover:text-neutral-750 font-semibold text-[10px] flex items-center gap-0.5"
                     >
                       + Add Stage
                     </button>
                   </div>
 
-                  <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
                     {editStages.map((stage) => {
                       const matchingUsers = allUsers.filter((u) => {
                         const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
                         return roles.includes(stage.role);
                       });
 
-                      // Types based on role
                       let typeOptions = ['Editing', 'Revisi'];
                       if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi'];
                       else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                       else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 
-                      // Formats based on type
                       const formatOptions = getStrategicFormats(stage.taskType).length > 0 ? getStrategicFormats(stage.taskType) :
                         (stage.taskType === 'Scheduling' ? ['Per Post'] :
                         (stage.taskType === 'Editing' ? ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'] : ['Minor', 'Medium', 'Major']));
 
                       return (
                         <div key={stage.id} className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
-                          {/* Role Select */}
+                          {/* Role */}
                           <div className="flex-1 min-w-[120px]">
                             <select
                               value={stage.role}
@@ -1257,7 +1527,7 @@ export default function KanbanPage() {
                             </select>
                           </div>
 
-                          {/* User Select */}
+                          {/* User */}
                           <div className="flex-1 min-w-[120px]">
                             <select
                               value={stage.userId}
@@ -1272,7 +1542,7 @@ export default function KanbanPage() {
                             </select>
                           </div>
 
-                          {/* Task Type Select */}
+                          {/* TaskType */}
                           <div className="flex-1 min-w-[120px]">
                             <select
                               value={stage.taskType}
@@ -1287,7 +1557,7 @@ export default function KanbanPage() {
                             </select>
                           </div>
 
-                          {/* Format Select */}
+                          {/* Format */}
                           <div className="flex-1 min-w-[120px]">
                             <select
                               value={stage.format}
@@ -1302,7 +1572,7 @@ export default function KanbanPage() {
                             </select>
                           </div>
 
-                          {/* Qty Input */}
+                          {/* Qty */}
                           <div className="w-16">
                             <input
                               type="number"
@@ -1313,57 +1583,48 @@ export default function KanbanPage() {
                             />
                           </div>
 
-                          {/* Display Score */}
-                          <div className="w-16 text-right font-mono font-bold text-neutral-800">
-                            {stage.score} pts
-                          </div>
-
-                          {/* Remove */}
+                          {/* Delete */}
                           <button
                             type="button"
                             onClick={() => handleRemoveStage(stage.id, true)}
-                            className="text-red-500 hover:text-red-700"
+                            className="p-1 hover:bg-red-50 text-red-500 rounded-lg transition"
                           >
-                            ✕
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       );
                     })}
-
                     {editStages.length === 0 && (
-                      <div className="text-center py-4 text-neutral-400 italic">
-                        No stages added.
-                      </div>
+                      <p className="text-center text-neutral-400 py-4 italic">No work stages allocated. Click "+ Add Stage" above.</p>
                     )}
                   </div>
                 </div>
 
-                <div className="pt-4 flex items-center justify-between border-t border-neutral-100">
+                <div className="flex items-center justify-between pt-4 border-t border-neutral-100">
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Delete this task permanently?')) {
+                      if (confirm('Are you sure you want to delete this task?')) {
                         deleteTask(selectedTaskDetail.id);
                         setSelectedTaskDetail(null);
-                        setIsEditingDetail(false);
                       }
                     }}
-                    className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-2 rounded-lg font-semibold transition"
+                    className="text-red-650 hover:underline font-bold"
                   >
-                    <Trash2 className="w-4 h-4" /> Delete Task
+                    Delete Task
                   </button>
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setIsEditingDetail(false)}
-                      className="bg-neutral-100 hover:bg-neutral-200 text-neutral-850 font-semibold px-4 py-2 rounded-lg transition"
+                      className="px-4 py-2 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition"
                     >
-                      Cancel
+                      Back to details
                     </button>
                     <button
                       type="submit"
-                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
+                      className="px-5 py-2 bg-neutral-900 text-white font-semibold rounded-lg hover:bg-neutral-850 transition"
                     >
                       Save Specifications
                     </button>
@@ -1371,88 +1632,134 @@ export default function KanbanPage() {
                 </div>
               </form>
             ) : (
-              /* READ-ONLY DETAIL VIEW */
-              <div className="p-6 space-y-6 text-xs text-neutral-800">
-                <div className="flex justify-between items-start gap-4">
-                  <div className="space-y-1">
+              /* DETAIL MODE (READ ONLY) */
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[90vh] text-xs">
+                {/* Meta details */}
+                <div className="flex flex-col sm:flex-row justify-between gap-4">
+                  <div>
                     <span
-                      className="text-[9px] font-bold px-2 py-0.5 rounded"
+                      className="text-[10px] font-bold px-2.5 py-0.5 rounded border"
                       style={{ backgroundColor: `${selectedTaskDetail.clientColor}15`, color: selectedTaskDetail.clientColor }}
                     >
                       {selectedTaskDetail.clientName}
                     </span>
-                    <h3 className="text-base font-bold text-neutral-900">{selectedTaskDetail.title}</h3>
+                    <h3 className="text-base font-bold text-neutral-900 mt-2">{selectedTaskDetail.title}</h3>
                   </div>
 
                   <div className="text-right">
+                    <span className="text-neutral-400 block font-semibold text-[10px]">Points Value</span>
                     <span className="text-lg font-mono font-bold text-neutral-900">{selectedTaskDetail.score}</span>
-                    <span className="text-[10px] text-neutral-400 block font-semibold">Total points</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl bg-neutral-50 border border-neutral-200/60 font-semibold text-neutral-600">
+                {/* Grid attributes */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-2xl bg-neutral-50 border border-neutral-200">
                   <div>
-                    <span className="text-neutral-400 block text-[10px]">Deadline:</span>
-                    <strong className="text-neutral-800 font-mono">{selectedTaskDetail.deadline}</strong>
+                    <span className="text-neutral-400 block mb-0.5 text-[10px] font-semibold uppercase tracking-wider">Deadline</span>
+                    <strong className="text-neutral-800 font-mono text-xs">{selectedTaskDetail.deadline}</strong>
                   </div>
                   <div>
-                    <span className="text-neutral-400 block text-[10px]">Posting Date:</span>
-                    <strong className="text-neutral-800 font-mono">{selectedTaskDetail.postingDate || '-'}</strong>
+                    <span className="text-neutral-400 block mb-0.5 text-[10px] font-semibold uppercase tracking-wider">Posting Date</span>
+                    <strong className="text-neutral-800 font-mono text-xs">{selectedTaskDetail.postingDate || '-'}</strong>
                   </div>
                   <div>
-                    <span className="text-neutral-400 block text-[10px]">Priority:</span>
-                    <strong
-                      className={`font-bold ${
-                        selectedTaskDetail.priority === 'High' ? 'text-rose-600' : 'text-neutral-800'
-                      }`}
-                    >
-                      {selectedTaskDetail.priority}
+                    <span className="text-neutral-400 block mb-0.5 text-[10px] font-semibold uppercase tracking-wider">Priority (Auto)</span>
+                    <strong className={`font-mono text-xs capitalize ${calculatePriority(selectedTaskDetail.deadline, selectedTaskDetail.status, selectedTaskDetail.postingDate) === 'Overdue' ? 'text-red-650 font-bold' : 'text-neutral-800'}`}>
+                      {calculatePriority(selectedTaskDetail.deadline, selectedTaskDetail.status, selectedTaskDetail.postingDate)}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-neutral-400 block text-[10px]">Stage:</span>
-                    <strong className="text-neutral-800 uppercase font-mono">{selectedTaskDetail.status}</strong>
+                    <span className="text-neutral-400 block mb-0.5 text-[10px] font-semibold uppercase tracking-wider">Current Stage</span>
+                    <strong className="text-neutral-850 uppercase font-mono text-xs">{selectedTaskDetail.status}</strong>
                   </div>
                 </div>
 
-                {/* Stages List Display */}
-                <div className="space-y-2 border-t border-neutral-100 pt-4">
-                  <h4 className="font-bold text-neutral-900">Work Stages Allocations</h4>
-                  <div className="space-y-2">
+                {/* Content Handover Audit metadata log (Requirement 6) */}
+                {selectedTaskDetail.handoverUserId && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-150 rounded-xl text-[10px] text-emerald-800">
+                    <span className="font-bold">Production Handover Audit:</span> Handed over from Strategy to Production by <strong className="text-emerald-950">{allUsers.find(u => u.id === selectedTaskDetail.handoverUserId)?.name || 'Unknown User'}</strong> on {new Date(selectedTaskDetail.handoverTime || '').toLocaleString('id-ID')}.
+                  </div>
+                )}
+
+                {/* Work allocations list */}
+                <div className="space-y-2.5">
+                  <h4 className="font-bold text-neutral-850">Assigned Stage Allocations</h4>
+                  <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                     {selectedTaskDetail.stages ? (
                       (typeof selectedTaskDetail.stages === 'string' ? JSON.parse(selectedTaskDetail.stages) : selectedTaskDetail.stages).map((s: any) => (
-                        <div key={s.id} className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-3 flex justify-between items-center text-xs">
-                          <div>
-                            <span className="font-bold text-neutral-900">{s.userName}</span>
-                            <span className="text-neutral-400 mx-2">|</span>
-                            <span className="text-neutral-500 font-semibold">{s.role}</span>
-                            <span className="text-neutral-400 mx-2">|</span>
-                            <span className="text-neutral-600 font-mono">{s.taskType} ({s.format})</span>
+                        <div key={s.id} className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-neutral-900 text-white font-bold flex items-center justify-center text-[10px]">
+                              {s.userName.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-neutral-900">{s.userName}</p>
+                              <p className="text-[10px] text-neutral-500">{s.role} • <span className="text-neutral-600 font-mono">{s.taskType} ({s.format})</span></p>
+                            </div>
                           </div>
-                          <div className="text-right font-mono font-bold text-neutral-900">
+                          <span className="font-mono font-bold text-neutral-850 bg-white border border-neutral-200 px-2.5 py-1 rounded-lg">
                             {s.score} pts
-                          </div>
+                          </span>
                         </div>
                       ))
                     ) : (
-                      <div className="bg-neutral-50 border border-neutral-200/80 rounded-xl p-3 flex justify-between items-center text-xs">
+                      <p className="text-neutral-400 italic">No stage owners allocated.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Workflow Audit Timeline logs (Requirement 7) */}
+                <div className="space-y-2 pt-2 border-t border-neutral-100">
+                  <h4 className="font-bold text-neutral-850 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-neutral-500" /> Content Workflow Timeline
+                  </h4>
+                  <div className="relative pl-4 border-l border-neutral-200 ml-2 space-y-3 py-1">
+                    {(selectedTaskDetail.workflowTimeline ? JSON.parse(selectedTaskDetail.workflowTimeline) : []).map((item: any, idx: number) => {
+                      const userObj = allUsers.find(u => u.id === item.userId);
+                      return (
+                        <div key={idx} className="relative text-[11px]">
+                          <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-neutral-900 border-2 border-white" />
+                          <p className="font-bold text-neutral-800">
+                            Stage Activated: <span className="uppercase">{item.status}</span>
+                          </p>
+                          <p className="text-[10px] text-neutral-450 mt-0.5">
+                            By {userObj?.name || 'System'} • {new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ({new Date(item.timestamp).toLocaleDateString('id-ID')})
+                          </p>
+                        </div>
+                      );
+                    })}
+                    {(!selectedTaskDetail.workflowTimeline || JSON.parse(selectedTaskDetail.workflowTimeline).length === 0) && (
+                      <p className="text-neutral-400 italic">No timeline entries logged.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent Content Activities Timeline logs (Requirement 13) */}
+                <div className="space-y-2 pt-2 border-t border-neutral-100">
+                  <h4 className="font-bold text-neutral-850 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-neutral-500" /> Recent Content Activities
+                  </h4>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    {activities.filter(a => a.entityId === selectedTaskDetail.id).map((act) => (
+                      <div key={act.id} className="p-2 bg-neutral-50 border border-neutral-200 rounded-lg text-[10px] flex justify-between items-center">
                         <div>
-                          <span className="font-bold text-neutral-900">Legacy Task Assignee</span>
-                          <span className="text-neutral-400 mx-2">|</span>
-                          <span className="text-neutral-600 font-mono">{selectedTaskDetail.taskType} ({selectedTaskDetail.format})</span>
+                          <span className="font-bold text-neutral-850">{act.userName || 'System'}</span> {act.details}
                         </div>
-                        <div className="text-right font-mono font-bold text-neutral-900">
-                          {selectedTaskDetail.score} pts
-                        </div>
+                        <span className="text-[9px] text-neutral-400 font-mono">
+                          {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
+                    ))}
+                    {activities.filter(a => a.entityId === selectedTaskDetail.id).length === 0 && (
+                      <p className="text-neutral-400 italic">No activity logs for this content.</p>
                     )}
                   </div>
                 </div>
 
                 {/* Links */}
-                <div className="space-y-2 border-t border-neutral-100 pt-4">
-                  <h4 className="font-bold text-neutral-900">Assets & Previews</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-neutral-550 font-semibold block">Asset Drive Link</span>
                     {selectedTaskDetail.driveLink ? (
                       <a
                         href={selectedTaskDetail.driveLink}
@@ -1461,7 +1768,7 @@ export default function KanbanPage() {
                         className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl text-blue-700 font-semibold hover:bg-blue-100 transition"
                       >
                         <span className="flex items-center gap-2">
-                          <FolderOpen className="w-4 h-4" /> Drive Folder
+                          <FolderOpen className="w-4 h-4" /> Open Drive Assets
                         </span>
                         <ExternalLink className="w-4 h-4" />
                       </a>
@@ -1470,7 +1777,10 @@ export default function KanbanPage() {
                         No Drive Link Added
                       </div>
                     )}
+                  </div>
 
+                  <div className="space-y-1">
+                    <span className="text-neutral-550 font-semibold block">Preview Link</span>
                     {selectedTaskDetail.previewLink ? (
                       <a
                         href={selectedTaskDetail.previewLink}
@@ -1491,6 +1801,7 @@ export default function KanbanPage() {
                   </div>
                 </div>
 
+                {/* Footer Controls */}
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-neutral-100">
                   <button
                     onClick={() => {
@@ -1500,6 +1811,16 @@ export default function KanbanPage() {
                   >
                     Close
                   </button>
+
+                  {/* Send to Production Handover Action Button (Requirement 1, 6, 16) */}
+                  {selectedTaskDetail.category === 'Strategic' && selectedTaskDetail.status === 'Ready for Production' && (currentUser?.roles.includes('Strategist') || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                    <button
+                      onClick={() => handleSendToProduction(selectedTaskDetail)}
+                      className="bg-emerald-600 hover:bg-emerald-750 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1"
+                    >
+                      <Play className="w-3.5 h-3.5" /> Send to Production
+                    </button>
+                  )}
 
                   <button
                     onClick={startEditing}

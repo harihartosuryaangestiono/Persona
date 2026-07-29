@@ -1,50 +1,80 @@
 'use client';
 
-import React from 'react';
-import { useData } from '@/context/DataContext';
+import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
-import { Download, TrendingUp, Award } from 'lucide-react';
+import { useData } from '@/context/DataContext';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+  DollarSign,
+  Award,
+  Download,
+  TrendingUp,
+  Calendar
+} from 'lucide-react';
+import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Bar } from 'recharts';
 import { formatRupiah } from '@/lib/score-calculator';
 import * as XLSX from 'xlsx';
 
+// Helper to convert task period to budget month string format (e.g. July 2026 -> 2026-07)
+const getBudgetMonthFormat = (month: string, year: number) => {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const idx = monthNames.indexOf(month);
+  if (idx === -1) return '';
+  const mStr = String(idx + 1).padStart(2, '0');
+  return `${year}-${mStr}`;
+};
+
 export default function ReportsPage() {
-  const { clients, worklogs, tasks } = useData();
+  const { clients, worklogs, tasks, budgets } = useData();
   const { allUsers } = useUser();
 
-  const totalCOGS = tasks.reduce((sum, t) => sum + (t.cogs || 0), 0);
-  const totalPoints = clients.reduce((sum, c) => sum + c.usedPoint, 0);
+  // Period Selector States defaulting to July 2026 (Requirement 10)
+  const [selectedMonth, setSelectedMonth] = useState('July');
+  const [selectedYear, setSelectedYear] = useState(2026);
 
-  // Client Budget Usage Data for Bar Chart
-  const clientChartData = clients.map((c) => ({
-    name: c.code,
-    fullName: c.name,
-    Used: c.usedPoint,
-    Remaining: c.remainingPoint,
-    COGS: c.usedPoint * 250,
-  }));
+  // Client Budget Usage Data for Bar Chart based on Period
+  const clientChartData = clients.map((c) => {
+    const budgetMonth = getBudgetMonthFormat(selectedMonth, selectedYear);
+    const budgetObj = budgets.find((b) => b.clientId === c.id && b.month === budgetMonth);
+    const budgetPoints = budgetObj ? budgetObj.budget : c.monthlyPointBudget;
 
-  // User Productivity Data for Chart
+    const usedPoints = tasks
+      .filter((t) => t.clientId === c.id && !t.isArchived && getBudgetMonthFormat(t.month, t.year) === budgetMonth)
+      .reduce((sum, t) => sum + (t.score || 0), 0);
+
+    const remainingPoints = Math.max(0, budgetPoints - usedPoints);
+
+    return {
+      name: c.code,
+      fullName: c.name,
+      Used: usedPoints,
+      Remaining: remainingPoints,
+      COGS: usedPoints * 250,
+      Budget: budgetPoints
+    };
+  });
+
+  const totalPoints = clientChartData.reduce((sum, c) => sum + c.Used, 0);
+  const totalCOGS = totalPoints * 250; // Employee Point COGS: Rp250 / point
+
+  // User Productivity Data for Chart based on Period
   const userProductivityData = allUsers.map((u) => {
-    const pts = worklogs.reduce((sum, w) => {
-      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-      if (logStages.length > 0) {
-        const userStagePoints = logStages
-          .filter((s: any) => s.userId === u.id || s.userName === u.name)
-          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-        return sum + userStagePoints;
-      } else {
-        const isUserLog = w.userName === u.name || w.userId === u.id;
-        return sum + (isUserLog ? w.score : 0);
-      }
-    }, 0);
+    const pts = worklogs
+      .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
+      .reduce((sum, w) => {
+        const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+        if (logStages.length > 0) {
+          const userStagePoints = logStages
+            .filter((s: any) => s.userId === u.id || s.userName === u.name)
+            .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+          return sum + userStagePoints;
+        } else {
+          const isUserLog = w.userName === u.name || w.userId === u.id;
+          return sum + (isUserLog ? w.score : 0);
+        }
+      }, 0);
     return {
       name: u.name,
       Points: pts,
@@ -56,19 +86,20 @@ export default function ReportsPage() {
   };
 
   const exportExcelReport = () => {
-    const data = clients.map((c) => ({
-      Client: c.name,
-      Code: c.code,
-      'Monthly Point Budget': c.monthlyPointBudget,
-      'Used Points': c.usedPoint,
-      'Remaining Points': c.remainingPoint,
-      'Total Client Value (Rp)': c.usedPoint * 1500,
+    const data = clientChartData.map((c) => ({
+      Client: c.fullName,
+      Code: c.name,
+      'Monthly Point Budget': c.Budget,
+      'Used Points': c.Used,
+      'Remaining Points': c.Remaining,
+      'Total Client Value (Rp)': c.Used * 1500,
+      'Employee Cost (COGS Rp)': c.COGS,
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Executive_Report');
-    XLSX.writeFile(wb, `PersonaOS_Executive_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `PersonaOS_Executive_Report_${selectedMonth}_${selectedYear}.xlsx`);
   };
 
   return (
@@ -82,18 +113,38 @@ export default function ReportsPage() {
           <p className="text-xs text-neutral-500">High-level executive overview of agency revenue, COGS burn, productivity, and client health.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Action Controls & Month/Year Selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white border border-neutral-200 p-2 rounded-xl shadow-2xs text-xs font-semibold">
+            <Calendar className="w-4 h-4 text-neutral-450" />
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden"
+            >
+              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="w-16 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-center text-neutral-800 font-mono focus:outline-hidden"
+            />
+          </div>
+
           <button
             onClick={exportPDF}
             className="bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-2 transition shadow-xs"
           >
-            <Download className="w-4 h-4 text-neutral-500" /> Export PDF Report
+            <Download className="w-4 h-4 text-neutral-500" /> Export PDF
           </button>
           <button
             onClick={exportExcelReport}
             className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
           >
-            <Download className="w-4 h-4" /> Export Excel Analytics
+            <Download className="w-4 h-4" /> Export Excel
           </button>
         </div>
       </div>
@@ -103,7 +154,7 @@ export default function ReportsPage() {
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-2 shadow-xs">
           <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Total Agency Points Burned</span>
           <p className="text-3xl font-bold text-neutral-900">{totalPoints.toLocaleString()} pts</p>
-          <p className="text-xs text-neutral-400">Across 6 master accounts</p>
+          <p className="text-xs text-neutral-400">For {selectedMonth} {selectedYear} period</p>
         </div>
 
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-2 shadow-xs">
@@ -124,7 +175,7 @@ export default function ReportsPage() {
         {/* Client Budget Usage Bar Chart */}
         <div className="bg-white p-6 rounded-2xl border border-neutral-200/80 space-y-4 shadow-xs">
           <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-neutral-700" /> Client Point Usage Breakdown
+            <TrendingUp className="w-4 h-4 text-neutral-700" /> Client Point Usage Breakdown ({selectedMonth} {selectedYear})
           </h3>
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
@@ -144,7 +195,7 @@ export default function ReportsPage() {
         {/* Employee Productivity Score Leaderboard Chart */}
         <div className="bg-white p-6 rounded-2xl border border-neutral-200/80 space-y-4 shadow-xs">
           <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-            <Award className="w-4 h-4 text-neutral-700" /> Employee Productivity Leaderboard (Pts)
+            <Award className="w-4 h-4 text-neutral-700" /> Employee Productivity Leaderboard ({selectedMonth} {selectedYear})
           </h3>
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">

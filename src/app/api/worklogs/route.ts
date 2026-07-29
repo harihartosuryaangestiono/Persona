@@ -19,34 +19,77 @@ export async function POST(req: Request) {
       deadline,
       previewLink,
       stages,
+      month,
+      year,
+      contentId,
+      isArchived,
     } = body;
 
     if (!clientId || !contentTitle) {
       return NextResponse.json({ error: 'Client and Title are required' }, { status: 400 });
     }
 
-    const log = await prisma.worklog.create({
-      data: {
-        date: date ? new Date(date) : new Date(),
-        userId: userId || 'u-jabin',
-        clientId,
-        contentTitle,
-        taskType: taskType || 'Editing',
-        format: format || 'Single Foto',
-        qty: Number(qty) || 1,
-        score: Number(score) || 0,
-        cogs: Number(cogs) || 0,
-        status: status || 'Completed',
-        source: source || 'Manual',
-        deadline: deadline ? new Date(deadline) : null,
-        previewLink: previewLink || '',
-        stages: stages ? JSON.stringify(stages) : null,
-      },
-    });
+    let log;
+
+    // Check if a worklog with the same contentId already exists to prevent duplicate rows (Requirement 9)
+    if (contentId) {
+      const existing = await prisma.worklog.findFirst({
+        where: { contentId },
+      });
+      if (existing) {
+        log = await prisma.worklog.update({
+          where: { id: existing.id },
+          data: {
+            date: date ? new Date(date) : existing.date,
+            userId: userId || existing.userId,
+            clientId: clientId || existing.clientId,
+            contentTitle: contentTitle || existing.contentTitle,
+            taskType: taskType || existing.taskType,
+            format: format || existing.format,
+            qty: Number(qty) || existing.qty,
+            score: Number(score) || existing.score,
+            cogs: Number(cogs) || existing.cogs,
+            status: status || existing.status,
+            source: source || existing.source,
+            deadline: deadline ? new Date(deadline) : existing.deadline,
+            previewLink: previewLink || existing.previewLink,
+            stages: stages ? JSON.stringify(stages) : existing.stages,
+            month: month || existing.month,
+            year: year ? Number(year) : existing.year,
+            isArchived: isArchived !== undefined ? isArchived : existing.isArchived,
+          },
+        });
+      }
+    }
+
+    if (!log) {
+      log = await prisma.worklog.create({
+        data: {
+          date: date ? new Date(date) : new Date(),
+          userId: userId || 'u-jabin',
+          clientId,
+          contentTitle,
+          taskType: taskType || 'Editing',
+          format: format || 'Single Foto',
+          qty: Number(qty) || 1,
+          score: Number(score) || 0,
+          cogs: Number(cogs) || 0,
+          status: status || 'Completed',
+          source: source || 'Manual',
+          deadline: deadline ? new Date(deadline) : null,
+          previewLink: previewLink || '',
+          stages: stages ? JSON.stringify(stages) : null,
+          month: month || 'July',
+          year: year ? Number(year) : 2026,
+          contentId: contentId || '',
+          isArchived: isArchived || false,
+        },
+      });
+    }
 
     return NextResponse.json(log);
   } catch (e: any) {
-    console.error('Error creating worklog:', e);
+    console.error('Error creating/updating worklog:', e);
     return NextResponse.json({ error: 'Failed to create worklog', message: e.message }, { status: 500 });
   }
 }
@@ -74,6 +117,17 @@ export async function PATCH(req: Request) {
     if (body.deadline !== undefined) updateData.deadline = body.deadline ? new Date(body.deadline) : null;
     if (body.previewLink !== undefined) updateData.previewLink = body.previewLink;
     if (body.stages !== undefined) updateData.stages = JSON.stringify(body.stages);
+    if (body.month !== undefined) updateData.month = body.month;
+    if (body.year !== undefined) updateData.year = Number(body.year);
+    if (body.contentId !== undefined) updateData.contentId = body.contentId;
+
+    if (body.isArchived !== undefined) {
+      updateData.isArchived = body.isArchived;
+      if (body.isArchived) {
+        updateData.archivedAt = new Date();
+        updateData.archivedBy = req.headers.get('X-User-Id') || 'u-system';
+      }
+    }
 
     const updated = await prisma.worklog.update({
       where: { id },

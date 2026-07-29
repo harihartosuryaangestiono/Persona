@@ -29,6 +29,7 @@ import {
   Zap,
   PieChart,
   Command,
+  Archive,
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
@@ -63,6 +64,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Client Budget', href: '/client-budget', icon: DollarSign, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Advanced Analytics', href: '/analytics', icon: PieChart, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Reports', href: '/reports', icon: BarChart3, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Archive', href: '/archive', icon: Archive, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
   { name: 'Settings', href: '/settings', icon: Settings, allowedRoles: ['Admin', 'Owner'] },
 ];
  

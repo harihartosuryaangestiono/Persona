@@ -12,7 +12,7 @@ import {
   MasterScoreItem,
   ActivityLogItem,
 } from '@/lib/types';
-import { MASTER_SCORES_STATIC, calculateCOGS } from '@/lib/score-calculator';
+import { MASTER_SCORES_STATIC, calculateCOGS, calculatePriority } from '@/lib/score-calculator';
 
 interface DataContextType {
   tasks: TaskItem[];
@@ -24,6 +24,10 @@ interface DataContextType {
   setBudgets: React.Dispatch<React.SetStateAction<ClientMonthlyBudgetItem[]>>;
   masterScores: MasterScoreItem[];
   activities: ActivityLogItem[];
+  notifications: any[];
+  addNotification: (notif: { userId: string; type: string; title: string; message: string; link?: string }) => Promise<void>;
+  companySettings: any;
+  updateCompanySettings: (updates: any) => Promise<void>;
   loading: boolean;
   addTask: (task: Partial<TaskItem>) => Promise<TaskItem>;
   updateTaskStatus: (taskId: string, newStatus: TaskItem['status']) => void;
@@ -52,6 +56,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [budgets, setBudgets] = useState<ClientMonthlyBudgetItem[]>([]);
   const [masterScores, setMasterScores] = useState<MasterScoreItem[]>([]);
   const [activities, setActivities] = useState<ActivityLogItem[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [companySettings, setCompanySettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { syncUsers, currentUser } = useUser();
 
@@ -74,6 +80,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setBudgets(json.budgets || []);
         setMasterScores(json.masterScores || []);
         setActivities(json.activities || []);
+        setNotifications(json.notifications || []);
+        setCompanySettings(json.companySettings || null);
       }
     } catch (e) {
       console.error('Failed to fetch data from API:', e);
@@ -97,6 +105,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const score = getTaskScore(newTaskData);
     const cogs = calculateCOGS(score);
     const clientObj = clients.find((c) => c.id === newTaskData.clientId) || clients[0];
+
+    const postingDateVal = newTaskData.postingDate || new Date().toISOString().split('T')[0];
+    const dateObj = new Date(postingDateVal);
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'July';
+    const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
+
+    const deadlineVal = newTaskData.deadline || new Date().toISOString().split('T')[0];
+    const computedPriority = calculatePriority(deadlineVal, newTaskData.status || 'Brief', postingDateVal);
+
     const created: TaskItem = {
       id: `task-${Date.now()}`,
       clientId: newTaskData.clientId || clientObj?.id || 'client-1',
@@ -109,9 +130,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       taskType: newTaskData.taskType || 'Editing',
       format: newTaskData.format || 'Reels',
       qty: newTaskData.qty || 1,
-      priority: newTaskData.priority || 'Medium',
-      postingDate: newTaskData.postingDate || new Date().toISOString().split('T')[0],
-      deadline: newTaskData.deadline || new Date().toISOString().split('T')[0],
+      priority: computedPriority,
+      postingDate: newTaskData.postingDate || null,
+      deadline: deadlineVal,
       status: newTaskData.status || 'Brief',
       assignedUserIds: newTaskData.assignedUserIds || [],
       score,
@@ -123,122 +144,119 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       stages: newTaskData.stages || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+      month: newTaskData.month || detectedMonth,
+      year: newTaskData.year || detectedYear,
+      contentId: newTaskData.contentId || `content-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      isArchived: newTaskData.isArchived || false,
+    } as any;
 
-    setTasks((prev) => [created, ...prev]);
-
-    // Update Client Budget remaining (allow negative)
-    setClients((prev) =>
-      prev.map((c) =>
-        c.id === created.clientId
-          ? {
-              ...c,
-              usedPoint: c.usedPoint + score,
-              remainingPoint: c.monthlyPointBudget - (c.usedPoint + score),
-            }
-          : c
-      )
-    );
-
-    addActivity(currentUser?.id || 'u-system', 'TASK', created.id, 'CREATED', `Created task "${created.title}"`);
-
-    // Sync to backend asynchronously
+    // Sync to backend first (Source of Truth)
     if (currentUser) {
-      fetch('/api/tasks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.id,
-          'X-User-Role': currentUser.roles.join(','),
-        },
-        body: JSON.stringify(created),
-      }).catch(console.error);
+      try {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser.id,
+            'X-User-Role': currentUser.roles.join(','),
+          },
+          body: JSON.stringify(created),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setTasks((prev) => [saved, ...prev]);
+          await fetchInitialData();
+          return saved;
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
 
+    setTasks((prev) => [created, ...prev]);
     return created;
   };
 
-  const updateTaskStatus = (taskId: string, newStatus: TaskItem['status']) => {
+  const updateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
+    // Optimistic local state update
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t))
     );
     addActivity(currentUser?.id || 'u-system', 'TASK', taskId, 'MOVED', `Moved task to stage ${newStatus}`);
 
     if (currentUser) {
-      fetch(`/api/tasks?id=${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.id,
-          'X-User-Role': currentUser.roles.join(','),
-        },
-        body: JSON.stringify({ status: newStatus }),
-      }).catch(console.error);
+      try {
+        const res = await fetch(`/api/tasks?id=${taskId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser.id,
+            'X-User-Role': currentUser.roles.join(','),
+          },
+          body: JSON.stringify({ status: newStatus }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+          await fetchInitialData();
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
-  const updateTask = (taskId: string, updates: Partial<TaskItem>) => {
+  const updateTask = async (taskId: string, updates: Partial<TaskItem>) => {
     const oldTask = tasks.find((t) => t.id === taskId);
-    if (oldTask) {
-      const oldScore = oldTask.score || 0;
-      const newScore = updates.stages ? getTaskScore(updates) : (updates.score !== undefined ? Number(updates.score) : oldScore);
-      const scoreDiff = newScore - oldScore;
-      const oldClientId = oldTask.clientId;
-      const newClientId = updates.clientId || oldClientId;
+    
+    const postingDateVal = updates.postingDate !== undefined ? updates.postingDate : (oldTask ? oldTask.postingDate : '');
+    const deadlineVal = updates.deadline !== undefined ? updates.deadline : (oldTask ? oldTask.deadline : '');
+    const statusVal = updates.status !== undefined ? updates.status : (oldTask ? oldTask.status : 'Brief');
 
-      // Adjust client usage
-      setClients((prev) =>
-        prev.map((c) => {
-          if (oldClientId === newClientId) {
-            if (c.id === oldClientId) {
-              const updatedUsed = c.usedPoint + scoreDiff;
-              return {
-                ...c,
-                usedPoint: updatedUsed,
-                remainingPoint: c.monthlyPointBudget - updatedUsed,
-              };
-            }
-          } else {
-            if (c.id === oldClientId) {
-              const updatedUsed = c.usedPoint - oldScore;
-              return {
-                ...c,
-                usedPoint: updatedUsed,
-                remainingPoint: c.monthlyPointBudget - updatedUsed,
-              };
-            }
-            if (c.id === newClientId) {
-              const updatedUsed = c.usedPoint + newScore;
-              return {
-                ...c,
-                usedPoint: updatedUsed,
-                remainingPoint: c.monthlyPointBudget - updatedUsed,
-              };
-            }
-          }
-          return c;
-        })
-      );
+    if (updates.deadline !== undefined || updates.postingDate !== undefined || updates.status !== undefined) {
+      updates.priority = calculatePriority(deadlineVal, statusVal as any, postingDateVal);
+    }
+
+    if (updates.postingDate !== undefined) {
+      const dateObj = new Date(updates.postingDate || '');
+      if (!isNaN(dateObj.getTime())) {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        if (updates.month === undefined) updates.month = monthNames[dateObj.getMonth()];
+        if (updates.year === undefined) updates.year = dateObj.getFullYear();
+      }
+    }
+
+    if (currentUser) {
+      try {
+        const res = await fetch(`/api/tasks?id=${taskId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser.id,
+            'X-User-Role': currentUser.roles.join(','),
+          },
+          body: JSON.stringify({
+            ...updates,
+            score: updates.stages ? getTaskScore(updates) : updates.score,
+          }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+          await fetchInitialData();
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
     );
-
-    if (currentUser) {
-      fetch(`/api/tasks?id=${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': currentUser.id,
-          'X-User-Role': currentUser.roles.join(','),
-        },
-        body: JSON.stringify({
-          ...updates,
-          score: updates.stages ? getTaskScore(updates) : updates.score,
-        }),
-      }).catch(console.error);
-    }
   };
 
   const deleteTask = (taskId: string) => {
@@ -274,9 +292,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addWorklog = async (log: Partial<WorklogItem>) => {
     const score = log.score || 10;
     const clientObj = clients.find((c) => c.id === log.clientId) || clients[0];
+
+    const dateVal = log.date || new Date().toISOString();
+    const dateObj = new Date(dateVal);
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'July';
+    const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
+
     const item: WorklogItem = {
       id: `wl-${Date.now()}-${Math.random()}`,
-      date: log.date || new Date().toISOString(),
+      date: dateVal,
       userId: log.userId || 'u-jabin',
       clientId: log.clientId || clientObj?.id || '',
       clientName: log.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
@@ -290,6 +318,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       source: log.source || 'Manual',
       previewLink: log.previewLink || '',
       stages: log.stages || null,
+      month: log.month || detectedMonth,
+      year: log.year ? Number(log.year) : detectedYear,
+      contentId: log.contentId || '',
+      isArchived: log.isArchived || false,
     };
 
     setWorklogs((prev) => [item, ...prev]);
@@ -319,12 +351,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const importWorklogs = async (newLogs: Partial<WorklogItem>[]) => {
     const formatted: WorklogItem[] = newLogs.map((log, i) => {
       const score = log.score || 10;
+      const dateVal = log.date || new Date().toISOString();
+      const dateObj = new Date(dateVal);
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'July';
+      const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
+
       return {
         id: `import-${Date.now()}-${i}`,
-        date: log.date || new Date().toISOString(),
+        date: dateVal,
         userId: log.userId || 'u-jabin',
         clientId: log.clientId || clients[0]?.id || '',
-        clientName: log.clientName || 'Baking Empire Gading Serpong',
+        clientName: 'Baking Empire Gading Serpong',
         contentTitle: log.contentTitle || 'Imported Task',
         taskType: log.taskType || 'Editing',
         format: log.format || 'Single Foto',
@@ -335,6 +376,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         source: 'Imported',
         previewLink: log.previewLink || '',
         stages: log.stages || null,
+        month: log.month || detectedMonth,
+        year: log.year ? Number(log.year) : detectedYear,
+        contentId: log.contentId || '',
+        isArchived: log.isArchived || false,
       };
     });
 
@@ -448,6 +493,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setActivities((prev) => [item, ...prev]);
   };
 
+  const addNotification = async (notif: { userId: string; type: string; title: string; message: string; link?: string }) => {
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notif),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setNotifications((prev) => [saved, ...prev]);
+      }
+    } catch (err) {
+      console.error('Failed to create notification:', err);
+    }
+  };
+
+  const updateCompanySettings = async (updates: any) => {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setCompanySettings(saved);
+        await fetchInitialData();
+      }
+    } catch (err) {
+      console.error('Failed to update company settings:', err);
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -460,6 +538,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setBudgets,
         masterScores,
         activities,
+        notifications,
+        addNotification,
+        companySettings,
+        updateCompanySettings,
         loading,
         addTask,
         updateTaskStatus,

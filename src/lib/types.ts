@@ -35,7 +35,7 @@ export interface ClientItem {
 
 export interface MasterScoreItem {
   id: string;
-  category: 'Editor' | 'Assistant' | 'Strategic' | 'Scheduler';
+  category: 'Editor' | 'Assistant' | 'Strategic' | 'Scheduler' | 'Production' | 'Editing' | 'Scheduling';
   taskType: string;
   format: string;
   score: number;
@@ -50,24 +50,30 @@ export interface TaskItem {
   workspaceId: string;
   title: string;
   description?: string;
-  category: 'Editor' | 'Strategic' | 'Assistant' | 'Scheduler';
+  category: 'Editor' | 'Assistant' | 'Strategic' | 'Scheduler' | 'Production' | 'Editing' | 'Scheduling';
   taskType?: string;
   format?: string;
   qty: number;
-  priority: 'High' | 'Medium' | 'Low';
+  priority: 'High' | 'Medium' | 'Low' | 'Urgent' | 'Overdue';
   postingDate?: string;
   deadline: string;
   status:
     | 'Brief'
     | 'Content Proposal'
     | 'Script'
-    | 'Editorial Plan'
-    | 'Shooting'
+    | 'Script & Shotlist'
+    | 'Editorial Calendar'
+    | 'Ready for Production'
+    | 'Completed'
+    | 'Production'
     | 'Editing'
     | 'Revision'
     | 'Approval'
+    | 'Ready to Post'
     | 'Scheduling'
-    | 'Posted';
+    | 'Posted'
+    | 'Editorial Plan'
+    | 'Shooting';
   assignedUserIds: string[];
   assignedUsers?: UserPersona[];
   files?: string[];
@@ -80,6 +86,13 @@ export interface TaskItem {
   comments?: { id: string; userName: string; userAvatar?: string; text: string; createdAt: string }[];
   createdAt: string;
   updatedAt: string;
+  month: string;
+  year: number;
+  contentId: string;
+  isArchived: boolean;
+  handoverUserId?: string;
+  handoverTime?: string;
+  workflowTimeline?: string;
 }
 
 export interface WorklogItem {
@@ -101,6 +114,10 @@ export interface WorklogItem {
   stages?: any;
   deadline?: string;
   previewLink?: string;
+  month: string;
+  year: number;
+  contentId: string;
+  isArchived: boolean;
 }
 
 export interface AttendanceItem {

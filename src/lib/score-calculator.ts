@@ -85,3 +85,61 @@ export function getCapacityHealth(
   }
   return { status: 'GREEN', percent, colorClass: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
 }
+
+export function calculatePriority(
+  deadlineStr: string | Date,
+  status: string = 'Brief',
+  postingDateStr?: string | Date | null
+): 'Low' | 'Medium' | 'Urgent' | 'Overdue' {
+  if (!deadlineStr) return 'Low';
+  const deadline = new Date(deadlineStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  deadline.setHours(0, 0, 0, 0);
+
+  const diffTime = deadline.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return 'Overdue';
+  }
+
+  // Check if posting date is tomorrow or today, and task is not yet posted (it is in pre-posting stages)
+  if (postingDateStr) {
+    const postingDate = new Date(postingDateStr);
+    postingDate.setHours(0, 0, 0, 0);
+    const daysToPost = Math.ceil((postingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    const isPrePostedStage = [
+      'Brief', 'Content Proposal', 'Script', 'Script & Shotlist', 'Editorial Calendar',
+      'Ready for Production', 'Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling'
+    ].includes(status);
+
+    if (daysToPost <= 1 && isPrePostedStage) {
+      return 'Urgent';
+    }
+  }
+
+  if (diffDays <= 3) {
+    return 'Urgent';
+  } else if (diffDays <= 7) {
+    return 'Medium';
+  } else {
+    return 'Low';
+  }
+}
+
+export function getPriorityColorClass(priority: string): string {
+  switch (priority) {
+    case 'Overdue':
+      return 'text-red-700 bg-red-50 border-red-200';
+    case 'Urgent':
+      return 'text-amber-700 bg-amber-50 border-amber-250';
+    case 'Medium':
+      return 'text-blue-700 bg-blue-50 border-blue-200';
+    case 'Low':
+    default:
+      return 'text-neutral-600 bg-neutral-50 border-neutral-200';
+  }
+}
+
