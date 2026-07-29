@@ -70,11 +70,34 @@ const ALL_NAV_ITEMS: NavItem[] = [
  
 export function Sidebar() {
   const pathname = usePathname();
-  const { tasks } = useData();
+  const { tasks, worklogs, companySettings } = useData();
   const { currentUser } = useUser();
   const { currentWorkspace } = useWorkspace();
  
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
+
+  // Dynamic capacity calculation
+  const capacity = companySettings?.monthlyCapacity || 12000;
+  
+  // Sum only worklogs matching selected period (July 2026)
+  const activeMonth = 'July';
+  const activeYear = 2026;
+  const userPoints = (worklogs || [])
+    .filter((w: any) => w.month === activeMonth && Number(w.year) === activeYear)
+    .reduce((sum: number, w: any) => {
+      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+      if (logStages.length > 0) {
+        const userStagePoints = logStages
+          .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
+          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+        return sum + userStagePoints;
+      } else {
+        const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
+        return sum + (isUserLog ? w.score : 0);
+      }
+    }, 0);
+
+  const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
  
   const navItems = ALL_NAV_ITEMS.filter((item) => {
     if (!item.allowedRoles) return true;
@@ -154,12 +177,16 @@ export function Sidebar() {
         <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200/80 space-y-1.5">
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-neutral-500 font-medium">Monthly Capacity</span>
-            <span className="text-neutral-900 font-mono font-semibold">12,000 pts</span>
+            <span className="text-neutral-900 font-mono font-semibold">{capacity.toLocaleString('en-US')} pts</span>
           </div>
           <div className="w-full bg-neutral-200 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-neutral-900 h-full w-[42%]" />
+            <div className="bg-neutral-900 h-full transition-all duration-500" style={{ width: `${progressPercent}%` }} />
           </div>
-          <p className="text-[10px] text-neutral-400">Persona: {currentUser.name}</p>
+          <div className="flex items-center justify-between text-[9px] text-neutral-400 font-mono font-semibold">
+            <span>Progress: {userPoints.toLocaleString('en-US')} pts</span>
+            <span>{progressPercent.toFixed(0)}%</span>
+          </div>
+          <p className="text-[9px] text-neutral-400 pt-0.5 border-t border-neutral-200/60">Persona: {currentUser.name}</p>
         </div>
       </div>
     </aside>
