@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert } from 'lucide-react';
+import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function ApprovalPage() {
@@ -140,9 +140,17 @@ export default function ApprovalPage() {
                     </div>
 
                     {t.previewLink && (
-                      <div className="rounded-xl overflow-hidden border border-neutral-200 max-h-48 bg-neutral-50 flex items-center justify-center">
-                        <img src={t.previewLink} alt={t.title} className="w-full h-full object-cover" />
-                      </div>
+                      <a
+                        href={t.previewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between text-xs text-purple-950 font-bold bg-purple-50 hover:bg-purple-100 p-2.5 rounded-xl border border-purple-200 transition"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Link className="w-4 h-4 text-purple-750" /> Review Preview Draft Link
+                        </span>
+                        <ExternalLink className="w-3.5 h-3.5 text-purple-600" />
+                      </a>
                     )}
 
                     {t.driveLink && (
@@ -190,6 +198,7 @@ export default function ApprovalPage() {
                   <tr>
                     <th className="px-4 py-3.5">Content</th>
                     <th className="px-4 py-3.5">Client</th>
+                    <th className="px-4 py-3.5">Preview Link</th>
                     <th className="px-4 py-3.5">Assignee</th>
                     <th className="px-4 py-3.5">Deadline</th>
                     <th className="px-4 py-3.5">Status</th>
@@ -221,6 +230,20 @@ export default function ApprovalPage() {
                           >
                             {t.clientName}
                           </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {t.previewLink ? (
+                            <a
+                              href={t.previewLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-purple-650" /> View Draft
+                            </a>
+                          ) : (
+                            <span className="text-neutral-450 italic">No Preview</span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 font-semibold text-neutral-600">
                           {uniqueUserNames.join(', ') || 'Unassigned'}
