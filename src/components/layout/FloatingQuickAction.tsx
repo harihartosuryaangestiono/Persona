@@ -120,7 +120,7 @@ export function FloatingQuickAction() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !clientId) return;
+    if (!title.trim() || !clientId || loading) return;
 
     setLoading(true);
     try {
