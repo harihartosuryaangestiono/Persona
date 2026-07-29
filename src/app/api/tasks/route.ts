@@ -138,16 +138,20 @@ export async function PATCH(req: Request) {
     const existingTask = await prisma.task.findUnique({ where: { id } });
     if (!existingTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
-    const assignedIds = JSON.parse(existingTask.assignedUserIds || '[]');
-    const isAssigned = assignedIds.includes(currentUserId);
+    const assignedIds: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
+    const isUnassigned = assignedIds.length === 0;
 
-    // Enforce role-based edit permissions (Requirement 7)
-    if (!isAdmin) {
-      if (roles.includes('Production Assistant') && existingTask.category === 'Production' && !isAssigned) {
-        return NextResponse.json({ error: 'You can only update your own Production tasks' }, { status: 403 });
-      }
-      if (roles.includes('Editor') && (existingTask.category === 'Editing' || existingTask.category === 'Editor') && !isAssigned) {
-        return NextResponse.json({ error: 'You can only update your own Editing tasks' }, { status: 403 });
+    // Check if user has role authorization
+    const isRoleAuthorized =
+      roles.includes('Production Assistant') ||
+      roles.includes('Editor') ||
+      roles.includes('Strategist') ||
+      roles.includes('Scheduler');
+
+    if (!isAdmin && !isUnassigned && !isRoleAuthorized) {
+      const isAssignedToUser = assignedIds.includes(currentUserId);
+      if (!isAssignedToUser) {
+        return NextResponse.json({ error: 'You can only update tasks assigned to you or in your role domain' }, { status: 403 });
       }
     }
 

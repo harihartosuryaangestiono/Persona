@@ -229,6 +229,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Optimistic local state update first so UI updates immediately
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
+    );
+
     if (currentUser) {
       try {
         const res = await fetch(`/api/tasks?id=${taskId}`, {
@@ -253,10 +258,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.error(err);
       }
     }
-
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
-    );
   };
 
   const deleteTask = (taskId: string) => {
