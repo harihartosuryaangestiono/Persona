@@ -10,7 +10,7 @@ import confetti from 'canvas-confetti';
 export default function ApprovalPage() {
   const { currentUser } = useUser();
   const { tasks, clients, approveTask, updateTaskStatus } = useData();
-  const { workspaces } = useWorkspace();
+  const { workspaces, currentWorkspace } = useWorkspace();
 
   const [viewType, setViewType] = useState<'card' | 'table'>('card');
   const [revisionNotes, setRevisionNotes] = useState('');
@@ -18,16 +18,24 @@ export default function ApprovalPage() {
 
   // Authenticated review checks
   const isAnggi = currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi';
+  const isGigie = currentUser?.name === 'Gigie' || currentUser?.id === 'u-gigie';
   const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
-  const canApprove = isAnggi || isAdmin;
+  
+  // Wewenang Approval per Workspace (Gigie hanya inhouse, Anggi hanya team anggi, Admin/Owner bebas)
+  const isAnggiInWorkspace = isAnggi && currentWorkspace?.id === 'ws-team-anggi';
+  const isGigieInWorkspace = isGigie && currentWorkspace?.id === 'ws-inhouse';
+  const canApprove = isAdmin || isAnggiInWorkspace || isGigieInWorkspace;
 
   // Filter tasks in Approval stage
   const rawQueue = tasks.filter((t) => t.status === 'Approval');
 
-  // Filter Approval Queue based on assignment (Requirement 2)
+  // Filter Approval Queue based on assignment & workspace permissions
   const approvalQueue = rawQueue.filter((t) => {
-    if (isAdmin || isAnggi) return true; // Admins and Anggi can see/approve everything
-    return false; // Other users see nothing in their queue
+    if (t.workspaceId !== currentWorkspace?.id) return false;
+    if (isAdmin) return true;
+    if (isAnggi && currentWorkspace?.id === 'ws-team-anggi') return true;
+    if (isGigie && currentWorkspace?.id === 'ws-inhouse') return true;
+    return false;
   });
 
   const handleApprove = (taskId: string) => {
@@ -59,7 +67,7 @@ export default function ApprovalPage() {
             Approval Queue <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Review Gate</span>
           </h1>
           <p className="text-xs text-neutral-500">
-            Anggi is responsible for approvals. Admins can view and override queue approvals.
+            Anggi handles approvals for Team Anggi, Gigie handles In-house, and Admins can approve globally.
           </p>
         </div>
 
@@ -91,7 +99,11 @@ export default function ApprovalPage() {
           <div>
             <p>Access Restricted</p>
             <p className="font-normal text-amber-700 mt-1">
-              Only Anggi or Admins are allowed to approve contents. Select Anggi or Devi in the user switcher above.
+              {isGigie 
+                ? 'Sesuai wewenang, Gigie hanya diperbolehkan menyetujui antrean di workspace Persona OS - Inhouse. Silakan pilih workspace Inhouse di switcher atas.'
+                : isAnggi
+                ? "Sesuai wewenang, Anggi hanya diperbolehkan menyetujui antrean di workspace Persona OS - Team Anggi. Silakan pilih workspace Team Anggi di switcher atas."
+                : 'Hanya Approver yang berwenang (Admin, Anggi di Team Anggi, atau Gigie di Inhouse) yang diizinkan menyetujui antrean konten.'}
             </p>
           </div>
         </div>
@@ -197,7 +209,7 @@ export default function ApprovalPage() {
                     const wsName = workspaces.find((w) => w.id === t.workspaceId)?.name || 'Main Workspace';
 
                     // Reviewer Logic
-                    const reviewer = isAnggi ? 'Anggi' : isAdmin ? `Devi (Admin Override)` : 'Anggi';
+                    const reviewer = isAnggi ? 'Anggi' : isGigie ? 'Gigie' : isAdmin ? `${currentUser?.name} (Admin Override)` : currentUser?.name || 'Reviewer';
 
                     return (
                       <tr key={t.id} className="hover:bg-neutral-50 transition">
