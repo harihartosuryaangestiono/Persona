@@ -43,7 +43,7 @@ async function main() {
     {
       name: 'Dinda',
       email: 'dinda@personaos.com',
-      roles: JSON.stringify(['Editor', 'Scheduler']),
+      roles: JSON.stringify(['Production Assistant', 'Editor', 'Scheduler']),
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
     },
     {

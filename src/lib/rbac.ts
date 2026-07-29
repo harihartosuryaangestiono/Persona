@@ -39,7 +39,7 @@ export const PERMANENT_USERS: UserPersona[] = [
     name: 'Dinda',
     email: 'dinda@personaos.com',
     avatar: '',
-    roles: ['Editor', 'Scheduler'],
+    roles: ['Production Assistant', 'Editor', 'Scheduler'],
     monthlyCapacity: 12000,
     hourlyPoint: 100,
     costPerPoint: 250,
