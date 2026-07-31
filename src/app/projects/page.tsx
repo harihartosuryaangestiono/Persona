@@ -187,7 +187,7 @@ export default function ProjectsPage() {
                       {c.code}
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                      {c.workspaceId === 'ws-team-anggi' ? 'In-House' : 'Persona Client'}
+                      {c.workspaceId === 'ws-inhouse' || c.code?.toLowerCase().includes('inhouse') || c.name?.toLowerCase().includes('in-house') ? 'In-House' : 'Persona Client'}
                     </span>
                   </div>
                   <h3 className="text-base font-bold text-neutral-900 mt-2">{c.name} Content Campaign</h3>

@@ -18,7 +18,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     let targetUserId = body.userId || 'u-priska';
-
     // Verify user exists in database, or find matching user by name/id
     const userMatch = await prisma.user.findFirst({
       where: {
