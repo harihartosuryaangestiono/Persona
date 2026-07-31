@@ -3,6 +3,7 @@ import './globals.css';
 import { UserProvider } from '@/context/UserContext';
 import { DataProvider } from '@/context/DataContext';
 import { WorkspaceProvider } from '@/context/WorkspaceContext';
+import { ToastProvider } from '@/context/ToastContext';
 import { AuthWrapper } from '@/components/layout/AuthWrapper';
 
 export const metadata: Metadata = {
@@ -21,9 +22,11 @@ export default function RootLayout({
         <UserProvider>
           <WorkspaceProvider>
             <DataProvider>
-              <AuthWrapper>
-                {children}
-              </AuthWrapper>
+              <ToastProvider>
+                <AuthWrapper>
+                  {children}
+                </AuthWrapper>
+              </ToastProvider>
             </DataProvider>
           </WorkspaceProvider>
         </UserProvider>

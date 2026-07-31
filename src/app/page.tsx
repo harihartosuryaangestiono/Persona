@@ -19,7 +19,7 @@ import {
   AlertTriangle,
   FolderOpen
 } from 'lucide-react';
-import { formatRupiah, getCapacityHealth } from '@/lib/score-calculator';
+import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
 
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
@@ -39,23 +39,10 @@ export default function DynamicDashboardPage() {
   // Filter Tasks for current user's workspace, excluding archived
   const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id && !t.isArchived);
 
-  // Recalculate employee workload score from stages (Requirement 10: July 2026 default)
-  const userTotalPoints = worklogs
-    .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
-    .reduce((sum, w) => {
-      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-      if (logStages.length > 0) {
-        const userStagePoints = logStages
-          .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
-          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-        return sum + userStagePoints;
-      } else {
-        const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
-        return sum + (isUserLog ? w.score : 0);
-      }
-    }, 0);
+  // Recalculate employee workload score from stages and tasks (Requirement 10: July 2026 default)
+  const userTotalPoints = currentUser ? calculateUserPointsForPeriod(currentUser, selectedMonth, selectedYear, worklogs, tasks) : 0;
 
-  const maxCapacity = currentUser?.monthlyCapacity || 12000;
+  const maxCapacity = (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000) ? currentUser.monthlyCapacity : 16000;
   const capacityHealth = getCapacityHealth(userTotalPoints, maxCapacity);
   const remainingCapacity = maxCapacity - userTotalPoints;
   const workloadForecast = capacityHealth.percent >= 90 ? 'Critical Overload' : (capacityHealth.percent >= 75 ? 'Busy/Full Load' : 'Healthy Capacity');

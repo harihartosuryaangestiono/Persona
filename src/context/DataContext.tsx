@@ -198,7 +198,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const saved = await res.json();
           setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
-          await fetchInitialData();
         }
       } catch (err) {
         console.error(err);
@@ -251,7 +250,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const saved = await res.json();
           setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
-          await fetchInitialData();
           return;
         }
       } catch (err) {
@@ -440,39 +438,56 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const submitLeave = (leave: Partial<LeaveRequestItem>) => {
+  const submitLeave = async (leave: Partial<LeaveRequestItem>) => {
     const item: LeaveRequestItem = {
       id: `leave-${Date.now()}`,
-      userId: leave.userId || 'u-priska',
-      startDate: leave.startDate || new Date().toISOString(),
-      endDate: leave.endDate || new Date().toISOString(),
+      userId: leave.userId || currentUser?.id || 'u-priska',
+      userName: leave.userName || currentUser?.name || 'Priska',
+      startDate: leave.startDate || new Date().toISOString().split('T')[0],
+      endDate: leave.endDate || new Date().toISOString().split('T')[0],
       reason: leave.reason || 'Personal leave',
       type: leave.type || 'ANNUAL',
       status: 'PENDING',
       createdAt: new Date().toISOString(),
     };
     setLeaveRequests((prev) => [item, ...prev]);
+
+    try {
+      const res = await fetch('/api/leave-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setLeaveRequests((prev) =>
+          prev.map((l) => (l.id === item.id ? saved : l))
+        );
+      }
+    } catch (e) {
+      console.error('Failed to save leave request:', e);
+    }
   };
 
-  const approveLeave = (leaveId: string, approvedByUserId: string) => {
+  const approveLeave = async (leaveId: string, approvedByUserId: string) => {
     setLeaveRequests((prev) =>
       prev.map((l) => (l.id === leaveId ? { ...l, status: 'APPROVED', approvedByUserId } : l))
     );
+
+    try {
+      await fetch('/api/leave-request', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: leaveId, status: 'APPROVED', approvedByUserId }),
+      });
+    } catch (e) {
+      console.error('Failed to approve leave request:', e);
+    }
   };
 
-  const approveTask = (taskId: string, nextStage: string, reviewerId: string, notes?: string) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          return {
-            ...t,
-            status: nextStage as any,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return t;
-      })
-    );
+  const approveTask = async (taskId: string, nextStage: string, reviewerId: string, notes?: string) => {
+    await updateTaskStatus(taskId, (nextStage || 'Scheduling') as TaskItem['status']);
+    addActivity(reviewerId || currentUser?.id || 'u-system', 'TASK', taskId, 'APPROVED', `Approved task and moved to ${nextStage || 'Scheduling'}`);
   };
 
   const addActivity = (

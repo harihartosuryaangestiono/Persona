@@ -6,10 +6,13 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { useUser } from '@/context/UserContext';
 import { Video, Calendar, MapPin, Users, CheckSquare, Camera, Upload, X, Check, Link } from 'lucide-react';
  
+import { useToast } from '@/context/ToastContext';
+
 export default function ProductionPage() {
   const { tasks, updateTask } = useData();
   const { currentWorkspace } = useWorkspace();
   const { currentUser } = useUser();
+  const { showToast } = useToast();
  
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [driveModalTask, setDriveModalTask] = useState<any | null>(null);
@@ -59,7 +62,7 @@ export default function ProductionPage() {
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err) {
       console.error(err);
-      alert('Failed to update status');
+      showToast('Failed to update status', 'error');
     } finally {
       setSubmittingId(null);
     }
@@ -87,7 +90,7 @@ export default function ProductionPage() {
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err) {
       console.error(err);
-      alert('Failed to save asset link');
+      showToast('Failed to save asset link', 'error');
     } finally {
       setSubmittingId(null);
     }

@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
+import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useToast } from '@/context/ToastContext';
 import {
   Archive,
   Search,
@@ -20,7 +22,10 @@ import { calculatePriority, getPriorityColorClass } from '@/lib/score-calculator
 
 export default function ArchivePage() {
   const { tasks, clients, updateTask } = useData();
+  const { currentUser } = useUser();
   const { currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('ALL');
   const [selectedMonth, setSelectedMonth] = useState('ALL');
@@ -48,7 +53,7 @@ export default function ArchivePage() {
 
   const handleRestore = (taskId: string) => {
     updateTask(taskId, { isArchived: false } as any);
-    alert('Task successfully restored to active board!');
+    showToast('Task successfully restored to active board!', 'success');
     if (selectedTaskDetail?.id === taskId) {
       setSelectedTaskDetail(null);
     }

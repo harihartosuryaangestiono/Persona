@@ -21,10 +21,13 @@ import {
 import { TaskItem } from '@/lib/types';
 import { calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 
+import { useToast } from '@/context/ToastContext';
+
 export default function CalendarPage() {
   const { tasks, clients, updateTask } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
 
   const [viewMode, setViewMode] = useState<'Month' | 'Week' | 'Timeline'>('Month');
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 1)); // Default July 2026
@@ -85,22 +88,20 @@ export default function CalendarPage() {
     // 2. Must belong to the current workspace
     if (t.workspaceId !== currentWorkspace.id) return false;
 
-    // 3. Strategic tasks containing a Posting Date must automatically appear (Requirement 1)
-    if (t.category === 'Strategic' && t.postingDate) return true;
+    // 3. Tasks containing a Posting Date or Deadline must automatically appear (Requirement 1)
+    if (t.postingDate || t.deadline) return true;
 
     // 4. Role-based view restrictions (Requirement 16)
     if (!isExecutive && currentUser) {
       const userRoles = currentUser.roles;
-      // Strategist sees Strategic category
       if (userRoles.includes('Strategist') && t.category === 'Strategic') return true;
-      // Editor sees Editor category
-      if (userRoles.includes('Editor') && t.category === 'Editor') return true;
-      // Scheduler sees Scheduler category
-      if (userRoles.includes('Scheduler') && t.category === 'Scheduler') return true;
-      // PA sees Assistant / Production Assistant
-      if (userRoles.includes('Production Assistant') && t.category === 'Assistant') return true;
+      if (userRoles.includes('Editor') && t.category === 'Editing') return true;
+      if (userRoles.includes('Scheduler') && t.category === 'Scheduling') return true;
+      if (userRoles.includes('Production Assistant') && (t.category === 'Production' || t.category === 'Assistant')) return true;
 
-      // If user has roles but this task category doesn't match any of their roles, hide it
+      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+      if (assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name)) return true;
+
       return false;
     }
 
@@ -114,8 +115,14 @@ export default function CalendarPage() {
     if (selectedFormat !== 'ALL' && t.format !== selectedFormat) return false;
 
     if (selectedPIC !== 'ALL') {
-      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds;
-      if (!assignedIds.includes(selectedPIC)) return false;
+      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+      const userObj = allUsers.find((u) => u.id === selectedPIC);
+      const isAssigned = assignedIds.includes(selectedPIC) || (userObj && assignedIds.includes(userObj.name));
+      
+      const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const isStageAssignee = logStages.some((s: any) => s.userId === selectedPIC || (userObj && s.userName === userObj.name));
+
+      if (!isAssigned && !isStageAssignee) return false;
     }
 
     if (selectedRole !== 'ALL' && t.category !== selectedRole) return false;
@@ -179,7 +186,7 @@ export default function CalendarPage() {
 
     setIsEditing(false);
     setSelectedTask(null);
-    alert('Task synchronized and updated successfully!');
+    showToast('Task synchronized and updated successfully!', 'success');
   };
 
   // Status Badge Colors

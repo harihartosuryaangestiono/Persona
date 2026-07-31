@@ -14,15 +14,15 @@ export default function SchedulingPage() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 1)); // Default July 2026
 
   // Workspace restriction
-  const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id);
+  const workspaceTasks = tasks.filter((t) => !t.isArchived && (!t.workspaceId || t.workspaceId === currentWorkspace.id));
 
   // Client filtering
   const filteredTasks = workspaceTasks.filter(
     (t) => selectedClientId === 'ALL' || t.clientId === selectedClientId
   );
 
-  // Queue List tasks (status is Scheduling)
-  const schedulingQueue = filteredTasks.filter((t) => t.status === 'Scheduling');
+  // Queue List tasks (status is Scheduling or Ready to Post)
+  const schedulingQueue = filteredTasks.filter((t) => t.status === 'Scheduling' || t.status === 'Ready to Post');
 
   // Calendar dates math
   const year = currentDate.getFullYear();

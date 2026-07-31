@@ -192,6 +192,15 @@ export async function PATCH(req: Request) {
           updateData.handoverUserId = currentUserId;
           updateData.handoverTime = new Date();
         }
+
+        if (body.status === 'Posted' || body.status === 'Completed') {
+          const settings = await prisma.companySetting.findFirst();
+          if (settings && settings.archiveRule === 'IMMEDIATE') {
+            updateData.isArchived = true;
+            updateData.archivedAt = new Date();
+            updateData.archivedBy = currentUserId;
+          }
+        }
       }
     }
 

@@ -35,6 +35,7 @@ import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { UserRole } from '@/lib/types';
+import { calculateUserPointsForPeriod } from '@/lib/score-calculator';
  
 interface NavItem {
   name: string;
@@ -48,7 +49,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Projects', href: '/projects', icon: Briefcase, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant'] },
-  { name: 'Editorial Calendar', href: '/calendar', icon: Calendar, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
+  { name: 'Editorial Calendar', href: '/calendar', icon: Calendar, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'] },
   { name: 'Kanban Pipeline', href: '/kanban', icon: Kanban, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Editor', 'Production Assistant', 'Scheduler'] },
   { name: 'Production & Shoot', href: '/production', icon: Video, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Strategist'] },
   { name: 'Worklog', href: '/worklog', icon: FileText, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'] },
@@ -77,25 +78,12 @@ export function Sidebar() {
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
 
   // Dynamic capacity calculation
-  const capacity = companySettings?.monthlyCapacity || 12000;
+  const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);
   
-  // Sum only worklogs matching selected period (July 2026)
+  // Sum worklogs and active tasks matching selected period (July 2026)
   const activeMonth = 'July';
   const activeYear = 2026;
-  const userPoints = (worklogs || [])
-    .filter((w: any) => w.month === activeMonth && Number(w.year) === activeYear)
-    .reduce((sum: number, w: any) => {
-      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-      if (logStages.length > 0) {
-        const userStagePoints = logStages
-          .filter((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name)
-          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-        return sum + userStagePoints;
-      } else {
-        const isUserLog = w.userName === currentUser?.name || w.userId === currentUser?.id;
-        return sum + (isUserLog ? w.score : 0);
-      }
-    }, 0);
+  const userPoints = currentUser ? calculateUserPointsForPeriod(currentUser, activeMonth, activeYear, worklogs, tasks) : 0;
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
  

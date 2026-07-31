@@ -7,10 +7,13 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+import { useToast } from '@/context/ToastContext';
+
 export default function ApprovalPage() {
   const { currentUser } = useUser();
   const { tasks, clients, approveTask, updateTaskStatus } = useData();
   const { workspaces, currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
 
   const [viewType, setViewType] = useState<'card' | 'table'>('card');
   const [revisionNotes, setRevisionNotes] = useState('');
@@ -38,24 +41,24 @@ export default function ApprovalPage() {
     return false;
   });
 
-  const handleApprove = (taskId: string) => {
+  const handleApprove = async (taskId: string) => {
     try {
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
     } catch (e) {}
 
-    approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
-    alert('Task approved! Moved to Scheduling pipeline stage.');
+    await approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
+    showToast('Task approved! Moved to Scheduling pipeline stage and sent to Scheduler.', 'success');
   };
 
   const handleRequestRevision = (taskId: string) => {
     if (!revisionNotes.trim()) {
-      alert('Please provide revision notes.');
+      showToast('Please provide revision notes before requesting revision.', 'warning');
       return;
     }
     updateTaskStatus(taskId, 'Revision');
     setSelectedTaskId(null);
     setRevisionNotes('');
-    alert('Revision requested. Moved back to Revision stage.');
+    showToast('Revision requested! Moved back to Revision stage.', 'info');
   };
 
   return (

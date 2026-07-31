@@ -44,7 +44,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         email: dbU.email,
         avatar: dbU.avatar || template?.avatar || '',
         roles: Array.isArray(dbU.roles) ? dbU.roles : (template?.roles || []),
-        monthlyCapacity: dbU.monthlyCapacity || 12000,
+        monthlyCapacity: (dbU.monthlyCapacity && dbU.monthlyCapacity !== 12000) ? dbU.monthlyCapacity : 16000,
         hourlyPoint: dbU.hourlyPoint || 100,
         costPerPoint: dbU.costPerPoint || 250,
         active: dbU.active !== undefined ? dbU.active : true,

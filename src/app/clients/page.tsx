@@ -5,6 +5,7 @@ import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { useUser } from '@/context/UserContext';
 import { Plus, Edit2, ShieldAlert, CheckCircle, Trash2, Ban, Folder } from 'lucide-react';
+import { useToast } from '@/context/ToastContext';
 
 const PRESET_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#6366F1', '#EF4444', '#14B8A6'];
 
@@ -12,6 +13,7 @@ export default function ClientsPage() {
   const { clients, tasks, refreshData } = useData();
   const { currentWorkspace, workspaces } = useWorkspace();
   const { currentUser } = useUser();
+  const { showToast } = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
@@ -121,7 +123,7 @@ export default function ClientsPage() {
       await refreshData();
     } catch (e) {
       console.error(e);
-      alert('Error updating status');
+      showToast('Error updating client status', 'error');
     }
   };
 

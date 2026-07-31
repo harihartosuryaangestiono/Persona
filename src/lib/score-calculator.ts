@@ -75,7 +75,7 @@ export function calculateAutoDeadline(postingDateStr: string, offsetDays: number
 
 export function getCapacityHealth(
   usedPoints: number,
-  maxCapacity: number = 12000
+  maxCapacity: number = 16000
 ): { status: 'GREEN' | 'YELLOW' | 'RED'; percent: number; colorClass: string } {
   const percent = Math.min(100, Math.round((usedPoints / maxCapacity) * 100));
   if (percent >= 90) {
@@ -142,4 +142,48 @@ export function getPriorityColorClass(priority: string): string {
       return 'text-neutral-600 bg-neutral-50 border-neutral-200';
   }
 }
+
+export function calculateUserPointsForPeriod(
+  usr: { id: string; name: string },
+  month: string,
+  year: number,
+  worklogs: any[] = [],
+  tasks: any[] = []
+): number {
+  const worklogPts = (worklogs || [])
+    .filter((w) => w.month === month && Number(w.year) === Number(year) && !w.isArchived)
+    .reduce((sum, w) => {
+      const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+      if (logStages.length > 0) {
+        const userStagePoints = logStages
+          .filter((s: any) => s.userId === usr.id || (s.userName && s.userName.toLowerCase() === usr.name.toLowerCase()))
+          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+        return sum + userStagePoints;
+      } else {
+        const isUserLog = (w.userName && w.userName.toLowerCase() === usr.name.toLowerCase()) || w.userId === usr.id;
+        return sum + (isUserLog ? (Number(w.score) || 0) : 0);
+      }
+    }, 0);
+
+  const loggedContentIds = new Set((worklogs || []).map((w) => w.contentId).filter(Boolean));
+
+  const taskPts = (tasks || [])
+    .filter((t) => !t.isArchived && t.month === month && Number(t.year) === Number(year) && (!t.contentId || !loggedContentIds.has(t.contentId)))
+    .reduce((sum, t) => {
+      const tStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      if (tStages.length > 0) {
+        const userStagePoints = tStages
+          .filter((s: any) => s.userId === usr.id || (s.userName && s.userName.toLowerCase() === usr.name.toLowerCase()))
+          .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
+        return sum + userStagePoints;
+      } else {
+        const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+        const isAssigned = assignedIds.includes(usr.id) || assignedIds.includes(usr.name);
+        return sum + (isAssigned ? (Number(t.score) || 0) : 0);
+      }
+    }, 0);
+
+  return worklogPts + taskPts;
+}
+
 

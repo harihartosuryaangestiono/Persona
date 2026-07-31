@@ -12,7 +12,7 @@ export interface UserPersona {
   email: string;
   avatar: string;
   roles: UserRole[];
-  monthlyCapacity: number; // 12000
+  monthlyCapacity: number; // 16000
   hourlyPoint: number;     // 100
   costPerPoint: number;    // 250
   active: boolean;

@@ -23,7 +23,7 @@ export class AiOptimizerService {
         .filter((w) => w.userName === usr.name || w.userId === usr.id)
         .reduce((sum, w) => sum + w.score, 0);
 
-      const capacity = usr.monthlyCapacity || 12000;
+      const capacity = usr.monthlyCapacity || 16000;
       const remainingCapacity = Math.max(0, capacity - currentPoints);
       const health = getCapacityHealth(currentPoints, capacity);
 

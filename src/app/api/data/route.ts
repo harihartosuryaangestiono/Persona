@@ -14,89 +14,9 @@ import {
 
 export async function GET() {
   try {
-    // 1. Fetch or create Company Settings (Requirement 5)
-    let settings = await prisma.companySetting.findFirst();
-    if (!settings) {
-      settings = await prisma.companySetting.create({ data: {} });
-    }
-    const archiveRule = settings.archiveRule || 'END_OF_MONTH';
-
-    // 2. Perform database-driven archiving check based on setting (Requirement 2 & 5)
-    try {
-      if (archiveRule === 'END_OF_MONTH') {
-        const MONTH_MAP: Record<string, number> = {
-          January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
-          July: 6, August: 7, September: 8, October: 9, November: 10, December: 11
-        };
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-
-        const potentialArchiveTasks = await prisma.task.findMany({
-          where: {
-            status: { in: ['Posted', 'Completed'] },
-            isArchived: false,
-          }
-        });
-
-        const tasksToArchive = potentialArchiveTasks.filter(t => {
-          const taskMonthNum = MONTH_MAP[t.month] ?? 0;
-          if (t.year < currentYear) return true;
-          if (t.year === currentYear && taskMonthNum < currentMonth) return true;
-          return false;
-        });
-
-        if (tasksToArchive.length > 0) {
-          const taskIds = tasksToArchive.map(t => t.id);
-          await prisma.task.updateMany({
-            where: { id: { in: taskIds } },
-            data: { isArchived: true, archivedAt: new Date(), archivedBy: 'u-system' }
-          });
-
-          // Also archive associated worklogs
-          const contentIds = tasksToArchive.map(t => t.contentId).filter(Boolean);
-          if (contentIds.length > 0) {
-            await prisma.worklog.updateMany({
-              where: { contentId: { in: contentIds }, isArchived: false },
-              data: { isArchived: true, archivedAt: new Date(), archivedBy: 'u-system' }
-            });
-          }
-        }
-      } else if (archiveRule === 'SEVEN_DAYS') {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-        const tasksToArchive = await prisma.task.findMany({
-          where: {
-            status: { in: ['Posted', 'Completed'] },
-            isArchived: false,
-            updatedAt: { lte: sevenDaysAgo }
-          }
-        });
-
-        if (tasksToArchive.length > 0) {
-          const taskIds = tasksToArchive.map(t => t.id);
-          await prisma.task.updateMany({
-            where: { id: { in: taskIds } },
-            data: { isArchived: true, archivedAt: new Date(), archivedBy: 'u-system' }
-          });
-
-          // Also archive associated worklogs
-          const contentIds = tasksToArchive.map(t => t.contentId).filter(Boolean);
-          if (contentIds.length > 0) {
-            await prisma.worklog.updateMany({
-              where: { contentId: { in: contentIds }, isArchived: false },
-              data: { isArchived: true, archivedAt: new Date(), archivedBy: 'u-system' }
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error during auto-archiving:', err);
-    }
-
-    // 3. Fetch all dataset collections
+    // 1. Fetch all dataset collections in parallel for maximum speed
     const [
+      settings,
       users,
       clients,
       tasks,
@@ -109,6 +29,7 @@ export async function GET() {
       workspaces,
       notifications,
     ] = await Promise.all([
+      prisma.companySetting.findFirst(),
       prisma.user.findMany(),
       prisma.client.findMany(),
       prisma.task.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -159,7 +80,11 @@ export async function GET() {
     }));
 
     return NextResponse.json({
-      users: users.map((u: User) => ({ ...u, roles: JSON.parse(u.roles) })),
+      users: users.map((u: User) => ({
+        ...u,
+        monthlyCapacity: u.monthlyCapacity === 12000 || !u.monthlyCapacity ? 16000 : u.monthlyCapacity,
+        roles: typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles,
+      })),
       clients,
       tasks: formattedTasks,
       worklogs: formattedWorklogs,
@@ -193,7 +118,7 @@ export async function GET() {
         ...n,
         createdAt: n.createdAt.toISOString(),
       })),
-      companySettings: settings,
+      companySettings: settings || { monthlyCapacity: 16000, archiveRule: 'END_OF_MONTH' },
     });
   } catch (error: any) {
     console.error('Error fetching data from Prisma:', error);

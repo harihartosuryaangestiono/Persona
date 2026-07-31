@@ -50,7 +50,7 @@ model User {
   avatar           String?
   roles            String   // JSON stringified array of roles: ["Admin", "Owner", "Strategist"]
   active           Boolean  @default(true)
-  monthlyCapacity  Int      @default(12000)
+  monthlyCapacity  Int      @default(16000)
   hourlyPoint      Int      @default(100)
   costPerPoint     Int      @default(250)
   createdAt        DateTime @default(now())
@@ -128,7 +128,7 @@ model CompanySetting {
   workingDaysPerWeek        Int      @default(5)
   workdaysPerMonth          Int      @default(20)
   pointPerHour              Int      @default(100)
-  monthlyCapacity           Int      @default(12000)
+  monthlyCapacity           Int      @default(16000)
   costPerPoint              Int      @default(250)
   defaultDeadlineOffsetDays Int      @default(-3)
   archiveRule               String   @default("END_OF_MONTH")

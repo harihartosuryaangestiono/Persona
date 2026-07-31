@@ -48,10 +48,13 @@ interface TaskStage {
   score: number;
 }
 
+import { useToast } from '@/context/ToastContext';
+
 export default function KanbanPage() {
   const { tasks, clients, worklogs, addTask, updateTask, updateTaskStatus, deleteTask, addWorklog, addNotification, activities, addActivity } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
 
   // View state
   const [viewType, setViewType] = useState<'kanban' | 'table'>('kanban');
@@ -107,20 +110,27 @@ export default function KanbanPage() {
   const [editStatus, setEditStatus] = useState<TaskItem['status']>('Brief');
   const [editStages, setEditStages] = useState<TaskStage[]>([]);
 
-  // Check user role to default board type
+  const [hasInitializedBoard, setHasInitializedBoard] = useState(false);
+  const [prevUserId, setPrevUserId] = useState<string | null>(null);
+
+  // Check user role to default board type on initial load or user switch
   useEffect(() => {
     if (currentUser) {
-      const roles = currentUser.roles;
-      const isAdmin = roles.includes('Admin') || roles.includes('Owner');
-      if (isAdmin) {
-        setActiveBoard('main');
-      } else if (roles.includes('Strategist')) {
-        setActiveBoard('strategic');
-      } else {
-        setActiveBoard('production');
+      if (!hasInitializedBoard || currentUser.id !== prevUserId) {
+        const roles = currentUser.roles;
+        const isAdmin = roles.includes('Admin') || roles.includes('Owner');
+        if (isAdmin) {
+          setActiveBoard('main');
+        } else if (roles.includes('Strategist')) {
+          setActiveBoard('strategic');
+        } else {
+          setActiveBoard('production');
+        }
+        setHasInitializedBoard(true);
+        setPrevUserId(currentUser.id);
       }
     }
-  }, [currentUser]);
+  }, [currentUser, hasInitializedBoard, prevUserId]);
 
   // Set default client on mount
   const activeClients = clients.filter((c) => c.status === 'Active' || c.active);
@@ -370,11 +380,11 @@ export default function KanbanPage() {
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (!isExecutive) {
       if (newCategory === 'Strategic' && !currentUser.roles.includes('Strategist')) {
-        alert('Unauthorized: Only Strategists can create Strategic tasks');
+        showToast('Unauthorized: Only Strategists can create Strategic tasks', 'warning');
         return;
       }
       if (newCategory === 'Production' && currentUser.roles.includes('Scheduler')) {
-        alert('Unauthorized: Schedulers cannot create Production tasks');
+        showToast('Unauthorized: Schedulers cannot create Production tasks', 'warning');
         return;
       }
     }
@@ -419,7 +429,7 @@ export default function KanbanPage() {
       }, 1500);
     } catch (err) {
       console.error(err);
-      alert('Failed to create task');
+      showToast('Failed to create task. Please try again.', 'error');
     } finally {
       setIsCreatingTask(false);
     }
@@ -457,7 +467,7 @@ export default function KanbanPage() {
       const isSelfAssign = assignedIds.length <= 1 && (assignedIds.length === 0 || assignedIds[0] === currentUser.id);
       const noChange = JSON.stringify(assignedIds.sort()) === JSON.stringify(originalAssigned.sort());
       if (!isSelfAssign && !noChange) {
-        alert('Unauthorized: You cannot assign other employees to this task.');
+        showToast('Unauthorized: You cannot assign other employees to this task.', 'warning');
         return;
       }
     }
@@ -554,7 +564,7 @@ export default function KanbanPage() {
       });
     }
 
-    alert('Handed over content task to Production successfully!');
+    showToast('Handed over content task to Production successfully!', 'success');
     setSelectedTaskDetail(null);
   };
 
@@ -657,13 +667,13 @@ export default function KanbanPage() {
     const isStrategicCol = STRATEGIC_COLUMNS.includes(column);
     const isProductionCol = PRODUCTION_COLUMNS.includes(column);
     if (taskObj.category === 'Strategic' && !isStrategicCol) {
-      alert('Cannot move a Strategic task to a Production column');
+      showToast('Cannot move a Strategic task to a Production column', 'warning');
       setDraggedTaskId(null);
       setDragOverColumn(null);
       return;
     }
     if (taskObj.category !== 'Strategic' && !isProductionCol) {
-      alert('Cannot move a Production task to a Strategic column');
+      showToast('Cannot move a Production task to a Strategic column', 'warning');
       setDraggedTaskId(null);
       setDragOverColumn(null);
       return;
@@ -673,7 +683,7 @@ export default function KanbanPage() {
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (!isExecutive) {
       if (taskObj.category === 'Strategic' && !currentUser.roles.includes('Strategist')) {
-        alert('Only Strategists can manage Strategic Workflow');
+        showToast('Only Strategists can manage Strategic Workflow', 'warning');
         setDraggedTaskId(null);
         setDragOverColumn(null);
         return;
@@ -683,7 +693,7 @@ export default function KanbanPage() {
           ['Production Assistant', 'Editor', 'Scheduler'].includes(r)
         );
         if (!hasProdRole) {
-          alert('Only Production, Editor, Scheduler, and Admin can manage Production Workflow');
+          showToast('Only Production, Editor, Scheduler, and Admin can manage Production Workflow', 'warning');
           setDraggedTaskId(null);
           setDragOverColumn(null);
           return;
@@ -712,21 +722,27 @@ export default function KanbanPage() {
         {/* View Switcher */}
         <div className="flex items-center gap-3">
           {/* Board selector tabs */}
-          <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
-            {(['main', 'strategic', 'production'] as const).map((b) => (
-              <button
-                key={b}
-                onClick={() => setActiveBoard(b)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
-                  activeBoard === b
-                    ? 'bg-neutral-900 text-white shadow-xs'
-                    : 'text-neutral-500 hover:text-neutral-900'
-                }`}
-              >
-                {b === 'main' ? 'All Pipelines' : `${b} Pipeline`}
-              </button>
-            ))}
-          </div>
+          {currentUser && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist')) ? (
+            <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+              {(['main', 'strategic', 'production'] as const).map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setActiveBoard(b)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                    activeBoard === b
+                      ? 'bg-neutral-900 text-white shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  {b === 'main' ? 'All Pipelines' : `${b} Pipeline`}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center bg-white border border-neutral-200 px-3 py-1.5 rounded-xl shadow-2xs text-xs font-bold text-neutral-800">
+              Production Pipeline
+            </div>
+          )}
 
           <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
             <button
@@ -1860,6 +1876,19 @@ export default function KanbanPage() {
                       className="bg-emerald-600 hover:bg-emerald-750 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1"
                     >
                       <Play className="w-3.5 h-3.5" /> Send to Production
+                    </button>
+                  )}
+
+                  {(selectedTaskDetail.status === 'Posted' || selectedTaskDetail.status === 'Completed' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                    <button
+                      onClick={() => {
+                        updateTask(selectedTaskDetail.id, { isArchived: true } as any);
+                        showToast('Task moved to Archive!', 'success');
+                        setSelectedTaskDetail(null);
+                      }}
+                      className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2 rounded-lg transition"
+                    >
+                      Archive Task
                     </button>
                   )}
 

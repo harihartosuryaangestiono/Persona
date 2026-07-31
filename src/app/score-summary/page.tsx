@@ -3,12 +3,12 @@
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
-import { formatRupiah, getCapacityHealth } from '@/lib/score-calculator';
+import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
 import { Filter, Calendar } from 'lucide-react';
 
 export default function ScoreSummaryPage() {
   const { allUsers } = useUser();
-  const { worklogs } = useData();
+  const { worklogs, tasks } = useData();
 
   // Period filter states defaulting to July 2026 (Requirement 10)
   const [selectedMonth, setSelectedMonth] = useState('July');
@@ -20,9 +20,9 @@ export default function ScoreSummaryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
-            Master Score Summary & Employee Capacity <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Monthly 12,000 Pts Cap</span>
+            Master Score Summary & Employee Capacity <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Monthly 16,000 Pts Cap</span>
           </h1>
-          <p className="text-xs text-neutral-500">Tracks employee effective workload capacity (6 hrs/day × 20 workdays = 12,000 points).</p>
+          <p className="text-xs text-neutral-500">Tracks employee effective workload capacity (16,000 points monthly limit).</p>
         </div>
 
         {/* Period Selector */}
@@ -64,23 +64,10 @@ export default function ScoreSummaryPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {allUsers.map((usr) => {
-                // Sum only worklogs matching selected period (Requirement 10)
-                const userPoints = worklogs
-                  .filter((w) => w.month === selectedMonth && Number(w.year) === selectedYear)
-                  .reduce((sum, w) => {
-                    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-                    if (logStages.length > 0) {
-                      const userStagePoints = logStages
-                        .filter((s: any) => s.userId === usr.id || s.userName === usr.name)
-                        .reduce((sumStage: number, s: any) => sumStage + (Number(s.score) || 0), 0);
-                      return sum + userStagePoints;
-                    } else {
-                      const isUserLog = w.userName === usr.name || w.userId === usr.id;
-                      return sum + (isUserLog ? w.score : 0);
-                    }
-                  }, 0);
+                // Sum worklogs and active tasks matching selected period
+                const userPoints = calculateUserPointsForPeriod(usr, selectedMonth, selectedYear, worklogs, tasks);
 
-                const capacity = 12000;
+                const capacity = (usr.monthlyCapacity && usr.monthlyCapacity !== 12000) ? usr.monthlyCapacity : 16000;
                 const remaining = Math.max(0, capacity - userPoints);
                 const health = getCapacityHealth(userPoints, capacity);
                 const cogs = userPoints * 250;
@@ -99,7 +86,7 @@ export default function ScoreSummaryPage() {
                       {selectedMonth} {selectedYear}
                     </td>
                     <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{userPoints} pts</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-neutral-500">12,000 pts</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-neutral-500">{capacity.toLocaleString()} pts</td>
                     <td className="px-4 py-3.5 text-right font-mono text-neutral-700">{remaining} pts</td>
                     <td className="px-4 py-3.5 text-center font-mono font-bold">{health.percent}%</td>
                     <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-800">{formatRupiah(cogs)}</td>
@@ -119,7 +106,7 @@ export default function ScoreSummaryPage() {
                                 ? 'bg-amber-500'
                                 : 'bg-emerald-600'
                             }`}
-                            style={{ width: `${Math.min(100, health.percent || 15)}%` }}
+                            style={{ width: `${Math.min(100, Math.max(0, health.percent))}%` }}
                           />
                         </div>
                       </div>

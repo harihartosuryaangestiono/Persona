@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
+import { useToast } from '@/context/ToastContext';
 import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { calculateTaskScore } from '@/lib/score-calculator';
@@ -22,6 +23,7 @@ interface WorklogStage {
 export default function WorklogPage() {
   const { worklogs, clients, addWorklog, deleteWorklog, importWorklogs } = useData();
   const { currentUser, allUsers } = useUser();
+  const { showToast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -112,7 +114,7 @@ export default function WorklogPage() {
         setParsedImportLogs(parsed);
         setDuplicateCount(dupes);
       } catch (err) {
-        alert('Failed to parse Excel file. Please ensure valid format.');
+        showToast('Failed to parse Excel file. Please ensure valid format.', 'error');
       }
     };
     reader.readAsBinaryString(file);
@@ -122,8 +124,8 @@ export default function WorklogPage() {
     if (parsedImportLogs.length === 0) return;
     importWorklogs(parsedImportLogs);
     setIsImportModalOpen(false);
+    showToast(`Successfully imported ${parsedImportLogs.length} worklog entries!`, 'success');
     setParsedImportLogs([]);
-    alert(`Successfully imported ${parsedImportLogs.length} worklog entries!`);
   };
 
   const exportToExcel = () => {

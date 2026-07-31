@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const [editEmail, setEditEmail] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editRoles, setEditRoles] = useState<UserRole[]>([]);
-  const [editCapacity, setEditCapacity] = useState(12000);
+  const [editCapacity, setEditCapacity] = useState(16000);
 
   // New user modal state
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
@@ -38,7 +38,7 @@ export default function SettingsPage() {
     setEditEmail(u.email);
     setEditAvatar(u.avatar || '');
     setEditRoles(u.roles);
-    setEditCapacity(u.monthlyCapacity || 12000);
+    setEditCapacity(u.monthlyCapacity || 16000);
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
@@ -50,7 +50,7 @@ export default function SettingsPage() {
       email: editEmail.trim(),
       avatar: editAvatar.trim(),
       roles: editRoles,
-      monthlyCapacity: Number(editCapacity) || 12000,
+      monthlyCapacity: Number(editCapacity) || 16000,
     });
 
     setEditingUser(null);
@@ -66,7 +66,7 @@ export default function SettingsPage() {
       email: newEmail.trim() || `${newName.toLowerCase()}@personaos.com`,
       avatar: newAvatar.trim(),
       roles: newRoles,
-      monthlyCapacity: 12000,
+      monthlyCapacity: 16000,
       hourlyPoint: 100,
       costPerPoint: 250,
       active: true,
@@ -202,6 +202,7 @@ export default function SettingsPage() {
               onChange={(e) => updateCompanySettings({ archiveRule: e.target.value })}
               className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 font-bold focus:outline-hidden text-xs w-full"
             >
+              <option value="IMMEDIATE">Archive Immediately (When Posted / Completed)</option>
               <option value="END_OF_MONTH">End of Period Month (Default)</option>
               <option value="SEVEN_DAYS">Posted + 7 Days Rolling Archive</option>
             </select>
