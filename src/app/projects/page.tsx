@@ -28,10 +28,10 @@ export default function ProjectsPage() {
   // Filter clients by scope
   const filteredClients = clients.filter((c) => {
     if (selectedScope === 'INHOUSE') {
-      return c.workspaceId === 'ws-team-anggi' || c.code?.toLowerCase().includes('inhouse') || c.name?.toLowerCase().includes('in-house');
+      return c.workspaceId === 'ws-inhouse' || c.code?.toLowerCase().includes('inhouse') || c.name?.toLowerCase().includes('in-house');
     }
     if (selectedScope === 'PERSONA') {
-      return c.workspaceId !== 'ws-team-anggi' && !c.code?.toLowerCase().includes('inhouse');
+      return c.workspaceId === 'ws-team-anggi' || (!c.workspaceId && !c.code?.toLowerCase().includes('inhouse'));
     }
     return true;
   });
