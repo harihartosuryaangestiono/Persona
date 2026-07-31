@@ -304,7 +304,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const item: WorklogItem = {
       id: `wl-${Date.now()}-${Math.random()}`,
       date: dateVal,
-      userId: log.userId || 'u-jabin',
+      userId: log.userId || currentUser?.id || 'u-anggi',
+      userName: log.userName || currentUser?.name || 'Anggi',
       clientId: log.clientId || clientObj?.id || '',
       clientName: log.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
       contentTitle: log.contentTitle || 'Untitled Content',

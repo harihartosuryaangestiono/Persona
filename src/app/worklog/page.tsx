@@ -158,25 +158,52 @@ export default function WorklogPage() {
 
   // Form helpers for manual stages
   const getStrategicFormats = (type: string) => {
-    if (type === 'Content Plan' || type === 'Production Lead') return ['4 Jam', '8 Jam'];
+    if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
     if (type === 'Presentasi') return ['Per Session'];
     return [];
   };
 
-  const handleAddStage = () => {
-    const defaultStage: WorklogStage = {
-      id: `stg-${Date.now()}-${Math.random()}`,
-      role: 'Editor',
-      userId: allUsers[0]?.id || '',
-      userName: allUsers[0]?.name || '',
-      taskType: 'Editing',
-      format: 'Reels',
-      qty: 1,
-      score: 150,
+  const createDefaultStage = (): WorklogStage => {
+    const userRole = currentUser?.roles?.[0] || 'Editor';
+    const roleMapping: Record<string, 'Strategist' | 'Production Assistant' | 'Editor' | 'Scheduler'> = {
+      'Strategist': 'Strategist',
+      'Production Assistant': 'Production Assistant',
+      'Editor': 'Editor',
+      'Scheduler': 'Scheduler',
     };
-    setNewStages([...newStages, defaultStage]);
+    const mappedRole = roleMapping[userRole] || 'Editor';
+
+    let cat = 'Editor';
+    if (mappedRole === 'Strategist') cat = 'Strategic';
+    else if (mappedRole === 'Production Assistant') cat = 'Assistant';
+    else if (mappedRole === 'Scheduler') cat = 'Scheduler';
+
+    const taskType = mappedRole === 'Strategist' ? 'Content Plan' : (mappedRole === 'Production Assistant' ? 'Production Assistant' : (mappedRole === 'Scheduler' ? 'Scheduling' : 'Editing'));
+    const format = mappedRole === 'Strategist' ? '4 Jam' : (mappedRole === 'Production Assistant' ? '4 Jam' : (mappedRole === 'Scheduler' ? 'Per Post' : 'Reels'));
+
+    return {
+      id: `stg-${Date.now()}-${Math.random()}`,
+      role: mappedRole,
+      userId: currentUser?.id || allUsers[0]?.id || '',
+      userName: currentUser?.name || allUsers[0]?.name || '',
+      taskType,
+      format,
+      qty: 1,
+      score: calculateTaskScore(cat, taskType, format, 1),
+    };
+  };
+
+  const openManualModal = () => {
+    setNewTitle('');
+    setNewClientId(clients[0]?.id || '');
+    setNewStages([createDefaultStage()]);
+    setIsManualModalOpen(true);
+  };
+
+  const handleAddStage = () => {
+    setNewStages([...newStages, createDefaultStage()]);
   };
 
   const handleRemoveStage = (id: string) => {
@@ -248,12 +275,15 @@ export default function WorklogPage() {
     const totalScore = newStages.reduce((sum, s) => sum + s.score, 0);
     const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
 
+    const primaryUserId = newStages[0]?.userId || currentUser.id;
+    const primaryUserName = newStages[0]?.userName || currentUser.name;
+
     addWorklog({
       contentTitle: newTitle,
       clientId: targetClient.id,
       clientName: targetClient.name,
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: primaryUserId,
+      userName: primaryUserName,
       taskType: newStages[0]?.taskType || 'Editing',
       format: newStages[0]?.format || 'Reels',
       qty: newStages[0]?.qty || 1,
@@ -265,6 +295,7 @@ export default function WorklogPage() {
     setIsManualModalOpen(false);
     setNewTitle('');
     setNewStages([]);
+    showToast(`Worklog created successfully for ${primaryUserName}!`, 'success');
   };
 
   const handleDelete = async (id: string) => {
@@ -298,10 +329,7 @@ export default function WorklogPage() {
             <Download className="w-4 h-4 text-neutral-500" /> Export Excel
           </button>
           <button
-            onClick={() => {
-              setNewStages([]);
-              setIsManualModalOpen(true);
-            }}
+            onClick={openManualModal}
             className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
           >
             <Plus className="w-4 h-4" /> Add Worklog

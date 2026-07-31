@@ -255,7 +255,7 @@ export default function KanbanPage() {
 
   // Strategic Formats Mapping based on Selected Task Type
   const getStrategicFormats = (type: string) => {
-    if (type === 'Content Plan' || type === 'Production Lead') return ['4 Jam', '8 Jam'];
+    if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
     if (type === 'Presentasi') return ['Per Session'];
