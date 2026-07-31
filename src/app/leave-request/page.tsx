@@ -16,7 +16,7 @@ export default function LeaveRequestPage() {
   const [reason, setReason] = useState('');
   const [type, setType] = useState<'ANNUAL' | 'SICK' | 'EMERGENCY'>('ANNUAL');
 
-  const canApprove = hasPermission(currentUser, 'APPROVE_TASKS');
+  const canApprove = currentUser?.name === 'Devi' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,15 +94,17 @@ export default function LeaveRequestPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {canApprove && l.status === 'PENDING' ? (
+                    {canApprove && l.status === 'PENDING' && l.userId !== currentUser?.id ? (
                       <button
                         onClick={() => approveLeave(l.id, currentUser.id)}
-                        className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] px-3 py-1 rounded-lg transition"
+                        className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] px-3 py-1 rounded-lg transition shadow-xs"
                       >
                         Approve
                       </button>
                     ) : (
-                      <span className="text-neutral-300 text-[11px]">—</span>
+                      <span className="text-neutral-400 font-mono text-[10px]">
+                        {l.status === 'APPROVED' ? 'Approved' : 'Awaiting Approval'}
+                      </span>
                     )}
                   </td>
                 </tr>
