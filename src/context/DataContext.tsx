@@ -326,6 +326,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     setWorklogs((prev) => [item, ...prev]);
 
+    if (item.clientId || item.clientName) {
+      setClients((prev) =>
+        prev.map((c) => {
+          if (c.id === item.clientId || c.name === item.clientName) {
+            const newUsed = c.usedPoint + item.score;
+            return {
+              ...c,
+              usedPoint: newUsed,
+              remainingPoint: c.monthlyPointBudget - newUsed,
+            };
+          }
+          return c;
+        })
+      );
+    }
+
     try {
       await fetch('/api/worklogs', {
         method: 'POST',
@@ -339,6 +355,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteWorklog = async (worklogId: string) => {
     const cleanId = worklogId.replace(/^worklog-task-/, '');
+
+    const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId || w.contentId === worklogId || w.contentId === cleanId);
+    const targetTask = tasks.find((t) => t.id === worklogId || t.id === cleanId || t.contentId === worklogId || t.contentId === cleanId);
+    const targetScore = targetWl?.score || targetTask?.score || 0;
+    const targetClientId = targetWl?.clientId || targetTask?.clientId;
+    const targetClientName = targetWl?.clientName || targetTask?.clientName;
+
+    if (targetScore > 0 && (targetClientId || targetClientName)) {
+      setClients((prev) =>
+        prev.map((c) => {
+          if (c.id === targetClientId || c.name === targetClientName) {
+            const newUsed = Math.max(0, c.usedPoint - targetScore);
+            return {
+              ...c,
+              usedPoint: newUsed,
+              remainingPoint: c.monthlyPointBudget - newUsed,
+            };
+          }
+          return c;
+        })
+      );
+    }
 
     setWorklogs((prev) =>
       prev.filter(
@@ -381,7 +419,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
 
       const matchedClient = clients.find((c) => c.id === log.clientId || c.name.toLowerCase() === log.clientName?.toLowerCase());
-      const matchedUser = syncUsers.length > 0 ? undefined : undefined; // resolve using closure
 
       const defaultStageRole = log.taskType === 'Content Plan' ? 'Strategist' : log.taskType === 'Scheduling' ? 'Scheduler' : 'Editor';
       const fallbackStage = [
@@ -422,6 +459,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
 
     setWorklogs((prev) => [...formatted, ...prev]);
+
+    setClients((prev) => {
+      const clientAddedPoints: Record<string, number> = {};
+      for (const item of formatted) {
+        const key = item.clientId || item.clientName;
+        if (key) {
+          clientAddedPoints[key] = (clientAddedPoints[key] || 0) + (item.score || 0);
+        }
+      }
+      return prev.map((c) => {
+        const added = clientAddedPoints[c.id] || clientAddedPoints[c.name] || 0;
+        if (added > 0) {
+          const newUsed = c.usedPoint + added;
+          return {
+            ...c,
+            usedPoint: newUsed,
+            remainingPoint: c.monthlyPointBudget - newUsed,
+          };
+        }
+        return c;
+      });
+    });
 
     for (const log of formatted) {
       try {
