@@ -32,6 +32,9 @@ export default function PersonaAIPage() {
   const { currentUser, allUsers } = useUser();
   const { showToast } = useToast();
 
+  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigie'];
+  const isAllowed = currentUser && AI_ALLOWED_USERS.some((n) => (currentUser.name || '').toLowerCase().includes(n));
+
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [execSummary, setExecSummary] = useState<ExecutiveSummary | null>(null);
@@ -56,13 +59,23 @@ export default function PersonaAIPage() {
     }
   }, [worklogs, tasks, clients, allUsers, budgets, attendances, leaveRequests]);
 
-  const handleQuery = (queryText: string) => {
+  const handleQuery = async (queryText: string) => {
     if (!queryText.trim()) return;
     setLoading(true);
     setPrompt(queryText);
 
     try {
-      const res = PersonaAIEngine.processQuery(
+      const res = await fetch('/api/persona-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: queryText }),
+      });
+
+      if (!res.ok) throw new Error('API Query Error');
+      const data = await res.json();
+      setActiveResponse(data);
+    } catch (e: any) {
+      const fallback = PersonaAIEngine.processQuery(
         queryText,
         worklogs,
         tasks || [],
@@ -72,10 +85,7 @@ export default function PersonaAIPage() {
         attendances || [],
         leaveRequests || []
       );
-
-      setActiveResponse(res);
-    } catch (e: any) {
-      showToast('Gagal memproses kueri database', 'error');
+      setActiveResponse(fallback);
     } finally {
       setLoading(false);
     }
@@ -107,8 +117,22 @@ export default function PersonaAIPage() {
     { label: 'Bandingkan Juli vs Agustus', query: 'Bandingkan Juli vs Agustus' },
   ];
 
+  if (!isAllowed) {
+    return (
+      <div className="max-w-xl mx-auto py-24 text-center space-y-4">
+        <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-xs border border-rose-100">
+          <ShieldCheck className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-neutral-900">Akses Dibatasi (Restricted)</h2>
+        <p className="text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
+          Fitur <strong>Persona AI Executive BI</strong> khusus hanya dapat diakses oleh akun <strong>Devi</strong>, <strong>Anggi</strong>, dan <strong>Gigie</strong>.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 pb-12 max-w-7xl mx-auto">
+    <div className="space-y-6 pb-32 max-w-7xl mx-auto">
       {/* HEADER BANNER */}
       <div className="bg-gradient-to-r from-neutral-900 via-neutral-850 to-neutral-900 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-neutral-800 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />

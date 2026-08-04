@@ -89,7 +89,13 @@ export function Sidebar() {
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
  
+  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigie'];
+
   const navItems = ALL_NAV_ITEMS.filter((item) => {
+    if (item.href === '/persona-ai') {
+      const uName = (currentUser?.name || '').toLowerCase();
+      return AI_ALLOWED_USERS.some((name) => uName.includes(name));
+    }
     if (!item.allowedRoles) return true;
     if (currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin')) return true;
     return item.allowedRoles.some((role) => currentUser.roles.includes(role));
