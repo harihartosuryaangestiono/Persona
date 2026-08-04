@@ -7,6 +7,7 @@ import { WelcomeModal } from './WelcomeModal';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingQuickAction } from './FloatingQuickAction';
+import PersonaAIFloatingWidget from '../persona-ai/PersonaAIFloatingWidget';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -29,6 +30,7 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
         </main>
       </div>
       <FloatingQuickAction />
+      <PersonaAIFloatingWidget />
       <WelcomeModal />
     </div>
   );

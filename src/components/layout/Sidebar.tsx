@@ -30,6 +30,7 @@ import {
   PieChart,
   Command,
   Archive,
+  Sparkles,
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
@@ -47,6 +48,7 @@ interface NavItem {
  
 const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Persona AI BI', href: '/persona-ai', icon: Sparkles },
   { name: 'Clients', href: '/clients', icon: Users, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Projects', href: '/projects', icon: Briefcase, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant'] },
   { name: 'Editorial Calendar', href: '/calendar', icon: Calendar, allowedRoles: ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'] },

@@ -464,8 +464,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         },
       ];
 
+      const uniqueSuffix = `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 8)}`;
+
       return {
-        id: `import-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
+        id: log.id || `import-${uniqueSuffix}`,
         date: dateVal,
         userId: log.userId || currentUser?.id || 'u-devi',
         userName: log.userName || currentUser?.name || 'Devi',
@@ -483,7 +485,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         stages: log.stages || fallbackStage,
         month: log.month || detectedMonth,
         year: log.year ? Number(log.year) : detectedYear,
-        contentId: log.contentId || `content-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
+        contentId: log.contentId || `content-import-${uniqueSuffix}`,
         isArchived: log.isArchived || false,
       };
     });

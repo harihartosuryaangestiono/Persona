@@ -180,22 +180,7 @@ export default function WorklogPage() {
       w.contentTitle.toLowerCase().includes(query) ||
       w.userName?.toLowerCase().includes(query) ||
       w.clientName?.toLowerCase().includes(query);
-    if (!matchSearch) return false;
-
-    const isLeadOrManager =
-      currentUser.roles.includes('Admin') ||
-      currentUser.roles.includes('Owner') ||
-      currentUser.roles.includes('Strategist');
-    if (isLeadOrManager) return true;
-
-    const isPrimaryAssignee = w.userName === currentUser.name || w.userId === currentUser.id;
-    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
-    const isStageAssignee = logStages.some(
-      (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
-    );
-    const isCreator = (w as any).createdBy === currentUser.id || (w as any).createdBy === currentUser.name;
-
-    return isPrimaryAssignee || isStageAssignee || isCreator;
+    return matchSearch;
   });
 
   // Excel File Upload Ingestion
