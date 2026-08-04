@@ -6,7 +6,7 @@ import { useUser } from '@/context/UserContext';
 import { useToast } from '@/context/ToastContext';
 import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { calculateTaskScore } from '@/lib/score-calculator';
+import { calculateTaskScore, normalizeFormat, calculateCOGS } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
 
 interface WorklogStage {
@@ -120,13 +120,46 @@ export default function WorklogPage() {
 
         let dupes = 0;
         const parsed: Partial<WorklogItem>[] = data.map((row, idx) => {
-          const contentTitle = row['Judul konten'] || row['Content Title'] || row['Title'] || `Task #${idx + 1}`;
-          const taskType = row['Tipe task'] || row['Task Type'] || 'Editing';
-          const format = row['Format'] || 'Single Foto';
+          const contentTitle = String(row['Judul konten'] || row['Content Title'] || row['Title'] || `Task #${idx + 1}`).trim();
+          const taskType = String(row['Tipe task'] || row['Task Type'] || 'Editing').trim();
+          const rawFmt = String(row['Format'] || 'Single Foto').trim();
+          const format = normalizeFormat(rawFmt);
           const qty = Number(row['Qty'] || 1);
-          const category = row['Kategori'] || 'Editor';
+
+          const rawClient = String(row['Klien'] || row['Client'] || '').trim();
+          const rawUser = String(row['Nama'] || row['Employee'] || currentUser.name).trim();
+
+          const matchedClient = clients.find(
+            (c) =>
+              c.name.toLowerCase() === rawClient.toLowerCase() ||
+              c.code?.toLowerCase() === rawClient.toLowerCase() ||
+              (rawClient && c.name.toLowerCase().includes(rawClient.toLowerCase())) ||
+              (rawClient && rawClient.toLowerCase().includes(c.name.toLowerCase()))
+          ) || clients[0];
+
+          const matchedUser = allUsers.find(
+            (u) =>
+              u.name.toLowerCase() === rawUser.toLowerCase() ||
+              u.id === rawUser ||
+              (rawUser && u.name.toLowerCase().includes(rawUser.toLowerCase()))
+          ) || currentUser;
+
+          const userRoles = matchedUser?.roles || [];
+          const category =
+            row['Kategori'] ||
+            (userRoles.includes('Strategist')
+              ? 'Strategic'
+              : userRoles.includes('Scheduler')
+              ? 'Scheduler'
+              : 'Editor');
 
           const score = Number(row['Score']) || calculateTaskScore(category, taskType, format, qty);
+
+          const rawDate = row['Tanggal'] ? String(row['Tanggal']).trim() : '';
+          const dateVal =
+            rawDate && !isNaN(new Date(rawDate).getTime())
+              ? new Date(rawDate).toISOString()
+              : new Date().toISOString();
 
           const isDup = worklogs.some(
             (existing) => existing.contentTitle.toLowerCase() === contentTitle.toLowerCase()
@@ -139,11 +172,14 @@ export default function WorklogPage() {
             format,
             qty,
             score,
-            clientName: row['Klien'] || row['Client'] || 'Baking Empire Gading Serpong',
-            userName: row['Nama'] || row['Employee'] || currentUser.name,
-            date: row['Tanggal'] || new Date().toISOString().split('T')[0],
+            cogs: calculateCOGS(score),
+            clientId: matchedClient?.id || clients[0]?.id || 'c-1',
+            clientName: matchedClient?.name || rawClient || 'Baking Empire Gading Serpong',
+            userId: matchedUser?.id || currentUser.id,
+            userName: matchedUser?.name || rawUser,
+            date: dateVal,
             status: row['Status'] || 'Posted',
-            source: row['Sumber (content plan)'] || 'To Do List',
+            source: row['Sumber (content plan)'] || 'Imported',
             deadline: row['Deadline'] || '',
             previewLink: row['Preview Link'] || '',
             stages: null,

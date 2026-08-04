@@ -23,20 +23,61 @@ export const MASTER_SCORES_STATIC: Omit<MasterScoreItem, 'id'>[] = [
   { category: 'Scheduler', taskType: 'Scheduling', format: 'Per Post', score: 5 },
 ];
 
+export function normalizeFormat(fmt?: string): string {
+  if (!fmt) return 'Single Foto';
+  const clean = fmt.trim().toLowerCase();
+  if (clean.includes('reel')) return 'Reels';
+  if (clean.includes('carou') || clean.includes('caros') || clean.includes('caras')) return 'Carousel';
+  if (clean.includes('story')) return 'Story Video';
+  if (clean.includes('grafis') || clean.includes('graphic')) return 'Grafis';
+  if (clean.includes('paket')) return 'Paket Static';
+  if (clean.includes('foto') || clean.includes('photo') || clean.includes('single') || clean.includes('static')) return 'Single Foto';
+  if (clean.includes('4') && clean.includes('jam')) return '4 Jam';
+  if (clean.includes('8') && clean.includes('jam')) return '8 Jam';
+  if (clean.includes('post')) return 'Per Post';
+  if (clean.includes('item')) return 'Per Item';
+  if (clean.includes('check')) return 'Per Check';
+  if (clean.includes('session')) return 'Per Session';
+  if (clean.includes('minor')) return 'Minor';
+  if (clean.includes('medium')) return 'Medium';
+  if (clean.includes('major')) return 'Major';
+  return fmt;
+}
+
 export function calculateTaskScore(
   category: string,
   taskType?: string,
   format?: string,
   qty: number = 1
 ): number {
-  if (!taskType || !format) return 0;
+  if (!format) return 0;
+  const normFormat = normalizeFormat(format);
+  const normCategory = category ? category.trim().toLowerCase() : 'editor';
+  const normTaskType = taskType ? taskType.trim().toLowerCase() : 'editing';
 
-  const match = MASTER_SCORES_STATIC.find(
+  // 1. Exact match attempt
+  let match = MASTER_SCORES_STATIC.find(
     (item) =>
-      item.category.toLowerCase() === category.toLowerCase() &&
-      item.taskType.toLowerCase() === taskType.toLowerCase() &&
-      item.format.toLowerCase() === format.toLowerCase()
+      item.category.toLowerCase() === normCategory &&
+      item.taskType.toLowerCase() === normTaskType &&
+      item.format.toLowerCase() === normFormat.toLowerCase()
   );
+
+  // 2. Match by normalized format & category
+  if (!match) {
+    match = MASTER_SCORES_STATIC.find(
+      (item) =>
+        item.format.toLowerCase() === normFormat.toLowerCase() &&
+        (item.category.toLowerCase() === normCategory || normCategory.includes(item.category.toLowerCase()))
+    );
+  }
+
+  // 3. Fallback: Match by normalized format alone
+  if (!match) {
+    match = MASTER_SCORES_STATIC.find(
+      (item) => item.format.toLowerCase() === normFormat.toLowerCase()
+    );
+  }
 
   const baseScore = match ? match.score : 10;
   return baseScore * (qty > 0 ? qty : 1);

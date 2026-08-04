@@ -357,28 +357,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
       ];
-      const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'July';
+      const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'August';
       const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
 
+      const matchedClient = clients.find((c) => c.id === log.clientId || c.name.toLowerCase() === log.clientName?.toLowerCase());
+      const matchedUser = syncUsers.length > 0 ? undefined : undefined; // resolve using closure
+
       return {
-        id: `import-${Date.now()}-${i}`,
+        id: `import-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
         date: dateVal,
-        userId: log.userId || 'u-jabin',
-        clientId: log.clientId || clients[0]?.id || '',
-        clientName: log.clientName || clients.find((c) => c.id === log.clientId)?.name || 'Baking Empire Gading Serpong',
+        userId: log.userId || currentUser?.id || 'u-devi',
+        userName: log.userName || currentUser?.name || 'Devi',
+        clientId: log.clientId || matchedClient?.id || clients[0]?.id || '',
+        clientName: log.clientName || matchedClient?.name || 'Baking Empire Gading Serpong',
         contentTitle: log.contentTitle || 'Imported Task',
         taskType: log.taskType || 'Editing',
         format: log.format || 'Single Foto',
         qty: log.qty || 1,
         score,
-        cogs: calculateCOGS(score),
-        status: 'Completed',
-        source: 'Imported',
+        cogs: log.cogs || calculateCOGS(score),
+        status: log.status || 'Posted',
+        source: log.source || 'Imported',
         previewLink: log.previewLink || '',
         stages: log.stages || null,
         month: log.month || detectedMonth,
         year: log.year ? Number(log.year) : detectedYear,
-        contentId: log.contentId || '',
+        contentId: log.contentId || `content-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
         isArchived: log.isArchived || false,
       };
     });
