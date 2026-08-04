@@ -21,7 +21,7 @@ interface WorklogStage {
 }
 
 export default function WorklogPage() {
-  const { worklogs, clients, addWorklog, deleteWorklog, importWorklogs } = useData();
+  const { worklogs, tasks, clients, addWorklog, deleteWorklog, importWorklogs } = useData();
   const { currentUser, allUsers } = useUser();
   const { showToast } = useToast();
 
@@ -45,7 +45,42 @@ export default function WorklogPage() {
     );
   };
 
-  const filteredLogs = worklogs.filter((w) => {
+  const loggedContentIds = new Set(worklogs.map((w) => w.contentId).filter(Boolean));
+
+  const activeTaskLogs: WorklogItem[] = (tasks || [])
+    .filter((t) => !t.isArchived && (!t.contentId || !loggedContentIds.has(t.contentId)))
+    .map((t) => {
+      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+      const primaryUser = allUsers.find((u) => assignedIds.includes(u.id) || assignedIds.includes(u.name)) || currentUser;
+      return {
+        id: `worklog-task-${t.id}`,
+        clientId: t.clientId,
+        clientName: t.clientName,
+        contentTitle: t.title,
+        taskType: t.taskType || 'Content Plan',
+        format: t.format || '4 Jam',
+        qty: t.qty || 1,
+        score: t.score || 0,
+        cogs: t.cogs || (t.score || 0) * 250,
+        userName: primaryUser?.name || 'Unknown',
+        userId: primaryUser?.id || '',
+        date: t.postingDate || t.createdAt,
+        status: t.status as any,
+        source: 'Automated',
+        deadline: t.deadline || '',
+        previewLink: t.previewLink || '',
+        driveLink: t.driveLink || '',
+        stages: t.stages || null,
+        month: t.month || 'August',
+        year: t.year || 2026,
+        contentId: t.contentId || '',
+        isArchived: false,
+      };
+    });
+
+  const combinedLogs = [...worklogs, ...activeTaskLogs];
+
+  const filteredLogs = combinedLogs.filter((w) => {
     const query = searchQuery.toLowerCase();
     const matchSearch =
       w.contentTitle.toLowerCase().includes(query) ||
@@ -53,16 +88,20 @@ export default function WorklogPage() {
       w.clientName?.toLowerCase().includes(query);
     if (!matchSearch) return false;
 
-    const isAdmin = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
-    if (isAdmin) return true;
+    const isLeadOrManager =
+      currentUser.roles.includes('Admin') ||
+      currentUser.roles.includes('Owner') ||
+      currentUser.roles.includes('Strategist');
+    if (isLeadOrManager) return true;
 
     const isPrimaryAssignee = w.userName === currentUser.name || w.userId === currentUser.id;
     const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
     const isStageAssignee = logStages.some(
       (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
     );
+    const isCreator = (w as any).createdBy === currentUser.id || (w as any).createdBy === currentUser.name;
 
-    return isPrimaryAssignee || isStageAssignee;
+    return isPrimaryAssignee || isStageAssignee || isCreator;
   });
 
   // Excel File Upload Ingestion

@@ -1,5 +1,5 @@
 import { UserPersona, TaskItem, WorklogItem } from '@/lib/types';
-import { getCapacityHealth } from '@/lib/score-calculator';
+import { getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
 
 export interface WorkloadRecommendation {
   employee: UserPersona;
@@ -16,12 +16,12 @@ export class AiOptimizerService {
     allUsers: UserPersona[],
     worklogs: WorklogItem[],
     tasks: TaskItem[],
-    requiredScore: number = 150
+    requiredScore: number = 150,
+    month: string = 'August',
+    year: number = 2026
   ): WorkloadRecommendation[] {
     const recommendations: WorkloadRecommendation[] = allUsers.map((usr) => {
-      const currentPoints = worklogs
-        .filter((w) => w.userName === usr.name || w.userId === usr.id)
-        .reduce((sum, w) => sum + w.score, 0);
+      const currentPoints = calculateUserPointsForPeriod(usr, month, year, worklogs, tasks);
 
       const capacity = usr.monthlyCapacity || 16000;
       const remainingCapacity = Math.max(0, capacity - currentPoints);

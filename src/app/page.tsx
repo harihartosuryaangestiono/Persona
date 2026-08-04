@@ -17,14 +17,23 @@ import {
   Calendar as CalendarIcon,
   Briefcase,
   AlertTriangle,
-  FolderOpen
+  FolderOpen,
+  ArrowRight
 } from 'lucide-react';
+import Link from 'next/link';
+import { useToast } from '@/context/ToastContext';
 import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
 
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
-  const { tasks, worklogs, clients, attendances } = useData();
+  const { tasks, worklogs, clients, attendances, approveTask } = useData();
   const { currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
+
+  const handleQuickApprove = async (taskId: string) => {
+    await approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
+    showToast('Task approved! Moved to Scheduling stage.', 'success');
+  };
 
   // Role Checks
   const isOwner = currentUser?.roles.includes('Owner') || currentUser?.roles.includes('Admin');
@@ -204,24 +213,44 @@ export default function DynamicDashboardPage() {
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-neutral-700" /> Approval Queue ({pendingApprovals.length})
                 </span>
+                <Link
+                  href="/approval"
+                  className="text-xs font-bold text-neutral-600 hover:text-neutral-900 flex items-center gap-1 transition"
+                >
+                  Go to Approval Page <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </h3>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {pendingApprovals.slice(0, 3).map((task) => (
-                  <div key={task.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-semibold text-neutral-900">{task.title}</p>
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                {pendingApprovals.slice(0, 5).map((task) => (
+                  <div key={task.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs gap-3">
+                    <Link href="/approval" className="flex-1 min-w-0 group">
+                      <p className="font-bold text-neutral-900 group-hover:text-blue-600 transition truncate">{task.title}</p>
                       <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{task.clientName} • {task.score} pts</p>
-                    </div>
-                    {task.previewLink && (
-                      <a
-                        href={task.previewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 font-semibold flex items-center gap-1"
+                    </Link>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {task.previewLink ? (
+                        <a
+                          href={task.previewLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1.5 rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-bold flex items-center gap-1 transition"
+                        >
+                          Review <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-mono text-neutral-400 bg-neutral-100 px-2 py-1 rounded border border-neutral-200">
+                          No Link
+                        </span>
+                      )}
+
+                      <button
+                        onClick={() => handleQuickApprove(task.id)}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white font-bold flex items-center gap-1 transition shadow-xs"
                       >
-                        Review <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Approve
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {pendingApprovals.length === 0 && (
@@ -243,24 +272,44 @@ export default function DynamicDashboardPage() {
                 <span className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-neutral-700" /> Approval Queue ({pendingApprovals.length})
                 </span>
+                <Link
+                  href="/approval"
+                  className="text-xs font-bold text-neutral-600 hover:text-neutral-900 flex items-center gap-1 transition"
+                >
+                  Go to Approval Page <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </h3>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {pendingApprovals.slice(0, 3).map((task) => (
-                  <div key={task.id} className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-semibold text-neutral-900">{task.title}</p>
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                {pendingApprovals.slice(0, 5).map((task) => (
+                  <div key={task.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs gap-3">
+                    <Link href="/approval" className="flex-1 min-w-0 group">
+                      <p className="font-bold text-neutral-900 group-hover:text-blue-600 transition truncate">{task.title}</p>
                       <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{task.clientName} • {task.score} pts</p>
-                    </div>
-                    {task.previewLink && (
-                      <a
-                        href={task.previewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg bg-neutral-200 text-neutral-800 hover:bg-neutral-300 font-semibold flex items-center gap-1"
+                    </Link>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {task.previewLink ? (
+                        <a
+                          href={task.previewLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1.5 rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-bold flex items-center gap-1 transition"
+                        >
+                          Review <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] font-mono text-neutral-400 bg-neutral-100 px-2 py-1 rounded border border-neutral-200">
+                          No Link
+                        </span>
+                      )}
+
+                      <button
+                        onClick={() => handleQuickApprove(task.id)}
+                        className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white font-bold flex items-center gap-1 transition shadow-xs"
                       >
-                        Review <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Approve
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {pendingApprovals.length === 0 && (

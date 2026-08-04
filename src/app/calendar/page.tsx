@@ -30,7 +30,7 @@ export default function CalendarPage() {
   const { showToast } = useToast();
 
   const [viewMode, setViewMode] = useState<'Month' | 'Week' | 'Timeline'>('Month');
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 1)); // Default July 2026
+  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // Default August 2026
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
 
   // Editing State
@@ -85,8 +85,13 @@ export default function CalendarPage() {
     // 1. Filter out archived tasks (Requirement 4)
     if (t.isArchived) return false;
 
-    // 2. Must belong to the current workspace
-    if (t.workspaceId !== currentWorkspace.id) return false;
+    // 2. Workspace check (fallback to client workspace or allow if unassigned)
+    if (t.workspaceId && t.workspaceId !== currentWorkspace.id) {
+      const taskClient = clients.find((c) => c.id === t.clientId);
+      if (taskClient && taskClient.workspaceId !== currentWorkspace.id && t.workspaceId !== taskClient.workspaceId) {
+        return false;
+      }
+    }
 
     // 3. Tasks containing a Posting Date or Deadline must automatically appear (Requirement 1)
     if (t.postingDate || t.deadline) return true;
@@ -140,7 +145,7 @@ export default function CalendarPage() {
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 6, 1));
+    setCurrentDate(new Date(2026, 7, 1));
   };
 
   const year = currentDate.getFullYear();

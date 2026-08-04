@@ -172,8 +172,12 @@ export default function KanbanPage() {
     }
   }, [editPostingDate]);
 
-  // Workspace filtering (fallback to current workspace if workspaceId is missing)
-  const workspaceTasks = tasks.filter((t) => !t.workspaceId || t.workspaceId === currentWorkspace.id);
+  // Workspace filtering (fallback to client workspace if missing or client match)
+  const workspaceTasks = tasks.filter((t) => {
+    if (!t.workspaceId || t.workspaceId === currentWorkspace.id) return true;
+    const taskClient = clients.find((c) => c.id === t.clientId);
+    return taskClient ? (taskClient.workspaceId === currentWorkspace.id || t.workspaceId === taskClient.workspaceId) : true;
+  });
 
   // Board columns based on active board state
   const columns = activeBoard === 'strategic' ? STRATEGIC_COLUMNS : activeBoard === 'production' ? PRODUCTION_COLUMNS : MAIN_COLUMNS;
@@ -198,8 +202,12 @@ export default function KanbanPage() {
     }
     // PIC Filter
     if (selectedPICFilter !== 'ALL') {
-      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds;
-      if (!assignedIds.includes(selectedPICFilter)) return false;
+      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+      const userObj = allUsers.find((u) => u.id === selectedPICFilter);
+      const isAssigned = assignedIds.includes(selectedPICFilter) || (userObj && assignedIds.includes(userObj.name));
+      const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const isStageAssignee = logStages.some((s: any) => s.userId === selectedPICFilter || (userObj && s.userName === userObj.name));
+      if (!isAssigned && !isStageAssignee) return false;
     }
     // Search Query
     if (searchQuery.trim()) {

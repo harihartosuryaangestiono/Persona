@@ -365,7 +365,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         date: dateVal,
         userId: log.userId || 'u-jabin',
         clientId: log.clientId || clients[0]?.id || '',
-        clientName: 'Baking Empire Gading Serpong',
+        clientName: log.clientName || clients.find((c) => c.id === log.clientId)?.name || 'Baking Empire Gading Serpong',
         contentTitle: log.contentTitle || 'Imported Task',
         taskType: log.taskType || 'Editing',
         format: log.format || 'Single Foto',

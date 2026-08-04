@@ -11,7 +11,7 @@ export default function ResourcePlannerPage() {
   const { allUsers } = useUser();
   const { worklogs, tasks } = useData();
 
-  const recommendations = AiOptimizerService.recommendAssignees(allUsers, worklogs, tasks, 150);
+  const recommendations = AiOptimizerService.recommendAssignees(allUsers, worklogs, tasks, 150, 'August', 2026);
 
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
@@ -53,7 +53,7 @@ export default function ResourcePlannerPage() {
                   <img src={rec.employee.avatar} alt={rec.employee.name} className="w-7 h-7 rounded-full object-cover border border-neutral-200" />
                   <span className="font-bold text-neutral-900">{rec.employee.name}</span>
                 </div>
-                <span className="font-mono font-bold text-xs">{rec.currentPoints} / 12,000 pts</span>
+                <span className="font-mono font-bold text-xs">{rec.currentPoints} / {(rec.employee.monthlyCapacity || 16000).toLocaleString()} pts</span>
               </div>
 
               <p className="text-[11px] leading-relaxed">{rec.reason}</p>
@@ -108,7 +108,7 @@ export default function ResourcePlannerPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs font-mono">
                 <span className="text-neutral-500">Used Points:</span>
-                <span className="font-bold text-neutral-900">{rec.currentPoints} / 12,000 pts</span>
+                <span className="font-bold text-neutral-900">{rec.currentPoints} / {(rec.employee.monthlyCapacity || 16000).toLocaleString()} pts</span>
               </div>
               <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200">
                 <div

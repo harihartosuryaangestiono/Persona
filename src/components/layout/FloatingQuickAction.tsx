@@ -16,10 +16,13 @@ export function FloatingQuickAction() {
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [category, setCategory] = useState<'Strategic' | 'Production' | 'Editing' | 'Scheduling'>('Editing');
-  const [postingDate, setPostingDate] = useState(new Date().toISOString().split('T')[0]);
-  const [deadline, setDeadline] = useState(calculateAutoDeadline(new Date().toISOString().split('T')[0], -3));
-  const [month, setMonth] = useState('July');
-  const [year, setYear] = useState(2026);
+  const initialPostingDate = new Date().toISOString().split('T')[0];
+  const initialDateObj = new Date(initialPostingDate);
+  const monthNamesList = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const [postingDate, setPostingDate] = useState(initialPostingDate);
+  const [deadline, setDeadline] = useState(calculateAutoDeadline(initialPostingDate, -3));
+  const [month, setMonth] = useState(!isNaN(initialDateObj.getTime()) ? monthNamesList[initialDateObj.getMonth()] : 'August');
+  const [year, setYear] = useState(initialDateObj.getFullYear() || 2026);
   const [assignedPIC, setAssignedPIC] = useState('');
   const [driveLink, setDriveLink] = useState('');
   const [loading, setLoading] = useState(false);
@@ -169,7 +172,7 @@ export function FloatingQuickAction() {
         clientId,
         clientName: selectedClient?.name || 'Unknown Client',
         clientColor: selectedClient?.clientColor || '#3B82F6',
-        workspaceId: currentWorkspace?.id || selectedClient?.workspaceId || 'ws-team-anggi',
+        workspaceId: selectedClient?.workspaceId || currentWorkspace?.id || 'ws-team-anggi',
         category,
         taskType,
         format,
