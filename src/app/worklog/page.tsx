@@ -39,6 +39,16 @@ export default function WorklogPage() {
   // Expanded rows
   const [expandedRowIds, setExpandedRowIds] = useState<string[]>([]);
 
+  // Delete modal state
+  const [deletingWorklog, setDeletingWorklog] = useState<WorklogItem | null>(null);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
+  // Local optimistic deletion state for 0ms instant removal
+  const [deletedRowIds, setDeletedRowIds] = useState<string[]>([]);
+
   const toggleRow = (id: string) => {
     setExpandedRowIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -81,6 +91,10 @@ export default function WorklogPage() {
   const combinedLogs = [...worklogs, ...activeTaskLogs];
 
   const filteredLogs = combinedLogs.filter((w) => {
+    if (deletedRowIds.includes(w.id) || (w.contentId && deletedRowIds.includes(w.contentId))) {
+      return false;
+    }
+
     const query = searchQuery.toLowerCase();
     const matchSearch =
       w.contentTitle.toLowerCase().includes(query) ||
@@ -166,6 +180,28 @@ export default function WorklogPage() {
           );
           if (isDup) dupes++;
 
+          const defaultStageRole =
+            category === 'Strategic'
+              ? 'Strategist'
+              : category === 'Assistant'
+              ? 'Production Assistant'
+              : category === 'Scheduler'
+              ? 'Scheduler'
+              : 'Editor';
+
+          const autoStage = [
+            {
+              id: `stage-import-${Date.now()}-${idx}`,
+              role: defaultStageRole as any,
+              userId: matchedUser?.id || currentUser.id,
+              userName: matchedUser?.name || rawUser,
+              taskType,
+              format,
+              qty,
+              score,
+            },
+          ];
+
           return {
             contentTitle,
             taskType,
@@ -182,7 +218,7 @@ export default function WorklogPage() {
             source: row['Sumber (content plan)'] || 'Imported',
             deadline: row['Deadline'] || '',
             previewLink: row['Preview Link'] || '',
-            stages: null,
+            stages: autoStage,
           };
         });
 
@@ -373,10 +409,51 @@ export default function WorklogPage() {
     showToast(`Worklog created successfully for ${primaryUserName}!`, 'success');
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Delete this worklog entry permanently?')) {
+  const openDeleteModal = (w: WorklogItem) => {
+    setDeletingWorklog(w);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingWorklog) return;
+    const target = deletingWorklog;
+    setDeletingWorklog(null); // Close modal instantly
+
+    setDeletedRowIds((prev) => [...prev, target.id, target.contentId].filter(Boolean));
+    await deleteWorklog(target.id);
+
+    showToast(`Worklog "${target.contentTitle}" berhasil dihapus`, 'success');
+  };
+
+  const allFilteredIds = filteredLogs.map((w) => w.id);
+  const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(allFilteredIds);
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const idsToDelete = [...selectedIds];
+    setIsBulkDeleteModalOpen(false);
+    setSelectedIds([]);
+
+    setDeletedRowIds((prev) => [...prev, ...idsToDelete]);
+
+    for (const id of idsToDelete) {
       await deleteWorklog(id);
     }
+
+    showToast(`Berhasil menghapus ${idsToDelete.length} item worklog terpilih`, 'success');
   };
 
   return (
@@ -432,6 +509,17 @@ export default function WorklogPage() {
           <table className="w-full text-left text-xs select-none">
             <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200 whitespace-nowrap">
               <tr>
+                <th className="px-4 py-3.5 w-10 text-center">
+                  {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
+                      title="Pilih Semua Worklog"
+                    />
+                  )}
+                </th>
                 <th className="px-4 py-3.5 w-10"></th>
                 <th className="px-4 py-3.5">Tanggal</th>
                 <th className="px-4 py-3.5">Klien</th>
@@ -456,7 +544,17 @@ export default function WorklogPage() {
 
                 return (
                   <React.Fragment key={w.id}>
-                    <tr className="hover:bg-neutral-50 transition">
+                    <tr className={`hover:bg-neutral-50 transition ${selectedIds.includes(w.id) ? 'bg-red-50/40 hover:bg-red-50/60' : ''}`}>
+                      <td className="px-4 py-3.5 text-center">
+                        {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(w.id)}
+                            onChange={() => toggleSelectRow(w.id)}
+                            className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3.5">
                         {hasStages && (
                           <button
@@ -497,8 +595,9 @@ export default function WorklogPage() {
                       <td className="px-4 py-3.5 text-center">
                         {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
                           <button
-                            onClick={() => handleDelete(w.id)}
-                            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-neutral-50 transition"
+                            onClick={() => openDeleteModal(w)}
+                            title="Hapus Worklog"
+                            className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition active:scale-95"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -509,7 +608,7 @@ export default function WorklogPage() {
                     {/* EXPANDABLE STAGES VIEW */}
                     {isExpanded && hasStages && (
                       <tr className="bg-neutral-50 border-y border-neutral-100">
-                        <td colSpan={10} className="px-6 py-4">
+                        <td colSpan={11} className="px-6 py-4">
                           <div className="space-y-2.5 max-w-2xl">
                             <h5 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Stages Allocation Details</h5>
                             <div className="grid grid-cols-1 gap-2">
@@ -818,6 +917,116 @@ export default function WorklogPage() {
                 className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-5 py-2 rounded-lg disabled:opacity-50 shadow-sm"
               >
                 Ingest to Database
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Actions Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-neutral-900/90 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md border border-neutral-800 flex items-center gap-4 animate-scaleUp">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <span className="w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-[11px]">
+              {selectedIds.length}
+            </span>
+            <span>Worklog Terpilih</span>
+          </div>
+
+          <div className="h-4 w-px bg-neutral-700" />
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-400 hover:text-white transition"
+            >
+              Batal
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1.5 active:scale-95"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Hapus {selectedIds.length} Item
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek Custom Bulk Delete Confirmation Modal */}
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-neutral-200/90 p-6 max-w-md w-full shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0 text-red-600 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-neutral-900">Hapus {selectedIds.length} Worklog Terpilih?</h3>
+                <p className="text-xs text-neutral-500 leading-relaxed font-medium">
+                  Seluruh {selectedIds.length} item worklog yang Anda centang akan dihapus secara permanen dari sistem ledger secara instan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 font-semibold text-xs transition active:scale-95"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkDelete}
+                className="px-4.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" /> Hapus {selectedIds.length} Permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek Custom Single Delete Confirmation Modal */}
+      {deletingWorklog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-neutral-200/90 p-6 max-w-md w-full shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center shrink-0 text-red-600 shadow-xs">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-neutral-900">Hapus Entry Worklog?</h3>
+                <p className="text-xs text-neutral-500 leading-relaxed font-medium">
+                  Item worklog ini akan dihapus secara permanen dari sistem ledger tanpa perlu reload halaman.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/80 text-xs space-y-1">
+              <div className="font-bold text-neutral-900 line-clamp-1">{deletingWorklog.contentTitle}</div>
+              <div className="flex items-center gap-2 text-neutral-500 font-medium">
+                <span>Klien: <strong className="text-neutral-700">{deletingWorklog.clientName}</strong></span>
+                <span>•</span>
+                <span>Poin: <strong className="text-neutral-700">{deletingWorklog.score} pts</strong></span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeletingWorklog(null)}
+                className="px-4 py-2.5 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 font-semibold text-xs transition active:scale-95"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1.5 active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" /> Hapus Permanen
               </button>
             </div>
           </div>

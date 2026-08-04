@@ -25,14 +25,51 @@ export async function POST(req: Request) {
       isArchived,
     } = body;
 
-    if (!clientId || !contentTitle) {
-      return NextResponse.json({ error: 'Client and Title are required' }, { status: 400 });
+    if (!contentTitle) {
+      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    }
+
+    // Safe Client Resolution for Prisma Foreign Key
+    let resolvedClientId = clientId;
+    const clientRecord = await prisma.client.findFirst({
+      where: {
+        OR: [
+          ...(clientId ? [{ id: clientId }] : []),
+          ...(body.clientName ? [{ name: { equals: body.clientName, mode: 'insensitive' as const } }] : []),
+          ...(body.clientName ? [{ code: { equals: body.clientName, mode: 'insensitive' as const } }] : []),
+          ...(clientId ? [{ name: { equals: clientId, mode: 'insensitive' as const } }] : []),
+        ],
+      },
+    });
+    if (clientRecord) {
+      resolvedClientId = clientRecord.id;
+    } else {
+      const anyClient = await prisma.client.findFirst();
+      if (anyClient) resolvedClientId = anyClient.id;
+    }
+
+    // Safe User Resolution for Prisma Foreign Key
+    let resolvedUserId = userId;
+    const userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(userId ? [{ id: userId }] : []),
+          ...(body.userName ? [{ name: { equals: body.userName, mode: 'insensitive' as const } }] : []),
+          ...(userId ? [{ name: { equals: userId, mode: 'insensitive' as const } }] : []),
+        ],
+      },
+    });
+    if (userRecord) {
+      resolvedUserId = userRecord.id;
+    } else {
+      const anyUser = await prisma.user.findFirst();
+      if (anyUser) resolvedUserId = anyUser.id;
     }
 
     let log;
 
     // Check if a worklog with the same contentId already exists to prevent duplicate rows (Requirement 9)
-    if (contentId) {
+    if (contentId && contentId.trim() !== '') {
       const existing = await prisma.worklog.findFirst({
         where: { contentId },
       });
@@ -41,8 +78,8 @@ export async function POST(req: Request) {
           where: { id: existing.id },
           data: {
             date: date ? new Date(date) : existing.date,
-            userId: userId || existing.userId,
-            clientId: clientId || existing.clientId,
+            userId: resolvedUserId || existing.userId,
+            clientId: resolvedClientId || existing.clientId,
             contentTitle: contentTitle || existing.contentTitle,
             taskType: taskType || existing.taskType,
             format: format || existing.format,
@@ -66,8 +103,8 @@ export async function POST(req: Request) {
       log = await prisma.worklog.create({
         data: {
           date: date ? new Date(date) : new Date(),
-          userId: userId || 'u-jabin',
-          clientId,
+          userId: resolvedUserId || 'u-devi',
+          clientId: resolvedClientId,
           contentTitle,
           taskType: taskType || 'Editing',
           format: format || 'Single Foto',

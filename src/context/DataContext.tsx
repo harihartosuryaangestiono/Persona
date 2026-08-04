@@ -338,11 +338,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteWorklog = async (worklogId: string) => {
-    setWorklogs((prev) => prev.filter((w) => w.id !== worklogId));
+    const cleanId = worklogId.replace(/^worklog-task-/, '');
+
+    setWorklogs((prev) =>
+      prev.filter(
+        (w) =>
+          w.id !== worklogId &&
+          w.id !== cleanId &&
+          (w.contentId ? w.contentId !== worklogId && w.contentId !== cleanId : true)
+      )
+    );
+
+    setTasks((prev) =>
+      prev.filter(
+        (t) =>
+          t.id !== worklogId &&
+          t.id !== cleanId &&
+          (t.contentId ? t.contentId !== worklogId && t.contentId !== cleanId : true)
+      )
+    );
+
     try {
-      await fetch(`/api/worklogs?id=${worklogId}`, {
-        method: 'DELETE',
-      });
+      await Promise.all([
+        fetch(`/api/worklogs?id=${cleanId}`, { method: 'DELETE' }),
+        fetch(`/api/tasks?id=${cleanId}`, { method: 'DELETE' }),
+      ]);
     } catch (e) {
       console.error('Failed to delete worklog:', e);
     }
@@ -363,6 +383,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const matchedClient = clients.find((c) => c.id === log.clientId || c.name.toLowerCase() === log.clientName?.toLowerCase());
       const matchedUser = syncUsers.length > 0 ? undefined : undefined; // resolve using closure
 
+      const defaultStageRole = log.taskType === 'Content Plan' ? 'Strategist' : log.taskType === 'Scheduling' ? 'Scheduler' : 'Editor';
+      const fallbackStage = [
+        {
+          id: `stage-import-${Date.now()}-${i}`,
+          role: defaultStageRole as any,
+          userId: log.userId || currentUser?.id || 'u-devi',
+          userName: log.userName || currentUser?.name || 'Devi',
+          taskType: log.taskType || 'Editing',
+          format: log.format || 'Single Foto',
+          qty: log.qty || 1,
+          score,
+        },
+      ];
+
       return {
         id: `import-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
         date: dateVal,
@@ -379,7 +413,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         status: log.status || 'Posted',
         source: log.source || 'Imported',
         previewLink: log.previewLink || '',
-        stages: log.stages || null,
+        stages: log.stages || fallbackStage,
         month: log.month || detectedMonth,
         year: log.year ? Number(log.year) : detectedYear,
         contentId: log.contentId || `content-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`,
