@@ -44,6 +44,73 @@ export function normalizeFormat(fmt?: string): string {
   return fmt;
 }
 
+export function parseExcelDate(raw: any): string {
+  if (!raw) return new Date().toISOString().split('T')[0];
+
+  // 1. JS Date instance
+  if (raw instanceof Date && !isNaN(raw.getTime())) {
+    return raw.toISOString().split('T')[0];
+  }
+
+  // 2. Numeric Excel serial number (e.g. 46236)
+  if (typeof raw === 'number' && raw > 10000 && raw < 100000) {
+    const jsDate = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    if (!isNaN(jsDate.getTime())) {
+      return jsDate.toISOString().split('T')[0];
+    }
+  }
+
+  const str = String(raw).trim();
+
+  // 3. String representation of number (e.g. "46236")
+  if (/^\d{5}$/.test(str)) {
+    const num = Number(str);
+    const jsDate = new Date(Math.round((num - 25569) * 86400 * 1000));
+    if (!isNaN(jsDate.getTime())) {
+      return jsDate.toISOString().split('T')[0];
+    }
+  }
+
+  // 4. ISO or standard date string (YYYY-MM-DD or YYYY/MM/DD)
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(str)) {
+    const parts = str.split(/[-/]/);
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2].split('T')[0], 10);
+    if (year >= 2020 && year <= 2035) {
+      const d = new Date(year, month, day);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}-${dd}`;
+    }
+  }
+
+  // 5. Indonesian or European format DD/MM/YYYY or DD-MM-YYYY (e.g. 03/08/2026)
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(str)) {
+    const parts = str.split(/[-/]/);
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2].split('T')[0], 10);
+    if (year >= 2020 && year <= 2035) {
+      const d = new Date(year, month, day);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}-${dd}`;
+    }
+  }
+
+  // 6. Generic JS Date parsing fallback if year is sensible (2020-2035)
+  const dateObj = new Date(str);
+  if (!isNaN(dateObj.getTime())) {
+    const y = dateObj.getFullYear();
+    if (y >= 2020 && y <= 2035) {
+      return dateObj.toISOString().split('T')[0];
+    }
+  }
+
+  return new Date().toISOString().split('T')[0];
+}
+
 export function calculateTaskScore(
   category: string,
   taskType?: string,

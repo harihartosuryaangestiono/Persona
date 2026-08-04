@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useToast } from '@/context/ToastContext';
-import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2 } from 'lucide-react';
+import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { calculateTaskScore, normalizeFormat, calculateCOGS } from '@/lib/score-calculator';
+import { calculateTaskScore, normalizeFormat, calculateCOGS, parseExcelDate } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
 
 interface WorklogStage {
@@ -21,7 +21,7 @@ interface WorklogStage {
 }
 
 export default function WorklogPage() {
-  const { worklogs, tasks, clients, addWorklog, deleteWorklog, importWorklogs } = useData();
+  const { worklogs, tasks, clients, addWorklog, updateWorklog, deleteWorklog, importWorklogs } = useData();
   const { currentUser, allUsers } = useUser();
   const { showToast } = useToast();
 
@@ -42,12 +42,92 @@ export default function WorklogPage() {
   // Delete modal state
   const [deletingWorklog, setDeletingWorklog] = useState<WorklogItem | null>(null);
 
+  // Edit modal state
+  const [editingWorklog, setEditingWorklog] = useState<WorklogItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editClientId, setEditClientId] = useState('');
+  const [editClientName, setEditClientName] = useState('');
+  const [editUserId, setEditUserId] = useState('');
+  const [editUserName, setEditUserName] = useState('');
+  const [editTaskType, setEditTaskType] = useState('Editing');
+  const [editFormat, setEditFormat] = useState('Single Foto');
+  const [editQty, setEditQty] = useState(1);
+  const [editScore, setEditScore] = useState(10);
+  const [editDate, setEditDate] = useState('');
+  const [editStatus, setEditStatus] = useState('Posted');
+  const [editPreviewLink, setEditPreviewLink] = useState('');
+
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
   // Local optimistic deletion state for 0ms instant removal
   const [deletedRowIds, setDeletedRowIds] = useState<string[]>([]);
+
+  const openEditModal = (w: WorklogItem) => {
+    setEditingWorklog(w);
+    setEditTitle(w.contentTitle);
+    setEditClientId(w.clientId || clients[0]?.id || '');
+    setEditClientName(w.clientName || clients[0]?.name || '');
+    setEditUserId(w.userId || currentUser?.id || '');
+    setEditUserName(w.userName || currentUser?.name || '');
+    setEditTaskType(w.taskType || 'Editing');
+    setEditFormat(w.format || 'Single Foto');
+    setEditQty(w.qty || 1);
+    setEditScore(w.score || 10);
+    setEditDate(w.date ? new Date(w.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditStatus(w.status || 'Posted');
+    setEditPreviewLink(w.previewLink || '');
+  };
+
+  const handleFormatOrQtyChange = (fmt: string, qtyVal: number, taskTypeVal: string, uId: string) => {
+    const selectedUser = allUsers.find((u) => u.id === uId) || currentUser;
+    const userRoles = selectedUser?.roles || [];
+    const category = userRoles.includes('Strategist') ? 'Strategic' : userRoles.includes('Scheduler') ? 'Scheduler' : 'Editor';
+    const newScore = calculateTaskScore(category, taskTypeVal, normalizeFormat(fmt), qtyVal);
+    setEditScore(newScore);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWorklog || !editTitle.trim()) return;
+
+    const targetClient = clients.find((c) => c.id === editClientId || c.name === editClientName) || clients[0];
+    const targetUser = allUsers.find((u) => u.id === editUserId || u.name === editUserName) || currentUser;
+
+    const updatedLog: WorklogItem = {
+      ...editingWorklog,
+      contentTitle: editTitle.trim(),
+      clientId: targetClient?.id || editClientId,
+      clientName: targetClient?.name || editClientName,
+      userId: targetUser?.id || editUserId,
+      userName: targetUser?.name || editUserName,
+      taskType: editTaskType,
+      format: normalizeFormat(editFormat),
+      qty: Number(editQty),
+      score: editScore,
+      cogs: calculateCOGS(editScore),
+      date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
+      status: editStatus as any,
+      previewLink: editPreviewLink.trim(),
+      stages: [
+        {
+          id: `stage-edit-${Date.now()}`,
+          role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
+          userId: targetUser?.id || editUserId,
+          userName: targetUser?.name || editUserName,
+          taskType: editTaskType,
+          format: normalizeFormat(editFormat),
+          qty: Number(editQty),
+          score: editScore,
+        },
+      ],
+    };
+
+    await updateWorklog(updatedLog);
+    setEditingWorklog(null);
+    showToast(`Worklog "${editTitle}" berhasil diperbarui!`, 'success');
+  };
 
   const toggleRow = (id: string) => {
     setExpandedRowIds((prev) =>
@@ -134,13 +214,17 @@ export default function WorklogPage() {
 
         let dupes = 0;
         const parsed: Partial<WorklogItem>[] = data.map((row, idx) => {
-          const contentTitle = String(row['Judul konten'] || row['Content Title'] || row['Title'] || `Task #${idx + 1}`).trim();
-          const taskType = String(row['Tipe task'] || row['Task Type'] || 'Editing').trim();
+          const contentTitle = String(
+            row['Judul konten'] || row['Judul Konten'] || row['Content Title'] || row['Title'] || `Task #${idx + 1}`
+          ).trim();
+          const taskType = String(row['Tipe task'] || row['Tipe Task'] || row['Task Type'] || 'Editing').trim();
           const rawFmt = String(row['Format'] || 'Single Foto').trim();
           const format = normalizeFormat(rawFmt);
           const qty = Number(row['Qty'] || 1);
 
-          const rawClient = String(row['Klien'] || row['Client'] || '').trim();
+          const rawClient = String(
+            row['Klien'] || row['Client'] || row['Nama Klien'] || row['Client Name'] || ''
+          ).trim();
           const rawUser = String(row['Nama'] || row['Employee'] || currentUser.name).trim();
 
           const matchedClient = clients.find(
@@ -149,7 +233,10 @@ export default function WorklogPage() {
               c.code?.toLowerCase() === rawClient.toLowerCase() ||
               (rawClient && c.name.toLowerCase().includes(rawClient.toLowerCase())) ||
               (rawClient && rawClient.toLowerCase().includes(c.name.toLowerCase()))
-          ) || clients[0];
+          );
+
+          const finalClientId = matchedClient?.id || (rawClient ? '' : clients[0]?.id || 'c-1');
+          const finalClientName = matchedClient?.name || rawClient || clients[0]?.name || 'Baking Empire Gading Serpong';
 
           const matchedUser = allUsers.find(
             (u) =>
@@ -169,11 +256,9 @@ export default function WorklogPage() {
 
           const score = Number(row['Score']) || calculateTaskScore(category, taskType, format, qty);
 
-          const rawDate = row['Tanggal'] ? String(row['Tanggal']).trim() : '';
-          const dateVal =
-            rawDate && !isNaN(new Date(rawDate).getTime())
-              ? new Date(rawDate).toISOString()
-              : new Date().toISOString();
+          const rawDate = row['Tanggal'] || row['Date'] || '';
+          const cleanDateStr = parseExcelDate(rawDate);
+          const dateVal = new Date(cleanDateStr).toISOString();
 
           const isDup = worklogs.some(
             (existing) => existing.contentTitle.toLowerCase() === contentTitle.toLowerCase()
@@ -209,8 +294,8 @@ export default function WorklogPage() {
             qty,
             score,
             cogs: calculateCOGS(score),
-            clientId: matchedClient?.id || clients[0]?.id || 'c-1',
-            clientName: matchedClient?.name || rawClient || 'Baking Empire Gading Serpong',
+            clientId: finalClientId,
+            clientName: finalClientName,
             userId: matchedUser?.id || currentUser.id,
             userName: matchedUser?.name || rawUser,
             date: dateVal,
@@ -594,13 +679,22 @@ export default function WorklogPage() {
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
-                          <button
-                            onClick={() => openDeleteModal(w)}
-                            title="Hapus Worklog"
-                            className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition active:scale-95"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => openEditModal(w)}
+                              title="Edit Worklog"
+                              className="text-neutral-500 hover:text-neutral-900 p-1.5 rounded-lg hover:bg-neutral-100 transition active:scale-95"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(w)}
+                              title="Hapus Worklog"
+                              className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition active:scale-95"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1029,6 +1123,207 @@ export default function WorklogPage() {
                 <Trash2 className="w-4 h-4" /> Hapus Permanen
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT WORKLOG MODAL */}
+      {editingWorklog && (
+        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-neutral-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shadow-md">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">Edit Worklog Data</h3>
+                  <p className="text-xs text-neutral-400">Perbarui rincian worklog & skor poin</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingWorklog(null)}
+                className="text-neutral-400 hover:text-neutral-600 p-1.5 rounded-xl hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-neutral-700 font-bold mb-1">Judul Konten / Task</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Klien</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => {
+                      setEditClientId(e.target.value);
+                      const c = clients.find((x) => x.id === e.target.value);
+                      if (c) setEditClientName(c.name);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Karyawan (Assignee)</label>
+                  <select
+                    value={editUserId}
+                    onChange={(e) => {
+                      setEditUserId(e.target.value);
+                      const u = allUsers.find((x) => x.id === e.target.value);
+                      if (u) {
+                        setEditUserName(u.name);
+                        handleFormatOrQtyChange(editFormat, editQty, editTaskType, u.id);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    {allUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.roles.join(', ')})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Tipe Task</label>
+                  <select
+                    value={editTaskType}
+                    onChange={(e) => {
+                      setEditTaskType(e.target.value);
+                      handleFormatOrQtyChange(editFormat, editQty, e.target.value, editUserId);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    <option value="Editing">Editing</option>
+                    <option value="Content Plan">Content Plan</option>
+                    <option value="Scheduling">Scheduling</option>
+                    <option value="Production Lead">Production Lead</option>
+                    <option value="Production Assistant">Production Assistant</option>
+                    <option value="Revisi">Revisi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Format</label>
+                  <select
+                    value={editFormat}
+                    onChange={(e) => {
+                      setEditFormat(e.target.value);
+                      handleFormatOrQtyChange(e.target.value, editQty, editTaskType, editUserId);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    <option value="Single Foto">Single Foto (10 pts)</option>
+                    <option value="Reels">Reels (150 pts)</option>
+                    <option value="Carousel">Carousel (150 pts)</option>
+                    <option value="Story Video">Story Video (33 pts)</option>
+                    <option value="Grafis">Grafis (25 pts)</option>
+                    <option value="Paket Static">Paket Static (75 pts)</option>
+                    <option value="4 Jam">4 Jam (400 pts)</option>
+                    <option value="8 Jam">8 Jam (800 pts)</option>
+                    <option value="Per Post">Per Post (5 pts)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Qty</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editQty}
+                    onChange={(e) => {
+                      const q = Number(e.target.value);
+                      setEditQty(q);
+                      handleFormatOrQtyChange(editFormat, q, editTaskType, editUserId);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Total Score</label>
+                  <input
+                    type="number"
+                    value={editScore}
+                    onChange={(e) => setEditScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 font-bold font-mono focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Tanggal</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    <option value="Posted">Posted</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Brief">Brief</option>
+                    <option value="Approval">Approval</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Preview Link</label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editPreviewLink}
+                    onChange={(e) => setEditPreviewLink(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingWorklog(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-neutral-200 font-bold text-neutral-600 hover:bg-neutral-50 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-neutral-900 text-white font-bold hover:bg-neutral-800 shadow-md transition active:scale-98"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

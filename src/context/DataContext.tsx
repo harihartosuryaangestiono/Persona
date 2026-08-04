@@ -34,6 +34,7 @@ interface DataContextType {
   updateTask: (taskId: string, updates: Partial<TaskItem>) => void;
   deleteTask: (taskId: string) => void;
   addWorklog: (log: Partial<WorklogItem>) => Promise<void>;
+  updateWorklog: (log: WorklogItem) => Promise<void>;
   deleteWorklog: (worklogId: string) => Promise<void>;
   importWorklogs: (logs: Partial<WorklogItem>[]) => void;
   clockIn: (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => void;
@@ -353,6 +354,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateWorklog = async (updatedItem: WorklogItem) => {
+    setWorklogs((prev) => prev.map((w) => (w.id === updatedItem.id ? updatedItem : w)));
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
+          ? {
+              ...t,
+              title: updatedItem.contentTitle,
+              clientId: updatedItem.clientId,
+              clientName: updatedItem.clientName,
+              score: updatedItem.score,
+              taskType: updatedItem.taskType,
+              format: updatedItem.format,
+            }
+          : t
+      )
+    );
+
+    try {
+      await fetch('/api/worklogs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedItem),
+      });
+    } catch (e) {
+      console.error('Failed to sync updated worklog:', e);
+    }
+  };
+
   const deleteWorklog = async (worklogId: string) => {
     const cleanId = worklogId.replace(/^worklog-task-/, '');
 
@@ -662,6 +692,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateTask,
         deleteTask,
         addWorklog,
+        updateWorklog,
         deleteWorklog,
         importWorklogs,
         clockIn,
