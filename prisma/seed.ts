@@ -97,6 +97,7 @@ async function main() {
     { category: 'Strategic', taskType: 'Editing Plan', format: 'Per Item', score: 25 },
     { category: 'Strategic', taskType: 'Supervisi', format: 'Per Check', score: 50 },
     { category: 'Strategic', taskType: 'Presentasi', format: 'Per Session', score: 100 },
+    { category: 'Strategic', taskType: 'Meeting Brief', format: 'Per Session', score: 100 },
     { category: 'Scheduler', taskType: 'Scheduling', format: 'Per Post', score: 5 },
   ];
   for (const ms of masterScoresData) {

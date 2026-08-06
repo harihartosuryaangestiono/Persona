@@ -42,8 +42,13 @@ export default function DynamicDashboardPage() {
   const isScheduler = currentUser?.roles.includes('Scheduler');
   const isPA = currentUser?.roles.includes('Production Assistant');
 
-  const [selectedMonth, setSelectedMonth] = useState('July');
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(monthNames[currentDate.getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
   // Filter Tasks for current user's workspace, excluding archived
   const workspaceTasks = tasks.filter((t) => t.workspaceId === currentWorkspace.id && !t.isArchived);
@@ -356,7 +361,12 @@ export default function DynamicDashboardPage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {workspaceTasks
-              .filter((t) => t.status === 'Shooting' || t.category === 'Assistant')
+              .filter((t) => {
+                const isShootingOrAssistant = t.status === 'Shooting' || t.category === 'Assistant';
+                if (!isShootingOrAssistant) return false;
+                const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+                return assignedIds.includes(currentUser?.id) || assignedIds.includes(currentUser?.name);
+              })
               .slice(0, 4)
               .map((t) => (
                 <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">

@@ -30,9 +30,13 @@ export default function ReportsPage() {
   const { clients, worklogs, tasks, budgets } = useData();
   const { allUsers } = useUser();
 
-  // Period Selector States defaulting to July 2026 (Requirement 10)
-  const [selectedMonth, setSelectedMonth] = useState('July');
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(monthNames[currentDate.getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
   // Client Budget Usage Data for Bar Chart based on Period
   const clientChartData = clients.map((c) => {

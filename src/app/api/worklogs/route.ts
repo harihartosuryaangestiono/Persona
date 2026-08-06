@@ -5,6 +5,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
+      id,
       date,
       userId,
       clientId,
@@ -68,8 +69,39 @@ export async function POST(req: Request) {
 
     let log;
 
+    // Check if a worklog with the same ID already exists to prevent duplicate rows
+    if (id && !id.startsWith('worklog-task-')) {
+      const existingById = await prisma.worklog.findUnique({
+        where: { id },
+      });
+      if (existingById) {
+        log = await prisma.worklog.update({
+          where: { id },
+          data: {
+            date: date ? new Date(date) : existingById.date,
+            userId: resolvedUserId || existingById.userId,
+            clientId: resolvedClientId || existingById.clientId,
+            contentTitle: contentTitle || existingById.contentTitle,
+            taskType: taskType || existingById.taskType,
+            format: format || existingById.format,
+            qty: Number(qty) || existingById.qty,
+            score: Number(score) || existingById.score,
+            cogs: Number(cogs) || existingById.cogs,
+            status: status || existingById.status,
+            source: source || existingById.source,
+            deadline: deadline ? new Date(deadline) : existingById.deadline,
+            previewLink: previewLink || existingById.previewLink,
+            stages: stages ? JSON.stringify(stages) : existingById.stages,
+            month: month || existingById.month,
+            year: year ? Number(year) : existingById.year,
+            isArchived: isArchived !== undefined ? isArchived : existingById.isArchived,
+          },
+        });
+      }
+    }
+
     // Check if a worklog with the same contentId already exists to prevent duplicate rows (Requirement 9)
-    if (contentId && contentId.trim() !== '') {
+    if (!log && contentId && contentId.trim() !== '') {
       const existing = await prisma.worklog.findFirst({
         where: { contentId },
       });

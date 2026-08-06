@@ -208,10 +208,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateTask = async (taskId: string, updates: Partial<TaskItem>) => {
     const oldTask = tasks.find((t) => t.id === taskId);
+    if (!oldTask) return;
     
-    const postingDateVal = updates.postingDate !== undefined ? updates.postingDate : (oldTask ? oldTask.postingDate : '');
-    const deadlineVal = updates.deadline !== undefined ? updates.deadline : (oldTask ? oldTask.deadline : '');
-    const statusVal = updates.status !== undefined ? updates.status : (oldTask ? oldTask.status : 'Brief');
+    const postingDateVal = updates.postingDate !== undefined ? updates.postingDate : oldTask.postingDate;
+    const deadlineVal = updates.deadline !== undefined ? updates.deadline : oldTask.deadline;
+    const statusVal = updates.status !== undefined ? updates.status : oldTask.status;
 
     if (updates.deadline !== undefined || updates.postingDate !== undefined || updates.status !== undefined) {
       updates.priority = calculatePriority(deadlineVal, statusVal as any, postingDateVal);
@@ -229,10 +230,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const computedScore = updates.stages
+      ? getTaskScore({ ...oldTask, ...updates })
+      : (updates.score !== undefined ? updates.score : oldTask.score);
+
+    const updatedTaskData = {
+      ...updates,
+      score: computedScore,
+      cogs: calculateCOGS(computedScore),
+    };
+
     // Optimistic local state update first so UI updates immediately
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, ...updatedTaskData, updatedAt: new Date().toISOString() } : t))
     );
+
+    // If there is a matching worklog, update it in local state and sync to DB
+    const contentIdVal = updates.contentId || oldTask.contentId;
+    if (contentIdVal) {
+      const matchingWorklogs = worklogs.filter((w) => w.contentId === contentIdVal);
+      if (matchingWorklogs.length > 0) {
+        setWorklogs((prev) =>
+          prev.map((w) =>
+            w.contentId === contentIdVal
+              ? {
+                  ...w,
+                  contentTitle: updatedTaskData.title || w.contentTitle,
+                  clientId: updatedTaskData.clientId || w.clientId,
+                  clientName: updatedTaskData.clientName || w.clientName,
+                  score: updatedTaskData.score,
+                  taskType: updatedTaskData.taskType || w.taskType,
+                  format: updatedTaskData.format || w.format,
+                  stages: updatedTaskData.stages || w.stages,
+                }
+              : w
+          )
+        );
+
+        // Sync matching worklogs in database
+        for (const mw of matchingWorklogs) {
+          try {
+            await fetch('/api/worklogs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...mw,
+                contentTitle: updatedTaskData.title || mw.contentTitle,
+                clientId: updatedTaskData.clientId || mw.clientId,
+                clientName: updatedTaskData.clientName || mw.clientName,
+                score: updatedTaskData.score,
+                taskType: updatedTaskData.taskType || mw.taskType,
+                format: updatedTaskData.format || mw.format,
+                stages: updatedTaskData.stages || mw.stages,
+              }),
+            });
+          } catch (err) {
+            console.error('Failed to sync matching worklog on task update:', err);
+          }
+        }
+      }
+    }
 
     if (currentUser) {
       try {
@@ -243,15 +300,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             'X-User-Id': currentUser.id,
             'X-User-Role': currentUser.roles.join(','),
           },
-          body: JSON.stringify({
-            ...updates,
-            score: updates.stages ? getTaskScore(updates) : updates.score,
-          }),
+          body: JSON.stringify(updatedTaskData),
         });
         if (res.ok) {
           const saved = await res.json();
           setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
-          return;
         }
       } catch (err) {
         console.error(err);
@@ -315,17 +368,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       qty: log.qty || 1,
       score,
       cogs: calculateCOGS(score),
-      status: 'Completed',
+      status: log.status || 'Completed',
       source: log.source || 'Manual',
       previewLink: log.previewLink || '',
       stages: log.stages || null,
       month: log.month || detectedMonth,
       year: log.year ? Number(log.year) : detectedYear,
-      contentId: log.contentId || '',
+      contentId: log.contentId || `content-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       isArchived: log.isArchived || false,
     };
 
     setWorklogs((prev) => [item, ...prev]);
+
+    const parsedStages = item.stages ? (typeof item.stages === 'string' ? JSON.parse(item.stages) : item.stages) : [];
+    const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
+
+    const matchedClient = clients.find((c) => c.id === item.clientId);
+    const targetWorkspaceId = matchedClient?.workspaceId || 'ws-team-anggi';
+
+    const newTask: TaskItem = {
+      id: `task-${item.id}`,
+      title: item.contentTitle,
+      description: 'Automatically synchronized task from manual worklog.',
+      category: item.taskType === 'Content Plan' ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor'),
+      taskType: item.taskType,
+      format: item.format,
+      qty: item.qty,
+      priority: 'Low',
+      status: item.status as any || 'Completed',
+      clientId: item.clientId,
+      workspaceId: targetWorkspaceId,
+      postingDate: item.date,
+      deadline: item.date,
+      assignedUserIds: assignedUserIds,
+      score: item.score,
+      cogs: item.cogs,
+      driveLink: '',
+      previewLink: item.previewLink || '',
+      checklist: [],
+      comments: [],
+      stages: parsedStages,
+      month: item.month,
+      year: item.year,
+      contentId: item.contentId,
+      isArchived: item.isArchived,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setTasks((prev) => [newTask, ...prev]);
 
     if (item.clientId || item.clientName) {
       setClients((prev) =>
@@ -349,8 +440,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item),
       });
+
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': currentUser?.id || 'u-system',
+          'X-User-Role': currentUser?.roles.join(',') || '',
+        },
+        body: JSON.stringify(newTask),
+      });
     } catch (e) {
-      console.error('Failed to sync worklog to database:', e);
+      console.error('Failed to sync manual worklog and task to database:', e);
     }
   };
 
@@ -367,17 +468,51 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               score: updatedItem.score,
               taskType: updatedItem.taskType,
               format: updatedItem.format,
+              stages: updatedItem.stages,
             }
           : t
       )
     );
 
+    const matchingTask = tasks.find(
+      (t) => t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
+    );
+
     try {
-      await fetch('/api/worklogs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedItem),
-      });
+      const isVirtual = updatedItem.id.startsWith('worklog-task-');
+      if (isVirtual) {
+        await fetch('/api/worklogs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedItem),
+        });
+      } else {
+        await fetch(`/api/worklogs?id=${updatedItem.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedItem),
+        });
+      }
+
+      if (matchingTask) {
+        await fetch(`/api/tasks?id=${matchingTask.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser?.id || 'u-system',
+            'X-User-Role': currentUser?.roles.join(',') || '',
+          },
+          body: JSON.stringify({
+            title: updatedItem.contentTitle,
+            clientId: updatedItem.clientId,
+            clientName: updatedItem.clientName,
+            score: updatedItem.score,
+            taskType: updatedItem.taskType,
+            format: updatedItem.format,
+            stages: updatedItem.stages,
+          }),
+        });
+      }
     } catch (e) {
       console.error('Failed to sync updated worklog:', e);
     }
@@ -490,7 +625,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
+    const formattedTasks: TaskItem[] = formatted.map((item) => {
+      const parsedStages = item.stages ? (typeof item.stages === 'string' ? JSON.parse(item.stages) : item.stages) : [];
+      const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
+      const matchedClientForTask = clients.find((c) => c.id === item.clientId);
+      const targetWorkspaceId = matchedClientForTask?.workspaceId || 'ws-team-anggi';
+
+      return {
+        id: `task-${item.id}`,
+        title: item.contentTitle,
+        description: 'Automatically synchronized task from imported worklog.',
+        category: item.taskType === 'Content Plan' ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor'),
+        taskType: item.taskType,
+        format: item.format,
+        qty: item.qty,
+        priority: 'Low',
+        status: item.status as any || 'Completed',
+        clientId: item.clientId,
+        workspaceId: targetWorkspaceId,
+        postingDate: item.date,
+        deadline: item.date,
+        assignedUserIds: assignedUserIds,
+        score: item.score,
+        cogs: item.cogs,
+        driveLink: '',
+        previewLink: item.previewLink || '',
+        checklist: [],
+        comments: [],
+        stages: parsedStages,
+        month: item.month,
+        year: item.year,
+        contentId: item.contentId,
+        isArchived: item.isArchived,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
     setWorklogs((prev) => [...formatted, ...prev]);
+    setTasks((prev) => [...formattedTasks, ...prev]);
 
     setClients((prev) => {
       const clientAddedPoints: Record<string, number> = {};
@@ -514,15 +687,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
-    for (const log of formatted) {
+    for (let j = 0; j < formatted.length; j++) {
+      const log = formatted[j];
+      const tsk = formattedTasks[j];
       try {
         await fetch('/api/worklogs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(log),
         });
+
+        await fetch('/api/tasks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser?.id || 'u-system',
+            'X-User-Role': currentUser?.roles.join(',') || '',
+          },
+          body: JSON.stringify(tsk),
+        });
       } catch (err) {
-        console.error('Failed to save imported worklog:', err);
+        console.error('Failed to save imported worklog/task:', err);
       }
     }
   };

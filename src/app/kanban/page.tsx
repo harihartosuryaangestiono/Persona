@@ -87,14 +87,22 @@ export default function KanbanPage() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskItem['status'] | null>(null);
 
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentDate = new Date();
+  const currentMonthName = monthNames[currentDate.getMonth()];
+  const currentYear = currentDate.getFullYear();
+
   // Form State - Task Creation
   const [newTitle, setNewTitle] = useState('');
   const [newClientId, setNewClientId] = useState('');
   const [newCategory, setNewCategory] = useState<'Strategic' | 'Production' | 'Editing' | 'Scheduling'>('Strategic');
   const [newPostingDate, setNewPostingDate] = useState(new Date().toISOString().split('T')[0]);
   const [newDeadline, setNewDeadline] = useState(calculateAutoDeadline(new Date().toISOString().split('T')[0], -3));
-  const [newMonth, setNewMonth] = useState('July');
-  const [newYear, setNewYear] = useState(2026);
+  const [newMonth, setNewMonth] = useState(currentMonthName);
+  const [newYear, setNewYear] = useState(currentYear);
   const [newDriveLink, setNewDriveLink] = useState('');
   const [newStages, setNewStages] = useState<TaskStage[]>([]);
 
@@ -103,8 +111,8 @@ export default function KanbanPage() {
   const [editClientId, setEditClientId] = useState('');
   const [editPostingDate, setEditPostingDate] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
-  const [editMonth, setEditMonth] = useState('July');
-  const [editYear, setEditYear] = useState(2026);
+  const [editMonth, setEditMonth] = useState(currentMonthName);
+  const [editYear, setEditYear] = useState(currentYear);
   const [editDriveLink, setEditDriveLink] = useState('');
   const [editPreviewLink, setEditPreviewLink] = useState('');
   const [editStatus, setEditStatus] = useState<TaskItem['status']>('Brief');
@@ -266,7 +274,7 @@ export default function KanbanPage() {
     if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
-    if (type === 'Presentasi') return ['Per Session'];
+    if (type === 'Presentasi' || type === 'Meeting Brief') return ['Per Session'];
     return [];
   };
 
@@ -1282,7 +1290,7 @@ export default function KanbanPage() {
 
                     // Types based on role
                     let typeOptions = ['Editing', 'Revisi'];
-                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi'];
+                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief'];
                     else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                     else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 
@@ -1568,7 +1576,7 @@ export default function KanbanPage() {
                       });
 
                       let typeOptions = ['Editing', 'Revisi'];
-                      if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi'];
+                      if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief'];
                       else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                       else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 

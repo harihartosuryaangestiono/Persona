@@ -10,9 +10,13 @@ export default function ScoreSummaryPage() {
   const { allUsers } = useUser();
   const { worklogs, tasks } = useData();
 
-  // Period filter states defaulting to July 2026 (Requirement 10)
-  const [selectedMonth, setSelectedMonth] = useState('July');
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(monthNames[currentDate.getMonth()]);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">

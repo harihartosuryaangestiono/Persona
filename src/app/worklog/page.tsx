@@ -95,6 +95,18 @@ export default function WorklogPage() {
     const targetClient = clients.find((c) => c.id === editClientId || c.name === editClientName) || clients[0];
     const targetUser = allUsers.find((u) => u.id === editUserId || u.name === editUserName) || currentUser;
 
+    let parsedStages: any[] = [];
+    if (editingWorklog.stages) {
+      try {
+        parsedStages = typeof editingWorklog.stages === 'string'
+          ? JSON.parse(editingWorklog.stages)
+          : editingWorklog.stages;
+      } catch (e) {
+        console.error('Failed to parse stages:', e);
+      }
+    }
+    const hasMultipleStages = Array.isArray(parsedStages) && parsedStages.length > 1;
+
     const updatedLog: WorklogItem = {
       ...editingWorklog,
       contentTitle: editTitle.trim(),
@@ -110,18 +122,20 @@ export default function WorklogPage() {
       date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
       status: editStatus as any,
       previewLink: editPreviewLink.trim(),
-      stages: [
-        {
-          id: `stage-edit-${Date.now()}`,
-          role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
-          userId: targetUser?.id || editUserId,
-          userName: targetUser?.name || editUserName,
-          taskType: editTaskType,
-          format: normalizeFormat(editFormat),
-          qty: Number(editQty),
-          score: editScore,
-        },
-      ],
+      stages: hasMultipleStages
+        ? parsedStages
+        : [
+            {
+              id: parsedStages[0]?.id || `stage-edit-${Date.now()}`,
+              role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
+              userId: targetUser?.id || editUserId,
+              userName: targetUser?.name || editUserName,
+              taskType: editTaskType,
+              format: normalizeFormat(editFormat),
+              qty: Number(editQty),
+              score: editScore,
+            },
+          ],
     };
 
     await updateWorklog(updatedLog);
@@ -342,7 +356,7 @@ export default function WorklogPage() {
     if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
-    if (type === 'Presentasi') return ['Per Session'];
+    if (type === 'Presentasi' || type === 'Meeting Brief') return ['Per Session'];
     return [];
   };
 
@@ -427,7 +441,7 @@ export default function WorklogPage() {
         else if (value === 'Content Plan' || value === 'Production Lead' || value === 'Production Assistant') newStage.format = '4 Jam';
         else if (value === 'Editing Plan') newStage.format = 'Per Item';
         else if (value === 'Supervisi') newStage.format = 'Per Check';
-        else if (value === 'Presentasi') newStage.format = 'Per Session';
+        else if (value === 'Presentasi' || value === 'Meeting Brief') newStage.format = 'Per Session';
         else if (value === 'Scheduling') newStage.format = 'Per Post';
       }
 
@@ -580,7 +594,7 @@ export default function WorklogPage() {
             <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200 whitespace-nowrap">
               <tr>
                 <th className="px-4 py-3.5 w-10 text-center">
-                  {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                  {currentUser && (
                     <input
                       type="checkbox"
                       checked={isAllSelected}
@@ -616,7 +630,7 @@ export default function WorklogPage() {
                   <React.Fragment key={w.id}>
                     <tr className={`hover:bg-neutral-50 transition ${selectedIds.includes(w.id) ? 'bg-red-50/40 hover:bg-red-50/60' : ''}`}>
                       <td className="px-4 py-3.5 text-center">
-                        {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                        {currentUser && (
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(w.id)}
@@ -663,7 +677,7 @@ export default function WorklogPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-center">
-                        {(currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                        {currentUser && (
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => openEditModal(w)}
@@ -783,7 +797,7 @@ export default function WorklogPage() {
                     });
 
                     let typeOptions = ['Editing', 'Revisi'];
-                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi'];
+                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief'];
                     else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                     else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 
@@ -1204,6 +1218,10 @@ export default function WorklogPage() {
                     <option value="Scheduling">Scheduling</option>
                     <option value="Production Lead">Production Lead</option>
                     <option value="Production Assistant">Production Assistant</option>
+                    <option value="Editing Plan">Editing Plan</option>
+                    <option value="Supervisi">Supervisi</option>
+                    <option value="Presentasi">Presentasi</option>
+                    <option value="Meeting Brief">Meeting Brief</option>
                     <option value="Revisi">Revisi</option>
                   </select>
                 </div>
@@ -1227,6 +1245,9 @@ export default function WorklogPage() {
                     <option value="4 Jam">4 Jam (400 pts)</option>
                     <option value="8 Jam">8 Jam (800 pts)</option>
                     <option value="Per Post">Per Post (5 pts)</option>
+                    <option value="Per Item">Per Item (25 pts)</option>
+                    <option value="Per Check">Per Check (50 pts)</option>
+                    <option value="Per Session">Per Session (100 pts)</option>
                   </select>
                 </div>
               </div>

@@ -82,9 +82,14 @@ export function Sidebar() {
   // Dynamic capacity calculation
   const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);
   
-  // Sum worklogs and active tasks matching selected period (July 2026)
-  const activeMonth = 'July';
-  const activeYear = 2026;
+  // Sum worklogs and active tasks matching selected period (current month/year)
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const currentDate = new Date();
+  const activeMonth = monthNames[currentDate.getMonth()];
+  const activeYear = currentDate.getFullYear();
   const userPoints = currentUser ? calculateUserPointsForPeriod(currentUser, activeMonth, activeYear, worklogs, tasks) : 0;
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
