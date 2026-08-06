@@ -1,31 +1,33 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useToast } from '@/context/ToastContext';
 import {
   Sparkles,
   Send,
-  Database,
   BarChart3,
   TrendingUp,
   AlertTriangle,
-  Users,
-  Briefcase,
-  CheckCircle2,
-  Clock,
-  Calendar,
-  FileSpreadsheet,
-  Copy,
-  Check,
   ChevronRight,
   Zap,
-  Info,
   ShieldCheck,
   RefreshCw,
+  Trash2,
+  Copy,
+  Check,
+  MessageSquare,
 } from 'lucide-react';
 import { PersonaAIEngine, ExecutiveSummary, PersonaAIResponse } from '@/lib/services/persona-ai-engine';
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  text: string;
+  response?: PersonaAIResponse;
+  timestamp: string;
+}
 
 export default function PersonaAIPage() {
   const { worklogs, tasks, clients, budgets, attendances, leaveRequests } = useData();
@@ -38,8 +40,25 @@ export default function PersonaAIPage() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [execSummary, setExecSummary] = useState<ExecutiveSummary | null>(null);
-  const [activeResponse, setActiveResponse] = useState<PersonaAIResponse | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome',
+      sender: 'assistant',
+      text: 'Selamat datang di **Persona AI Executive Workspace**! Kueri apapun mengenai operasional, tim, budget, dan konten dapat ditanyakan langsung dan akan dihitung 100% secara live dari database Supabase PostgreSQL.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    },
+  ]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
 
   // Auto-generate Executive Summary on Mount & when data changes
   useEffect(() => {
@@ -59,64 +78,6 @@ export default function PersonaAIPage() {
     }
   }, [worklogs, tasks, clients, allUsers, budgets, attendances, leaveRequests]);
 
-  const handleQuery = async (queryText: string) => {
-    if (!queryText.trim()) return;
-    setLoading(true);
-    setPrompt(queryText);
-
-    try {
-      const res = await fetch('/api/persona-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: queryText }),
-      });
-
-      if (!res.ok) throw new Error('API Query Error');
-      const data = await res.json();
-      setActiveResponse(data);
-    } catch (e: any) {
-      const fallback = PersonaAIEngine.processQuery(
-        queryText,
-        worklogs,
-        tasks || [],
-        clients,
-        allUsers,
-        budgets || [],
-        attendances || [],
-        leaveRequests || []
-      );
-      setActiveResponse(fallback);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleQuery(prompt);
-  };
-
-  const handleCopy = () => {
-    if (!activeResponse) return;
-    const text = `${activeResponse.answerTitle}\n\n${activeResponse.answerText}\n\nAnalysis Based On:\n- Source: ${activeResponse.reasoning.source}\n- Records Analyzed: ${activeResponse.reasoning.recordsFound}`;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    showToast('Ringkasan berhasil disalin!', 'success');
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const QUICK_BUTTONS = [
-    { label: 'Total Reels Bulan Ini', query: 'Berapa total Reels bulan Agustus?' },
-    { label: 'Total Carousel Bulan Ini', query: 'Berapa Carousel bulan Agustus?' },
-    { label: 'Status Budget Klien', query: 'Budget Karihome tinggal berapa?' },
-    { label: 'Workload & Peringkat Editor', query: 'Siapa editor paling sibuk bulan ini?' },
-    { label: 'Agenda Operasional Hari Ini', query: 'Hari ini ada apa?' },
-    { label: 'Daftar Overdue Tasks', query: 'Ada task yang overdue?' },
-    { label: 'Ringkasan BEGS', query: 'Ringkasan Baking Empire bulan Agustus' },
-    { label: 'Reels Baking Empire', query: 'Berapa konten Carousel Baking Empire Gading Serpong bulan Agustus?' },
-    { label: 'Bandingkan Juli vs Agustus', query: 'Bandingkan Juli vs Agustus' },
-  ];
-
   if (!isAllowed) {
     return (
       <div className="max-w-xl mx-auto py-24 text-center space-y-4">
@@ -130,6 +91,104 @@ export default function PersonaAIPage() {
       </div>
     );
   }
+
+  const handleQuery = async (queryText: string) => {
+    if (!queryText.trim() || loading) return;
+
+    const userMsgId = Date.now().toString();
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const userMessage: ChatMessage = {
+      id: userMsgId,
+      sender: 'user',
+      text: queryText.trim(),
+      timestamp: timeStr,
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setPrompt('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/persona-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: queryText }),
+      });
+
+      if (!res.ok) throw new Error('API Query Error');
+      const data: PersonaAIResponse = await res.json();
+
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'assistant',
+        text: data.answerText,
+        response: data,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (e: any) {
+      const fallback = PersonaAIEngine.processQuery(
+        queryText,
+        worklogs,
+        tasks || [],
+        clients,
+        allUsers,
+        budgets || [],
+        attendances || [],
+        leaveRequests || []
+      );
+
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'assistant',
+        text: fallback.answerText,
+        response: fallback,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleQuery(prompt);
+  };
+
+  const handleClearChat = () => {
+    setMessages([
+      {
+        id: Date.now().toString(),
+        sender: 'assistant',
+        text: 'Sesi percakapan telah dibersihkan. Silakan ajukan kueri database operasional baru!',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  };
+
+  const handleCopyMessage = (msg: ChatMessage) => {
+    if (!msg.response) return;
+    const text = `${msg.response.answerTitle}\n\n${msg.response.answerText}\n\nAnalysis Based On:\n- Source: ${msg.response.reasoning.source}\n- Records Analyzed: ${msg.response.reasoning.recordsFound}`;
+    navigator.clipboard.writeText(text);
+    setCopiedId(msg.id);
+    showToast('Laporan berhasil disalin!', 'success');
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const QUICK_BUTTONS = [
+    { label: '🎬 Total Reels Bulan Ini', query: 'Berapa total Reels bulan Agustus?' },
+    { label: '📊 Carousel BEGS', query: 'Berapa Carousel Baking Empire Gading Serpong bulan Agustus?' },
+    { label: '🏙️ Carousel BEKG', query: 'Berapa Carousel Baking Empire Kelapa Gading bulan Agustus?' },
+    { label: '💰 Status Budget Karihome', query: 'Budget Karihome tinggal berapa?' },
+    { label: '👨‍💻 Workload & Editor Sibuk', query: 'Siapa editor paling sibuk bulan ini?' },
+    { label: '📅 Agenda Hari Ini', query: 'Hari ini ada apa?' },
+    { label: '⚠️ Overdue Tasks', query: 'Ada task yang overdue?' },
+    { label: '📈 Bandingkan Juli vs Agustus', query: 'Bandingkan Juli vs Agustus' },
+  ];
 
   return (
     <div className="space-y-6 pb-32 max-w-7xl mx-auto">
@@ -273,153 +332,192 @@ export default function PersonaAIPage() {
         </div>
       )}
 
-      {/* QUICK ACTION BUTTONS */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-neutral-700">
-          <Zap className="w-4 h-4 text-amber-500" />
-          <span>Quick Executive Action Queries (1-Click Execution)</span>
+      {/* MULTI-TURN CHAT SECTION */}
+      <div className="bg-white rounded-3xl border border-neutral-200/80 shadow-md flex flex-col overflow-hidden">
+        {/* CHAT HEADER */}
+        <div className="bg-neutral-900 text-white px-6 py-4 flex items-center justify-between border-b border-neutral-800">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold">Conversational BI Chat Stream</h3>
+              <p className="text-[11px] text-neutral-400">Tanyakan pertanyaan beruntun secara bebas — percakapan tersimpan dalam alur chat</p>
+            </div>
+          </div>
+          <button
+            onClick={handleClearChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-rose-400 text-xs font-semibold transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear Chat</span>
+          </button>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {QUICK_BUTTONS.map((btn) => (
-            <button
-              key={btn.label}
-              onClick={() => handleQuery(btn.query)}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-neutral-900 hover:text-white border border-neutral-200/90 text-neutral-700 font-semibold text-xs transition shadow-2xs flex items-center gap-1.5 active:scale-95"
-            >
-              <span>{btn.label}</span>
-              <ChevronRight className="w-3 h-3 text-neutral-400 opacity-60" />
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* NATURAL LANGUAGE QUERY INPUT BAR */}
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="bg-white rounded-2xl border border-neutral-300 shadow-md p-2 flex items-center gap-3 focus-within:ring-2 focus-within:ring-neutral-900 transition">
-          <div className="pl-3 text-neutral-400">
-            <Sparkles className="w-5 h-5 text-emerald-500" />
+        {/* QUICK ACTION BUTTONS */}
+        <div className="p-4 bg-neutral-50/80 border-b border-neutral-200/60 space-y-2">
+          <div className="flex items-center gap-2 text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <span>Rekomendasi Kueri (1-Click Action)</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {QUICK_BUTTONS.map((btn) => (
+              <button
+                key={btn.label}
+                onClick={() => handleQuery(btn.query)}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-900 hover:text-white border border-neutral-200 text-neutral-700 font-semibold text-xs transition shadow-2xs flex items-center gap-1 active:scale-95"
+              >
+                <span>{btn.label}</span>
+                <ChevronRight className="w-3 h-3 text-neutral-400 opacity-60" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* CHAT MESSAGES CONTAINER */}
+        <div className="p-6 space-y-6 max-h-[600px] overflow-y-auto bg-neutral-50/30">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} space-y-1.5`}
+            >
+              {/* SENDER LABEL */}
+              <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono px-1">
+                {msg.sender === 'user' ? (
+                  <>
+                    <span>{msg.timestamp}</span>
+                    <strong className="text-neutral-800">{currentUser.name}</strong>
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-emerald-700 font-bold">Persona AI BI</strong>
+                    <span>{msg.timestamp}</span>
+                  </>
+                )}
+              </div>
+
+              {/* USER BUBBLE */}
+              {msg.sender === 'user' ? (
+                <div className="bg-neutral-900 text-white rounded-3xl rounded-tr-xs px-5 py-3.5 max-w-2xl text-sm font-medium leading-relaxed shadow-md">
+                  {msg.text}
+                </div>
+              ) : (
+                /* ASSISTANT CARD */
+                <div className="bg-white rounded-3xl rounded-tl-xs p-6 md:p-7 border border-neutral-200/90 shadow-md max-w-4xl space-y-5 w-full">
+                  {msg.response ? (
+                    <>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-100 pb-3">
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
+                            Persona AI Result
+                          </span>
+                          <h4 className="text-lg font-bold text-neutral-900 mt-1">{msg.response.answerTitle}</h4>
+                        </div>
+                        <button
+                          onClick={() => handleCopyMessage(msg)}
+                          className="px-3 py-1.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-semibold text-xs flex items-center gap-1.5 transition self-start md:self-auto"
+                        >
+                          {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedId === msg.id ? 'Tersalin' : 'Salin Laporan'}</span>
+                        </button>
+                      </div>
+
+                      {/* SUMMARY CARDS */}
+                      {msg.response.summaryCards && msg.response.summaryCards.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {msg.response.summaryCards.map((card, idx) => (
+                            <div key={idx} className="bg-neutral-50 p-3.5 rounded-2xl border border-neutral-200/70 space-y-1">
+                              <span className="text-[10px] font-extrabold uppercase text-neutral-400">{card.label}</span>
+                              <div className="text-base font-black text-neutral-900">{card.value}</div>
+                              {card.badge && (
+                                <span className="inline-block text-[9px] font-bold px-2 py-0.5 rounded bg-neutral-200/80 text-neutral-700">
+                                  {card.badge}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ANSWER TEXT */}
+                      <div className="bg-neutral-50/70 rounded-2xl p-4 border border-neutral-200/80 text-xs md:text-sm leading-relaxed text-neutral-800 whitespace-pre-line">
+                        {msg.response.answerText}
+                      </div>
+
+                      {/* AUTO INSIGHTS */}
+                      {msg.response.autoInsights && msg.response.autoInsights.length > 0 && (
+                        <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-200/60 space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
+                            <Sparkles className="w-4 h-4 text-emerald-600" />
+                            <span>Auto Insights (Derived from Dataset)</span>
+                          </div>
+                          <ul className="space-y-1 text-xs text-emerald-800 font-medium">
+                            {msg.response.autoInsights.map((insight, idx) => (
+                              <li key={idx}>{insight}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* REASONING TRANSPARENCY PANEL */}
+                      <div className="bg-neutral-900 text-white rounded-2xl p-4 space-y-2 shadow-sm font-mono text-xs">
+                        <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
+                          <span className="text-emerald-400 font-bold text-xs">Analysis Based On:</span>
+                          <span className="text-[10px] text-neutral-400">{msg.response.reasoning.source}</span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+                          <div>Records: <strong className="text-amber-400">{msg.response.reasoning.recordsFound} DB Rows</strong></div>
+                          <div>Calculation: <strong className="text-emerald-400">{msg.response.reasoning.calculation}</strong></div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-neutral-800 text-sm whitespace-pre-line leading-relaxed">
+                      {msg.text}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* LOADING STATE */}
+          {loading && (
+            <div className="flex flex-col items-start space-y-1">
+              <span className="text-xs font-mono font-bold text-emerald-600">Persona AI BI</span>
+              <div className="bg-white border border-neutral-200 rounded-3xl rounded-tl-xs px-5 py-4 shadow-sm flex items-center gap-3 text-neutral-700">
+                <RefreshCw className="w-4 h-4 text-emerald-500 animate-spin" />
+                <span className="text-xs font-medium">Menganalisis live database Supabase PostgreSQL...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* INPUT FORM FOOTER */}
+        <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-neutral-200 flex items-center gap-3">
+          <div className="pl-2 text-emerald-500">
+            <Sparkles className="w-5 h-5" />
           </div>
           <input
             type="text"
-            placeholder="Tanyakan ke Persona AI... (contoh: Berapa total Reels bulan Agustus? atau Siapa editor paling sibuk?)"
+            placeholder="Ketik pertanyaan kueri lagi... (contoh: Berapa total Carousel BEGS? atau Sisa budget Karihome?)"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            disabled={loading}
             className="flex-1 bg-transparent border-none focus:outline-hidden text-sm font-medium text-neutral-900 placeholder-neutral-400"
           />
           <button
             type="submit"
             disabled={loading || !prompt.trim()}
-            className="px-5 py-2.5 rounded-xl bg-neutral-900 text-white font-bold text-xs hover:bg-neutral-800 disabled:opacity-50 transition flex items-center gap-2 shadow-sm"
+            className="px-5 py-3 rounded-2xl bg-neutral-900 text-white font-bold text-xs hover:bg-neutral-800 disabled:opacity-50 transition active:scale-95 flex items-center gap-2 shadow-sm shrink-0"
           >
             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            <span>Query Database</span>
+            <span>Kirim Pertanyaan</span>
           </button>
-        </div>
-      </form>
-
-      {/* ACTIVE RESPONSE DISPLAY AREA */}
-      {activeResponse && (
-        <div className="bg-white rounded-3xl p-6 md:p-8 border border-neutral-200/90 shadow-lg space-y-6 animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-100 pb-4">
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
-                Persona AI Result
-              </span>
-              <h2 className="text-xl font-bold text-neutral-900 mt-1">{activeResponse.answerTitle}</h2>
-            </div>
-            <button
-              onClick={handleCopy}
-              className="px-3.5 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-semibold text-xs flex items-center gap-1.5 transition self-start md:self-auto"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              <span>{copied ? 'Tersalin' : 'Salin Laporan'}</span>
-            </button>
-          </div>
-
-          {/* SUMMARY CARDS */}
-          {activeResponse.summaryCards && activeResponse.summaryCards.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {activeResponse.summaryCards.map((card, idx) => (
-                <div key={idx} className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200/70 space-y-1">
-                  <span className="text-[10px] font-extrabold uppercase text-neutral-400">{card.label}</span>
-                  <div className="text-lg font-black text-neutral-900">{card.value}</div>
-                  {card.badge && (
-                    <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-200/80 text-neutral-700">
-                      {card.badge}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ANSWER TEXT */}
-          <div className="bg-neutral-50/60 rounded-2xl p-5 border border-neutral-200/80 text-sm leading-relaxed text-neutral-800 space-y-2">
-            <div className="font-medium whitespace-pre-line">{activeResponse.answerText}</div>
-          </div>
-
-          {/* AUTO INSIGHTS */}
-          {activeResponse.autoInsights && activeResponse.autoInsights.length > 0 && (
-            <div className="bg-emerald-50/40 rounded-2xl p-5 border border-emerald-200/60 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                <span>Auto Insights (Derived from Dataset)</span>
-              </div>
-              <ul className="space-y-1 text-xs text-emerald-800 font-medium">
-                {activeResponse.autoInsights.map((insight, idx) => (
-                  <li key={idx}>{insight}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* REASONING TRANSPARENCY PANEL */}
-          <div className="bg-neutral-900 text-white rounded-2xl p-5 space-y-3 shadow-md">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Analysis Based On (Reasoning Transparency)</span>
-              </div>
-              <span className="text-[10px] font-mono text-neutral-400">{activeResponse.reasoning.source}</span>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
-              {activeResponse.reasoning.client && (
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Client:</span>
-                  <strong className="text-white">{activeResponse.reasoning.client}</strong>
-                </div>
-              )}
-              {activeResponse.reasoning.period && (
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Period:</span>
-                  <strong className="text-white">{activeResponse.reasoning.period}</strong>
-                </div>
-              )}
-              {activeResponse.reasoning.format && (
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Format:</span>
-                  <strong className="text-white">{activeResponse.reasoning.format}</strong>
-                </div>
-              )}
-              {activeResponse.reasoning.calculation && (
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Calculation:</span>
-                  <strong className="text-emerald-400">{activeResponse.reasoning.calculation}</strong>
-                </div>
-              )}
-              <div>
-                <span className="text-neutral-400 block text-[10px]">Records Analyzed:</span>
-                <strong className="text-amber-400">{activeResponse.reasoning.recordsFound} DB Rows</strong>
-              </div>
-              <div>
-                <span className="text-neutral-400 block text-[10px]">Database Source:</span>
-                <strong className="text-emerald-400">Supabase PostgreSQL</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }

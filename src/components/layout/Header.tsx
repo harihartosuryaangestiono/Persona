@@ -17,7 +17,7 @@ import {
 import { GlobalSearchModal } from '@/components/search/GlobalSearchModal';
 
 export function Header() {
-  const { currentUser, switchUserByName, allUsers, logout } = useUser();
+  const { currentUser, logout } = useUser();
   const { tasks } = useData();
   const { currentWorkspace, workspaces, switchWorkspace, createWorkspace } = useWorkspace();
 
@@ -170,55 +170,37 @@ export function Header() {
               <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
             </button>
 
-            {/* Persona Switcher Dropdown */}
+            {/* Logged-In User Profile & Sign Out Dropdown */}
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-neutral-200 rounded-xl shadow-xl p-2 z-50">
-                <div className="px-3 py-2 border-b border-neutral-100 mb-1">
-                  <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-600" /> Active Persona Switcher
-                  </p>
-                  <p className="text-[10px] text-neutral-400 mt-0.5">Switch user context to test RBX views</p>
+              <div className="absolute right-0 mt-2.5 w-72 bg-white border border-neutral-200/90 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-start gap-3.5 pb-3.5 border-b border-neutral-100">
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt={currentUser.name} className="w-11 h-11 rounded-full object-cover border border-neutral-200 shrink-0 shadow-xs" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 text-left space-y-1">
+                    <p className="font-extrabold text-neutral-900 text-sm leading-tight truncate">{currentUser.name}</p>
+                    <p className="text-[11px] text-neutral-500 font-mono truncate">{currentUser.email || `${currentUser.name.toLowerCase()}@personaos.com`}</p>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {currentUser.roles.map((role) => (
+                        <span key={role} className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200/80">
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {allUsers.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        switchUserByName(u.name);
-                        setIsUserMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition ${
-                        currentUser.name === u.name
-                          ? 'bg-neutral-100 text-neutral-900 font-semibold'
-                          : 'hover:bg-neutral-50 text-neutral-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {u.avatar ? (
-                          <img src={u.avatar} alt={u.name} className="w-6 h-6 rounded-full object-cover" />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
-                            {u.name.charAt(0)}
-                          </div>
-                        )}
-                        <div className="text-left">
-                          <p className="font-semibold">{u.name}</p>
-                          <p className="text-[10px] text-neutral-500">{u.roles.join(', ')}</p>
-                        </div>
-                      </div>
-                      {currentUser.name === u.name && (
-                        <span className="w-2 h-2 rounded-full bg-neutral-900" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-                <div className="pt-2 mt-2 border-t border-neutral-100">
+
+                <div className="pt-3">
                   <button
                     onClick={() => {
                       logout();
                       setIsUserMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2 p-2 hover:bg-red-50 text-red-600 hover:text-red-700 rounded-lg text-xs font-semibold transition"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 rounded-xl text-xs font-bold transition border border-rose-100 shadow-2xs active:scale-98"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out of Persona</span>

@@ -319,6 +319,12 @@ export class FunctionRegistry {
     };
   }
 
+  public static isClientMentionedInPrompt(prompt: string): boolean {
+    const clean = prompt.toLowerCase();
+    const clientKeywords = ['baking empire', 'karihome', 'motodw', 'samazama', 'harihari', 'begs', 'bekg', 'bec8', 'kh', 'smz', 'hhg', 'gading', 'serpong', 'kelapa', 'citra'];
+    return clientKeywords.some((k) => clean.includes(k));
+  }
+
   /**
    * 4. getContentStatistics: Aggregates Format & Content Statistics
    */
@@ -331,26 +337,56 @@ export class FunctionRegistry {
     clients: ClientItem[],
     users?: UserPersona[]
   ): PersonaAIResponse {
+    const resolvedClient = filters.clientQuery ? PersonaAIEngine.resolveClient(filters.clientQuery, clients) : null;
+    const isClientMentioned = filters.clientQuery ? PersonaAIEngine.isClientMentionedInPrompt(filters.clientQuery) : false;
+
+    // Strict Zero-Hallucination Guard: If user mentioned a client name/branch that does NOT exist or has conflicting branches
+    if (filters.clientQuery && isClientMentioned && !resolvedClient) {
+      return {
+        answerTitle: `Data Klien Tidak Ditemukan`,
+        answerText: `Maaf, tidak ada data atau nama klien yang cocok di database untuk kueri **"${filters.clientQuery}"**.\n\nMohon periksa kembali ejaan atau nama cabang yang Anda masukkan. Klien resmi yang terdaftar di database:\n- 🏢 **Baking Empire Gading Serpong** (BEGS)\n- 🏢 **Baking Empire Kelapa Gading** (BEKG)\n- 🏢 **Baking Empire Citra 8** (BEC8)\n- 🏢 **Karihome**\n- 🏢 **MotoDW**\n- 🏢 **Samazama Japan**\n- 🏢 **Hariharigimmick**`,
+        summaryCards: [
+          { label: 'Status Data', value: 'Not Found', badge: '0 DB Rows' },
+          { label: 'Kueri Input', value: filters.clientQuery },
+        ],
+        reasoning: {
+          client: 'Unknown / Not Found',
+          period: `${month} ${year}`,
+          calculation: `getContentStatistics(NotFound)`,
+          recordsFound: 0,
+          source: 'Supabase Production Database (Zero Hallucination)',
+        },
+        autoInsights: [
+          `• Kueri "${filters.clientQuery}" mengandung nama atau cabang klien yang tidak terdaftar di database.`,
+        ],
+      };
+    }
+
     let filtered = worklogs.filter((w) => !w.isArchived && w.month === month && Number(w.year) === year);
 
     if (filters.format) {
       filtered = filtered.filter((w) => (w.format || '').toLowerCase().includes(filters.format!.toLowerCase()));
     }
 
-    const resolvedClient = filters.clientQuery ? PersonaAIEngine.resolveClient(filters.clientQuery, clients) : null;
     if (resolvedClient) {
-      filtered = filtered.filter((w) => w.clientId === resolvedClient.id || w.clientName === resolvedClient.name);
+      filtered = filtered.filter((w) => (
+        w.clientId === resolvedClient.id ||
+        (w.clientName || '').toLowerCase().includes(resolvedClient.name.toLowerCase()) ||
+        resolvedClient.name.toLowerCase().includes((w.clientName || '').toLowerCase())
+      ));
     }
 
     const totalCount = filtered.length;
     const totalPts = filtered.reduce((sum, w) => sum + (w.score || 0), 0);
 
-    // Grouping
+    // Grouping with safe name resolution
     const clientMap: Record<string, number> = {};
     const userMap: Record<string, number> = {};
     for (const w of filtered) {
-      clientMap[w.clientName || 'Unknown'] = (clientMap[w.clientName || 'Unknown'] || 0) + 1;
-      userMap[w.userName || 'Unknown'] = (userMap[w.userName || 'Unknown'] || 0) + 1;
+      const cName = w.clientName || clients.find((c) => c.id === w.clientId)?.name || (resolvedClient ? resolvedClient.name : 'Unknown Client');
+      const uName = w.userName || users?.find((u) => u.id === w.userId)?.name || 'Team Member';
+      clientMap[cName] = (clientMap[cName] || 0) + 1;
+      userMap[uName] = (userMap[uName] || 0) + 1;
     }
 
     const topClient = Object.entries(clientMap).sort((a, b) => b[1] - a[1])[0];
@@ -576,9 +612,9 @@ export class FunctionRegistry {
 export class PersonaAIEngine {
   // Alias dictionary for entity resolution
   private static CLIENT_ALIASES: Record<string, string[]> = {
-    'Baking Empire Gading Serpong': ['begs', 'baking empire gading serpong', 'baking empire gading', 'baking empire gs', 'begs august'],
-    'Baking Empire Kelapa Gading': ['bekg', 'baking empire kelapa gading', 'baking empire kg'],
-    'Baking Empire Citra 8': ['bec8', 'baking empire citra 8', 'baking empire citra'],
+    'Baking Empire Citra 8': ['bec8', 'baking empire citra 8', 'baking empire citra', 'citra 8', 'citra8', 'citra'],
+    'Baking Empire Kelapa Gading': ['bekg', 'baking empire kelapa gading', 'kelapa gading', 'baking empire kg', 'kelapa'],
+    'Baking Empire Gading Serpong': ['begs', 'baking empire gading serpong', 'gading serpong', 'baking empire gs', 'serpong'],
     'Karihome': ['karihome', 'kh'],
     'MotoDW': ['motodw', 'moto dw', 'moto'],
     'Samazama Japan': ['samazama', 'samazama japan', 'smz'],
@@ -593,6 +629,12 @@ export class PersonaAIEngine {
     'Dinda': ['dinda', 'dindong', 'dd'],
   };
 
+  public static isClientMentionedInPrompt(prompt: string): boolean {
+    const clean = prompt.toLowerCase();
+    const clientKeywords = ['baking empire', 'karihome', 'motodw', 'samazama', 'harihari', 'begs', 'bekg', 'bec8', 'kh', 'smz', 'hhg', 'gading', 'serpong', 'kelapa', 'citra'];
+    return clientKeywords.some((k) => clean.includes(k));
+  }
+
   public static resolveClient(prompt: string, clients: ClientItem[]): ClientItem | null {
     const matches = this.resolveClients(prompt, clients);
     return matches.length > 0 ? matches[0] : null;
@@ -600,29 +642,70 @@ export class PersonaAIEngine {
 
   public static resolveClients(prompt: string, clients: ClientItem[]): ClientItem[] {
     const cleanPrompt = prompt.toLowerCase();
-    const results: ClientItem[] = [];
 
-    // Check if user specified generic "baking empire"
-    if (cleanPrompt.includes('baking empire') && !cleanPrompt.includes('gading') && !cleanPrompt.includes('kelapa') && !cleanPrompt.includes('citra')) {
+    // Check if user specified generic "baking empire" without specific branch
+    if (
+      cleanPrompt.includes('baking empire') &&
+      !cleanPrompt.includes('serpong') &&
+      !cleanPrompt.includes('kelapa') &&
+      !cleanPrompt.includes('citra') &&
+      !cleanPrompt.includes('bec8') &&
+      !cleanPrompt.includes('bekg') &&
+      !cleanPrompt.includes('begs')
+    ) {
       return clients.filter((c) => c.name.toLowerCase().includes('baking empire'));
     }
 
+    // Score each client based on longest matching alias / exact name match
+    const scoredClients: { client: ClientItem; score: number }[] = [];
+
     for (const c of clients) {
-      if (cleanPrompt.includes(c.name.toLowerCase()) || (c.code && cleanPrompt.includes(c.code.toLowerCase()))) {
-        results.push(c);
+      let maxScore = 0;
+      const cName = c.name.toLowerCase();
+      const cCode = (c.code || '').toLowerCase();
+
+      // Direct exact match
+      if (cleanPrompt.includes(cName)) {
+        maxScore = Math.max(maxScore, cName.length * 10);
+      }
+      if (cCode && cleanPrompt.includes(cCode)) {
+        maxScore = Math.max(maxScore, cCode.length * 8);
+      }
+
+      // Check alias dictionary
+      for (const [canonicalName, aliases] of Object.entries(this.CLIENT_ALIASES)) {
+        if (cName.includes(canonicalName.toLowerCase()) || canonicalName.toLowerCase().includes(cName)) {
+          for (const alias of aliases) {
+            if (cleanPrompt.includes(alias)) {
+              maxScore = Math.max(maxScore, alias.length * 5);
+            }
+          }
+        }
+      }
+
+      if (maxScore > 0) {
+        scoredClients.push({ client: c, score: maxScore });
       }
     }
 
-    if (results.length === 0) {
+    // Fallback search if no score yet
+    if (scoredClients.length === 0) {
       for (const [canonicalName, aliases] of Object.entries(this.CLIENT_ALIASES)) {
-        if (aliases.some((alias) => cleanPrompt.includes(alias))) {
-          const found = clients.find((c) => c.name.toLowerCase().includes(canonicalName.toLowerCase()) || canonicalName.toLowerCase().includes(c.name.toLowerCase()));
-          if (found) results.push(found);
+        for (const alias of aliases) {
+          if (cleanPrompt.includes(alias)) {
+            const found = clients.find(
+              (c) => c.name.toLowerCase().includes(canonicalName.toLowerCase()) || canonicalName.toLowerCase().includes(c.name.toLowerCase())
+            );
+            if (found && !scoredClients.some((sc) => sc.client.id === found.id)) {
+              scoredClients.push({ client: found, score: alias.length * 5 });
+            }
+          }
         }
       }
     }
 
-    return results;
+    scoredClients.sort((a, b) => b.score - a.score);
+    return scoredClients.map((sc) => sc.client);
   }
 
   public static resolveEmployee(prompt: string, users: UserPersona[]): UserPersona | null {
@@ -814,12 +897,12 @@ export class PersonaAIEngine {
 
     // Intent: REELS FORMAT STATISTICS (e.g. "Berapa total Reels bulan ini?")
     if (cleanPrompt.includes('reel')) {
-      return FunctionRegistry.getContentStatistics({ format: 'Reels' }, month, year, worklogs, tasks, clients, users);
+      return FunctionRegistry.getContentStatistics({ format: 'Reels', clientQuery: prompt }, month, year, worklogs, tasks, clients, users);
     }
 
     // Intent: CAROUSEL FORMAT STATISTICS (e.g. "Berapa total Carousel bulan ini?")
     if (cleanPrompt.includes('carousel')) {
-      return FunctionRegistry.getContentStatistics({ format: 'Carousel' }, month, year, worklogs, tasks, clients, users);
+      return FunctionRegistry.getContentStatistics({ format: 'Carousel', clientQuery: prompt }, month, year, worklogs, tasks, clients, users);
     }
 
     // Intent: INDIVIDUAL EMPLOYEE SUMMARY (e.g. "Kinerja Jabin", "Score Anggi", "Laporan Dinda")
