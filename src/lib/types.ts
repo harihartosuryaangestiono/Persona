@@ -11,6 +11,7 @@ export interface UserPersona {
   name: string;
   email: string;
   avatar: string;
+  password?: string;
   roles: UserRole[];
   monthlyCapacity: number; // 16000
   hourlyPoint: number;     // 100

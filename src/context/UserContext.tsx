@@ -10,6 +10,7 @@ interface UserContextType {
   switchUserByName: (name: string) => void;
   allUsers: UserPersona[];
   updateUser: (id: string, updatedData: Partial<UserPersona>) => void;
+  updateUserPassword: (userId: string, newPassword: string) => void;
   addUser: (newUser: UserPersona) => void;
   isLoggedIn: boolean;
   login: (userId: string, password?: string) => boolean;
@@ -30,19 +31,35 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [hasCheckedInToday, setHasCheckedInToday] = useState<boolean>(false);
   const [hasSeenWelcomeToday, setHasSeenWelcomeToday] = useState<boolean>(false);
 
-  // Sync users from database
+  // Sync users from database & apply localStorage overrides
   const syncUsers = (dbUsers: any[]) => {
-    if (!dbUsers || dbUsers.length === 0) return;
-    
-    // Map dbUsers to UserPersona format
+    const savedAvatars = typeof window !== 'undefined' ? localStorage.getItem('persona_custom_avatars') : null;
+    const avatarsMap = savedAvatars ? JSON.parse(savedAvatars) : {};
+    const savedPasswords = typeof window !== 'undefined' ? localStorage.getItem('persona_custom_passwords') : null;
+    const passwordsMap = savedPasswords ? JSON.parse(savedPasswords) : {};
+
+    if (!dbUsers || dbUsers.length === 0) {
+      setUsers((prev) =>
+        prev.map((u) => ({
+          ...u,
+          avatar: avatarsMap[u.id] !== undefined ? avatarsMap[u.id] : u.avatar,
+          password: passwordsMap[u.id] || u.password || u.name.toLowerCase(),
+        }))
+      );
+      return;
+    }
+
     const mapped: UserPersona[] = dbUsers.map((dbU) => {
-      // Find matching permanent user template for roles and fallbacks
       const template = PERMANENT_USERS.find((p) => p.name.toLowerCase() === dbU.name.toLowerCase());
+      const customAvatar = avatarsMap[dbU.id];
+      const customPassword = passwordsMap[dbU.id];
+
       return {
         id: dbU.id,
         name: dbU.name,
         email: dbU.email,
-        avatar: dbU.avatar || template?.avatar || '',
+        avatar: customAvatar !== undefined ? customAvatar : (dbU.avatar || template?.avatar || ''),
+        password: customPassword || dbU.password || template?.name.toLowerCase() || dbU.name.toLowerCase(),
         roles: Array.isArray(dbU.roles) ? dbU.roles : (template?.roles || []),
         monthlyCapacity: (dbU.monthlyCapacity && dbU.monthlyCapacity !== 12000) ? dbU.monthlyCapacity : 16000,
         hourlyPoint: dbU.hourlyPoint || 100,
@@ -53,24 +70,42 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     setUsers(mapped);
 
-    // Also update currentUser ID if matched by name
     setCurrentUser((current) => {
-      const match = mapped.find((m) => m.name.toLowerCase() === current.name.toLowerCase());
+      const match = mapped.find((m) => m.id === current.id || m.name.toLowerCase() === current.name.toLowerCase());
       return match || current;
     });
   };
 
-  // Load auth state from localStorage on mount
+  // Load auth state & custom avatars/passwords on mount
   useEffect(() => {
+    const savedAvatars = localStorage.getItem('persona_custom_avatars');
+    const avatarsMap = savedAvatars ? JSON.parse(savedAvatars) : {};
+    const savedPasswords = localStorage.getItem('persona_custom_passwords');
+    const passwordsMap = savedPasswords ? JSON.parse(savedPasswords) : {};
+
+    setUsers((prev) =>
+      prev.map((u) => ({
+        ...u,
+        avatar: avatarsMap[u.id] !== undefined ? avatarsMap[u.id] : u.avatar,
+        password: passwordsMap[u.id] || u.password || u.name.toLowerCase(),
+      }))
+    );
+
     const savedUserId = localStorage.getItem('persona_logged_in_user_id');
     if (savedUserId) {
-      const found = users.find((u) => u.id === savedUserId);
+      const found = PERMANENT_USERS.find((u) => u.id === savedUserId);
       if (found) {
-        setCurrentUser(found);
+        const customAvatar = avatarsMap[found.id];
+        const customPassword = passwordsMap[found.id];
+        setCurrentUser({
+          ...found,
+          avatar: customAvatar !== undefined ? customAvatar : found.avatar,
+          password: customPassword || found.name.toLowerCase(),
+        });
         setIsLoggedIn(true);
       }
     }
-  }, [users]);
+  }, []);
 
   const switchUserByName = (name: string) => {
     const found = users.find((u) => u.name.toLowerCase() === name.toLowerCase());
@@ -83,14 +118,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const found = users.find((u) => u.id === userId);
     if (!found) return false;
 
-    // Password is the lowercase name of the employee (e.g. devi, anggi, gigie, dinda, jabin, priska)
-    const expectedPassword = found.name.toLowerCase();
-    if (password && password.toLowerCase() === expectedPassword) {
+    const savedPasswords = localStorage.getItem('persona_custom_passwords');
+    const passwordsMap = savedPasswords ? JSON.parse(savedPasswords) : {};
+    const expectedPassword = passwordsMap[found.id] || found.password || found.name.toLowerCase();
+
+    if (password && password.toLowerCase() === expectedPassword.toLowerCase()) {
       setCurrentUser(found);
       setIsLoggedIn(true);
       localStorage.setItem('persona_logged_in_user_id', found.id);
-      
-      // Reset welcome seen status for a new login session
       setHasSeenWelcomeToday(false);
       return true;
     }
@@ -103,6 +138,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUser = (id: string, updatedData: Partial<UserPersona>) => {
+    // Persist custom avatar if updated
+    if (updatedData.avatar !== undefined) {
+      const savedAvatars = localStorage.getItem('persona_custom_avatars');
+      const map = savedAvatars ? JSON.parse(savedAvatars) : {};
+      map[id] = updatedData.avatar;
+      localStorage.setItem('persona_custom_avatars', JSON.stringify(map));
+    }
+
+    // Persist custom password if updated
+    if (updatedData.password !== undefined) {
+      const savedPasswords = localStorage.getItem('persona_custom_passwords');
+      const map = savedPasswords ? JSON.parse(savedPasswords) : {};
+      map[id] = updatedData.password;
+      localStorage.setItem('persona_custom_passwords', JSON.stringify(map));
+    }
+
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
@@ -117,6 +168,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const updateUserPassword = (userId: string, newPassword: string) => {
+    updateUser(userId, { password: newPassword });
+  };
+
   const addUser = (newUser: UserPersona) => {
     setUsers((prev) => [...prev, newUser]);
   };
@@ -129,6 +184,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         switchUserByName,
         allUsers: users,
         updateUser,
+        updateUserPassword,
         addUser,
         isLoggedIn,
         login,
