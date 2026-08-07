@@ -24,7 +24,7 @@ import { calculatePriority, getPriorityColorClass } from '@/lib/score-calculator
 import { useToast } from '@/context/ToastContext';
 
 export default function CalendarPage() {
-  const { tasks, clients, updateTask } = useData();
+  const { tasks, clients, worklogs, updateTask } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
@@ -78,10 +78,55 @@ export default function CalendarPage() {
     }
   }, [selectedClientId, selectedStatus, selectedPIC, selectedRole, selectedFormat, viewMode]);
 
+  // Combine Tasks & Worklogs to keep Editorial Calendar aligned (Requirement 1, 2)
+  const loggedContentIds = new Set(worklogs.map((w) => w.contentId).filter(Boolean));
+  const activeTasks = tasks.filter((t) => !t.isArchived && (!t.contentId || !loggedContentIds.has(t.contentId)));
+
+  const worklogTasks = worklogs.map((w) => {
+    const matchedClient = clients.find((c) => c.id === w.clientId);
+    const stages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+    const assignedUserIds = Array.isArray(stages) ? stages.map((s: any) => s.userId).filter(Boolean) : [w.userId];
+    
+    return {
+      id: w.id,
+      workspaceId: matchedClient?.workspaceId || 'ws-team-anggi',
+      campaignId: null,
+      projectId: null,
+      clientId: w.clientId,
+      clientName: w.clientName || matchedClient?.name || 'Unknown Client',
+      clientColor: matchedClient?.clientColor || '#3B82F6',
+      title: w.contentTitle,
+      description: 'Automatically synchronized task from manual worklog.',
+      category: w.taskType === 'Content Plan' ? 'Strategic' : (w.taskType === 'Scheduling' ? 'Scheduling' : (w.taskType === 'Production Assistant' ? 'Production' : 'Editing')),
+      taskType: w.taskType,
+      format: w.format,
+      qty: w.qty,
+      priority: 'Low',
+      postingDate: w.date ? w.date.substring(0, 10) : null,
+      deadline: w.deadline ? w.deadline.substring(0, 10) : (w.date ? w.date.substring(0, 10) : null),
+      status: w.status,
+      assignedUserIds: JSON.stringify(assignedUserIds),
+      files: null,
+      driveLink: '',
+      previewLink: w.previewLink || '',
+      checklist: '[]',
+      comments: '[]',
+      stages: w.stages,
+      month: w.month,
+      year: w.year,
+      contentId: w.contentId,
+      isArchived: w.isArchived,
+      createdAt: w.createdAt?.toString() || new Date().toISOString(),
+      updatedAt: w.updatedAt?.toString() || new Date().toISOString(),
+    };
+  }) as any as TaskItem[];
+
+  const combinedTasks = [...activeTasks, ...worklogTasks];
+
   // Role-based filtering
   const isExecutive = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
 
-  const workspaceTasks = tasks.filter((t) => {
+  const workspaceTasks = combinedTasks.filter((t) => {
     // 1. Filter out archived tasks (Requirement 4)
     if (t.isArchived) return false;
 
@@ -125,7 +170,7 @@ export default function CalendarPage() {
       const isAssigned = assignedIds.includes(selectedPIC) || (userObj && assignedIds.includes(userObj.name));
       
       const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-      const isStageAssignee = logStages.some((s: any) => s.userId === selectedPIC || (userObj && s.userName === userObj.name));
+      const isStageAssignee = Array.isArray(logStages) && logStages.some((s: any) => s.userId === selectedPIC || (userObj && s.userName === userObj.name));
 
       if (!isAssigned && !isStageAssignee) return false;
     }
@@ -668,12 +713,28 @@ export default function CalendarPage() {
                 )}
 
                 <div className="pt-2 flex items-center justify-end gap-2 border-t border-neutral-100">
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-semibold text-xs px-4 py-2 rounded-lg flex items-center gap-1 transition"
-                  >
-                    <Edit className="w-3.5 h-3.5" /> Edit specifications
-                  </button>
+                  {currentUser && (isExecutive || (
+                    (() => {
+                      const assignedIds = typeof selectedTask.assignedUserIds === 'string'
+                        ? JSON.parse(selectedTask.assignedUserIds)
+                        : (selectedTask.assignedUserIds || []);
+                      const isAssigned = assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name);
+
+                      const stages = selectedTask.stages
+                        ? (typeof selectedTask.stages === 'string' ? JSON.parse(selectedTask.stages) : selectedTask.stages)
+                        : [];
+                      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
+
+                      return isAssigned || isStageAssignee;
+                    })()
+                  )) && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 font-semibold text-xs px-4 py-2 rounded-lg flex items-center gap-1 transition"
+                    >
+                      <Edit className="w-3.5 h-3.5" /> Edit specifications
+                    </button>
+                  )}
                   <button
                     onClick={() => setSelectedTask(null)}
                     className="bg-neutral-900 text-white font-semibold text-xs px-4 py-2 rounded-lg"

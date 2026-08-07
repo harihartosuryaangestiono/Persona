@@ -147,3 +147,68 @@ export function getEditableFieldsForStage(stage: string): string[] {
       return [];
   }
 }
+
+export function isPicAllowedForTaskType(roles: string[], taskType: string): boolean {
+  if (roles.includes('Admin') || roles.includes('Owner')) return true;
+  
+  const typeLower = taskType.toLowerCase();
+  if (typeLower.includes('editing') || typeLower.includes('revisi') || typeLower.includes('edit')) {
+    return roles.includes('Editor');
+  }
+  if (typeLower.includes('scheduling') || typeLower.includes('schedule')) {
+    return roles.includes('Scheduler');
+  }
+  if (typeLower.includes('production assistant') || typeLower.includes('pa') || typeLower.includes('shooting') || typeLower.includes('shoot')) {
+    return roles.includes('Production Assistant');
+  }
+  if (
+    typeLower.includes('content plan') ||
+    typeLower.includes('proposal') ||
+    typeLower.includes('script') ||
+    typeLower.includes('lead') ||
+    typeLower.includes('supervisi') ||
+    typeLower.includes('presentasi') ||
+    typeLower.includes('brief') ||
+    typeLower.includes('strategic')
+  ) {
+    return roles.includes('Strategist');
+  }
+  
+  return false;
+}
+
+export function checkTaskAccess(user: { id: string; name: string; roles: string[] }, task: { assignedUserIds: string; stages?: string | null }): boolean {
+  if (user.roles.includes('Admin') || user.roles.includes('Owner') || user.roles.includes('Strategist')) {
+    return true;
+  }
+  
+  const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
+  if (assignedIds.includes(user.id) || assignedIds.includes(user.name)) {
+    return true;
+  }
+  
+  const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
+  if (Array.isArray(stages) && stages.some((s: any) => s.userId === user.id || s.userName === user.name)) {
+    return true;
+  }
+  
+  return false;
+}
+
+export function checkWorklogAccess(user: { id: string; name: string; roles: string[] }, worklog: { userId: string; stages?: string | null }): boolean {
+  if (user.roles.includes('Admin') || user.roles.includes('Owner') || user.roles.includes('Strategist')) {
+    return true;
+  }
+  
+  if (worklog.userId === user.id) {
+    return true;
+  }
+  
+  const stages = worklog.stages ? (typeof worklog.stages === 'string' ? JSON.parse(worklog.stages) : worklog.stages) : [];
+  if (Array.isArray(stages) && stages.some((s: any) => s.userId === user.id || s.userName === user.name)) {
+    return true;
+  }
+  
+  return false;
+}
+

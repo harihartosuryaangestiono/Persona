@@ -56,6 +56,20 @@ export default function KanbanPage() {
   const { currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
 
+  const canAccessTaskDetails = (task: TaskItem) => {
+    if (!currentUser) return false;
+    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
+    if (isExecutive) return true;
+
+    const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
+    const isAssigned = assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name);
+
+    const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
+    const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
+
+    return isAssigned || isStageAssignee;
+  };
+
   // View state
   const [viewType, setViewType] = useState<'kanban' | 'table'>('kanban');
   const [activeBoard, setActiveBoard] = useState<'main' | 'strategic' | 'production'>('main');
@@ -189,6 +203,38 @@ export default function KanbanPage() {
 
   // Board columns based on active board state
   const columns = activeBoard === 'strategic' ? STRATEGIC_COLUMNS : activeBoard === 'production' ? PRODUCTION_COLUMNS : MAIN_COLUMNS;
+
+  // Filter columns based on user role (Requirement 18)
+  const getVisibleColumns = () => {
+    if (!currentUser) return [];
+    const roles = currentUser.roles;
+    if (roles.includes('Admin') || roles.includes('Owner')) {
+      return columns;
+    }
+
+    const allowed = new Set<string>();
+
+    if (roles.includes('Strategist')) {
+      STRATEGIC_COLUMNS.forEach((col) => allowed.add(col));
+    }
+    if (roles.includes('Production Assistant')) {
+      allowed.add('Production');
+      allowed.add('Shooting');
+    }
+    if (roles.includes('Editor')) {
+      allowed.add('Editing');
+      allowed.add('Revision');
+    }
+    if (roles.includes('Scheduler')) {
+      allowed.add('Ready to Post');
+      allowed.add('Scheduling');
+      allowed.add('Posted');
+    }
+
+    return columns.filter((col) => allowed.has(col));
+  };
+
+  const visibleColumns = getVisibleColumns();
 
   // Filtered tasks for presentation
   const filteredTasks = workspaceTasks.filter((t) => {
@@ -698,6 +744,12 @@ export default function KanbanPage() {
     // 2. Enforce Role Permissions on moves
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (!isExecutive) {
+      if (!canAccessTaskDetails(taskObj)) {
+        showToast('Unauthorized: You can only move tasks assigned to you.', 'warning');
+        setDraggedTaskId(null);
+        setDragOverColumn(null);
+        return;
+      }
       if (taskObj.category === 'Strategic' && !currentUser.roles.includes('Strategist')) {
         showToast('Only Strategists can manage Strategic Workflow', 'warning');
         setDraggedTaskId(null);
@@ -859,7 +911,7 @@ export default function KanbanPage() {
             className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
           >
             <option value="ALL">All Stages</option>
-            {columns.map((col) => (
+            {visibleColumns.map((col) => (
               <option key={col} value={col}>
                 {col}
               </option>
@@ -883,7 +935,7 @@ export default function KanbanPage() {
                 className="bg-white border border-neutral-200 rounded-lg px-2 py-1.5"
               >
                 <option value="">Move Stage To...</option>
-                {columns.map((c) => (
+                {visibleColumns.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -936,7 +988,7 @@ export default function KanbanPage() {
       {viewType === 'kanban' ? (
         /* KANBAN BOARD VIEW */
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin select-none">
-          {columns.map((col) => {
+          {visibleColumns.map((col) => {
             const colTasks = filteredTasks.filter((t) => t.status === col);
             const isDragOver = dragOverColumn === col;
 
@@ -1004,7 +1056,13 @@ export default function KanbanPage() {
                             setDraggedTaskId(null);
                             setDragOverColumn(null);
                           }}
-                          onClick={() => setSelectedTaskDetail(task)}
+                          onClick={() => {
+                            if (canAccessTaskDetails(task)) {
+                              setSelectedTaskDetail(task);
+                            } else {
+                              showToast('Unauthorized: You are not assigned to this task.', 'warning');
+                            }
+                          }}
                           className={`bg-white border border-neutral-200/80 rounded-xl p-4 hover:border-neutral-400 hover:shadow-md transition cursor-pointer space-y-3 relative ${
                             isBeingDragged ? 'opacity-40 border-neutral-900 shadow-inner' : 'shadow-2xs'
                           }`}
@@ -1148,7 +1206,13 @@ export default function KanbanPage() {
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{t.score}</td>
                       <td className="px-4 py-3.5 text-center">
                         <button
-                          onClick={() => setSelectedTaskDetail(t)}
+                          onClick={() => {
+                            if (canAccessTaskDetails(t)) {
+                              setSelectedTaskDetail(t);
+                            } else {
+                              showToast('Unauthorized: You are not assigned to this task.', 'warning');
+                            }
+                          }}
                           className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -1496,7 +1560,7 @@ export default function KanbanPage() {
                       onChange={(e) => setEditStatus(e.target.value as any)}
                       className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-semibold"
                     >
-                      {columns.map((col) => (
+                      {visibleColumns.map((col) => (
                         <option key={col} value={col}>
                           {col}
                         </option>

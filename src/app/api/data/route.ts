@@ -12,8 +12,39 @@ import {
   Notification,
 } from '@prisma/client';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const userIdHeader = req.headers.get('X-User-Id') || '';
+    
+    // Authenticate and fetch user from DB to identify roles
+    const userRecord = userIdHeader ? await prisma.user.findUnique({ where: { id: userIdHeader } }) : null;
+    const dbRoles: string[] = userRecord ? (typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles) : [];
+    
+    let tasksQuery: any = { orderBy: { createdAt: 'desc' } };
+    let worklogsQuery: any = { orderBy: { date: 'desc' } };
+
+    if (userRecord) {
+      const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
+      if (!isExecutive) {
+        tasksQuery.where = {
+          OR: [
+            { assignedUserIds: { contains: userRecord.id } },
+            { assignedUserIds: { contains: userRecord.name } },
+            { stages: { contains: userRecord.id } },
+            { stages: { contains: userRecord.name } }
+          ]
+        };
+
+        worklogsQuery.where = {
+          OR: [
+            { userId: userRecord.id },
+            { stages: { contains: userRecord.id } },
+            { stages: { contains: userRecord.name } }
+          ]
+        };
+      }
+    }
+
     // 1. Fetch all dataset collections in parallel for maximum speed
     const [
       settings,
@@ -32,8 +63,8 @@ export async function GET() {
       prisma.companySetting.findFirst(),
       prisma.user.findMany(),
       prisma.client.findMany(),
-      prisma.task.findMany({ orderBy: { createdAt: 'desc' } }),
-      prisma.worklog.findMany({ orderBy: { date: 'desc' } }),
+      prisma.task.findMany(tasksQuery),
+      prisma.worklog.findMany(worklogsQuery),
       prisma.attendance.findMany({ orderBy: { date: 'desc' } }),
       prisma.leaveRequest.findMany({ orderBy: { createdAt: 'desc' } }),
       prisma.clientMonthlyBudget.findMany(),

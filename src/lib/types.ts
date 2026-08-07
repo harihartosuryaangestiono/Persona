@@ -119,6 +119,8 @@ export interface WorklogItem {
   year: number;
   contentId: string;
   isArchived: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AttendanceItem {

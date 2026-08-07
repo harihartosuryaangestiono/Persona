@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculatePriority } from '@/lib/score-calculator';
+import { isPicAllowedForTaskType, checkTaskAccess } from '@/lib/rbac';
+import { getDbStatus } from '@/lib/status';
 
 function checkAuth(req: Request, allowedRoles: string[]): boolean {
   const userRoleHeader = req.headers.get('X-User-Role') || '';
@@ -8,6 +10,46 @@ function checkAuth(req: Request, allowedRoles: string[]): boolean {
   const roles = userRoleHeader.split(',').map((r) => r.trim());
   if (roles.includes('Admin') || roles.includes('Owner')) return true;
   return roles.some((role) => allowedRoles.includes(role));
+}
+
+async function validateTaskAssignments(stages: any[]): Promise<string | null> {
+  if (!stages || !Array.isArray(stages)) return null;
+
+  for (const s of stages) {
+    if (!s.userId) continue;
+    const assignedUser = await prisma.user.findUnique({ where: { id: s.userId } });
+    if (!assignedUser) {
+      return `User not found: ${s.userId}`;
+    }
+    const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
+    const isAllowed = isPicAllowedForTaskType(roles, s.taskType || s.role);
+    if (!isAllowed) {
+      return `${assignedUser.name} (${roles.join(', ')}) is not authorized for task type ${s.taskType || s.role}`;
+    }
+  }
+  return null;
+}
+
+async function validateCategoryAssignments(assignedUserIds: string[], category: string): Promise<string | null> {
+  if (!assignedUserIds || !Array.isArray(assignedUserIds)) return null;
+
+  for (const uid of assignedUserIds) {
+    const assignedUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: uid },
+          { name: uid }
+        ]
+      }
+    });
+    if (!assignedUser) continue;
+    const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
+    const isAllowed = isPicAllowedForTaskType(roles, category);
+    if (!isAllowed) {
+      return `${assignedUser.name} (${roles.join(', ')}) is not authorized for category ${category}`;
+    }
+  }
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -36,8 +78,24 @@ export async function POST(req: Request) {
       }
     }
 
+    // Validate stage assignments
+    if (body.stages) {
+      const err = await validateTaskAssignments(body.stages);
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 });
+      }
+    }
+
+    // Validate category assignments
+    if (body.assignedUserIds && category) {
+      const err = await validateCategoryAssignments(body.assignedUserIds, category);
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 });
+      }
+    }
+
     // Respect requested status if passed; otherwise resolve default from category
-    let defaultStatus = body.status || 'Brief';
+    let defaultStatus = body.status ? getDbStatus(body.status) : 'Brief';
     if (!body.status) {
       if (category === 'Strategic') defaultStatus = 'Brief';
       else if (category === 'Production') defaultStatus = 'Production';
@@ -126,10 +184,12 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const userRoleHeader = req.headers.get('X-User-Role') || '';
-    const roles = userRoleHeader.split(',').map((r) => r.trim());
-    const isAdmin = roles.includes('Admin') || roles.includes('Owner');
     const currentUserId = req.headers.get('X-User-Id') || 'u-system';
+    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    if (!userRecord) {
+      return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
+    }
+    const dbRoles: string[] = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
@@ -138,24 +198,38 @@ export async function PATCH(req: Request) {
     const existingTask = await prisma.task.findUnique({ where: { id } });
     if (!existingTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
-    const assignedIds: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
-    const isUnassigned = assignedIds.length === 0;
-
-    // Check if user has role authorization
-    const isRoleAuthorized =
-      roles.includes('Production Assistant') ||
-      roles.includes('Editor') ||
-      roles.includes('Strategist') ||
-      roles.includes('Scheduler');
-
-    if (!isAdmin && !isUnassigned && !isRoleAuthorized) {
-      const isAssignedToUser = assignedIds.includes(currentUserId);
-      if (!isAssignedToUser) {
-        return NextResponse.json({ error: 'You can only update tasks assigned to you or in your role domain' }, { status: 403 });
-      }
+    // Ownership & Access Control Check
+    const hasAccess = checkTaskAccess(
+      { id: userRecord.id, name: userRecord.name, roles: dbRoles },
+      { assignedUserIds: existingTask.assignedUserIds, stages: existingTask.stages }
+    );
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
 
     const body = await req.json();
+
+    // Validate stage assignments
+    if (body.stages) {
+      const err = await validateTaskAssignments(body.stages);
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 });
+      }
+    }
+
+    // Validate category assignments
+    if (body.assignedUserIds || body.category) {
+      const finalCategory = body.category !== undefined ? body.category : existingTask.category;
+      const finalAssignedUserIds = body.assignedUserIds !== undefined
+        ? (Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]'))
+        : JSON.parse(existingTask.assignedUserIds || '[]');
+
+      const err = await validateCategoryAssignments(finalAssignedUserIds, finalCategory);
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 });
+      }
+    }
+
     const updateData: any = {};
 
     if (body.title !== undefined) updateData.title = body.title;
@@ -176,24 +250,25 @@ export async function PATCH(req: Request) {
 
     // Set stage status and track transition log (Requirement 7)
     if (body.status !== undefined) {
-      updateData.status = body.status;
-      if (body.status !== existingTask.status) {
+      const dbStatus = getDbStatus(body.status);
+      updateData.status = dbStatus;
+      if (dbStatus !== existingTask.status) {
         const timeline = JSON.parse(existingTask.workflowTimeline || '[]');
         timeline.push({
-          status: body.status,
+          status: dbStatus,
           timestamp: new Date().toISOString(),
           userId: currentUserId,
         });
         updateData.workflowTimeline = JSON.stringify(timeline);
 
         // Check if hand-off from Strategic to Production occurs (Requirement 1 & 6)
-        if (body.status === 'Production' && existingTask.category === 'Strategic') {
+        if (dbStatus === 'Production' && existingTask.category === 'Strategic') {
           updateData.category = 'Production';
           updateData.handoverUserId = currentUserId;
           updateData.handoverTime = new Date();
         }
 
-        if (body.status === 'Posted' || body.status === 'Completed') {
+        if (dbStatus === 'Posted' || dbStatus === 'Completed') {
           const settings = await prisma.companySetting.findFirst();
           if (settings && settings.archiveRule === 'IMMEDIATE') {
             updateData.isArchived = true;
@@ -214,7 +289,7 @@ export async function PATCH(req: Request) {
 
     const postingDateVal = body.postingDate !== undefined ? body.postingDate : existingTask.postingDate;
     const deadlineVal = body.deadline !== undefined ? new Date(body.deadline) : existingTask.deadline;
-    const statusVal = body.status !== undefined ? body.status : existingTask.status;
+    const statusVal = body.status !== undefined ? getDbStatus(body.status) : existingTask.status;
 
     if (body.deadline !== undefined) {
       updateData.deadline = deadlineVal;
@@ -226,9 +301,11 @@ export async function PATCH(req: Request) {
     // Assignment restrictions (Requirement 7)
     if (body.assignedUserIds !== undefined) {
       const newAssignedIds = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]');
-      if (!isAdmin && !roles.includes('Strategist')) {
+      const isAdmin = dbRoles.includes('Admin') || dbRoles.includes('Owner');
+      if (!isAdmin && !dbRoles.includes('Strategist')) {
+        const originalAssigned: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
         const isSelfAssign = newAssignedIds.length <= 1 && (newAssignedIds.length === 0 || newAssignedIds[0] === currentUserId);
-        const noChange = JSON.stringify(newAssignedIds.sort()) === JSON.stringify(assignedIds.sort());
+        const noChange = JSON.stringify(newAssignedIds.sort()) === JSON.stringify(originalAssigned.sort());
         if (!isSelfAssign && !noChange) {
           return NextResponse.json({ error: 'You are not authorized to assign other employees' }, { status: 403 });
         }
@@ -299,8 +376,16 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    if (!checkAuth(req, [])) { // Only Admin or Owner allowed
-      return NextResponse.json({ error: 'Unauthorized role' }, { status: 403 });
+    const currentUserId = req.headers.get('X-User-Id') || 'u-system';
+    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    if (!userRecord) {
+      return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
+    }
+    const dbRoles: string[] = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
+    const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
+
+    if (!isExecutive) {
+      return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);

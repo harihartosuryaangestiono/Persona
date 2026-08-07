@@ -8,6 +8,7 @@ import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp
 import * as XLSX from 'xlsx';
 import { calculateTaskScore, normalizeFormat, calculateCOGS, parseExcelDate } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
+import { getDbStatus, getStatusLabel } from '@/lib/status';
 
 interface WorklogStage {
   id: string;
@@ -76,7 +77,7 @@ export default function WorklogPage() {
     setEditQty(w.qty || 1);
     setEditScore(w.score || 10);
     setEditDate(w.date ? new Date(w.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-    setEditStatus(w.status || 'Posted');
+    setEditStatus(getStatusLabel(w.status || 'Posted'));
     setEditPreviewLink(w.previewLink || '');
   };
 
@@ -120,7 +121,7 @@ export default function WorklogPage() {
       score: editScore,
       cogs: calculateCOGS(editScore),
       date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
-      status: editStatus as any,
+      status: getDbStatus(editStatus) as any,
       previewLink: editPreviewLink.trim(),
       stages: hasMultipleStages
         ? parsedStages
@@ -187,6 +188,22 @@ export default function WorklogPage() {
   const filteredLogs = combinedLogs.filter((w) => {
     if (deletedRowIds.includes(w.id) || (w.contentId && deletedRowIds.includes(w.contentId))) {
       return false;
+    }
+
+    if (currentUser) {
+      const isExecutive =
+        currentUser.roles.includes('Admin') ||
+        currentUser.roles.includes('Owner') ||
+        currentUser.roles.includes('Strategist');
+      if (!isExecutive) {
+        const isOwner = w.userId === currentUser.id || w.userName === currentUser.name;
+        const stages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+        const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
+        
+        if (!isOwner && !isStageAssignee) {
+          return false;
+        }
+      }
     }
 
     const query = searchQuery.toLowerCase();
@@ -508,7 +525,50 @@ export default function WorklogPage() {
     showToast(`Worklog "${target.contentTitle}" berhasil dihapus`, 'success');
   };
 
-  const allFilteredIds = filteredLogs.map((w) => w.id);
+  const canModifyWorklog = (w: WorklogItem) => {
+    if (!currentUser) return false;
+    const isExecutive =
+      currentUser.roles.includes('Admin') ||
+      currentUser.roles.includes('Owner') ||
+      currentUser.roles.includes('Strategist');
+    if (isExecutive) return true;
+
+    // Check if the current user is the owner of the worklog
+    if (w.userId === currentUser.id || w.userName === currentUser.name) return true;
+
+    // Check if the current user is in one of the stages
+    const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+    if (Array.isArray(logStages) && logStages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const getBadgeClass = (status: string) => {
+    const s = getStatusLabel(status);
+    switch (s) {
+      case 'Brief':
+        return 'badge-draft';
+      case 'In Progress':
+        return 'badge-in-progress';
+      case 'Approval':
+      case 'Waiting Approval':
+      case 'Waiting for Approval':
+        return 'badge-waiting';
+      case 'Completed':
+      case 'Approved':
+        return 'badge-approved';
+      case 'Scheduling':
+        return 'badge-scheduled';
+      case 'Posted':
+        return 'badge-posted';
+      default:
+        return 'badge-draft';
+    }
+  };
+
+  const allFilteredIds = filteredLogs.filter(canModifyWorklog).map((w) => w.id);
   const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedIds.includes(id));
 
   const toggleSelectAll = () => {
@@ -630,13 +690,15 @@ export default function WorklogPage() {
                   <React.Fragment key={w.id}>
                     <tr className={`hover:bg-neutral-50 transition ${selectedIds.includes(w.id) ? 'bg-red-50/40 hover:bg-red-50/60' : ''}`}>
                       <td className="px-4 py-3.5 text-center">
-                        {currentUser && (
+                        {currentUser && canModifyWorklog(w) ? (
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(w.id)}
                             onChange={() => toggleSelectRow(w.id)}
                             className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
                           />
+                        ) : (
+                          <span className="text-neutral-300">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3.5">
@@ -657,8 +719,8 @@ export default function WorklogPage() {
                       <td className="px-4 py-3.5 font-semibold text-neutral-700">{uniqueUserNames}</td>
                       <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{w.score} pts</td>
                       <td className="px-4 py-3.5">
-                        <span className="badge-draft text-[10px] px-2 py-0.5 rounded border border-neutral-200 font-bold">
-                          {w.status}
+                        <span className={`${getBadgeClass(w.status)} text-[10px] px-2 py-0.5 rounded font-bold`}>
+                          {getStatusLabel(w.status)}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-neutral-500 font-semibold">{w.source || 'To Do List'}</td>
@@ -677,7 +739,7 @@ export default function WorklogPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-center">
-                        {currentUser && (
+                        {currentUser && canModifyWorklog(w) ? (
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => openEditModal(w)}
@@ -694,6 +756,8 @@ export default function WorklogPage() {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
+                        ) : (
+                          <span className="text-neutral-300">-</span>
                         )}
                       </td>
                     </tr>

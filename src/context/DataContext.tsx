@@ -13,6 +13,7 @@ import {
   ActivityLogItem,
 } from '@/lib/types';
 import { MASTER_SCORES_STATIC, calculateCOGS, calculatePriority } from '@/lib/score-calculator';
+import { getStatusLabel, getDbStatus } from '@/lib/status';
 
 interface DataContextType {
   tasks: TaskItem[];
@@ -62,6 +63,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { syncUsers, currentUser } = useUser();
 
+  const normalizeTask = (t: TaskItem): TaskItem => ({
+    ...t,
+    status: getDbStatus(getStatusLabel(t.status)) as any
+  });
+
+  const normalizeWorklog = (w: WorklogItem): WorklogItem => ({
+    ...w,
+    status: getStatusLabel(w.status)
+  });
+
   const fetchInitialData = async () => {
     try {
       const headers: HeadersInit = {};
@@ -73,9 +84,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const json = await res.json();
         syncUsers(json.users || []);
-        setTasks(json.tasks || []);
+        setTasks((json.tasks || []).map(normalizeTask));
         setClients(json.clients || []);
-        setWorklogs(json.worklogs || []);
+        setWorklogs((json.worklogs || []).map(normalizeWorklog));
         setAttendances(json.attendances || []);
         setLeaveRequests(json.leaveRequests || []);
         setBudgets(json.budgets || []);
@@ -165,7 +176,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
         if (res.ok) {
           const saved = await res.json();
-          setTasks((prev) => [saved, ...prev]);
+          setTasks((prev) => [normalizeTask(saved), ...prev]);
           await fetchInitialData();
           return saved;
         }
@@ -174,14 +185,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setTasks((prev) => [created, ...prev]);
+    setTasks((prev) => [normalizeTask(created), ...prev]);
     return created;
   };
 
   const updateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     // Optimistic local state update
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t))
+      prev.map((t) => (t.id === taskId ? normalizeTask({ ...t, status: newStatus, updatedAt: new Date().toISOString() }) : t))
     );
     addActivity(currentUser?.id || 'u-system', 'TASK', taskId, 'MOVED', `Moved task to stage ${newStatus}`);
 
@@ -198,7 +209,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
         if (res.ok) {
           const saved = await res.json();
-          setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+          setTasks((prev) => prev.map((t) => (t.id === taskId ? normalizeTask(saved) : t)));
         }
       } catch (err) {
         console.error(err);
@@ -242,7 +253,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     // Optimistic local state update first so UI updates immediately
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, ...updatedTaskData, updatedAt: new Date().toISOString() } : t))
+      prev.map((t) => (t.id === taskId ? normalizeTask({ ...t, ...updatedTaskData, updatedAt: new Date().toISOString() }) : t))
     );
 
     // If there is a matching worklog, update it in local state and sync to DB
@@ -253,7 +264,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setWorklogs((prev) =>
           prev.map((w) =>
             w.contentId === contentIdVal
-              ? {
+              ? normalizeWorklog({
                   ...w,
                   contentTitle: updatedTaskData.title || w.contentTitle,
                   clientId: updatedTaskData.clientId || w.clientId,
@@ -262,7 +273,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                   taskType: updatedTaskData.taskType || w.taskType,
                   format: updatedTaskData.format || w.format,
                   stages: updatedTaskData.stages || w.stages,
-                }
+                  date: updatedTaskData.postingDate || w.date,
+                })
               : w
           )
         );
@@ -282,6 +294,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 taskType: updatedTaskData.taskType || mw.taskType,
                 format: updatedTaskData.format || mw.format,
                 stages: updatedTaskData.stages || mw.stages,
+                date: updatedTaskData.postingDate || mw.date,
               }),
             });
           } catch (err) {
@@ -304,7 +317,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
         if (res.ok) {
           const saved = await res.json();
-          setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+          setTasks((prev) => prev.map((t) => (t.id === taskId ? normalizeTask(saved) : t)));
         }
       } catch (err) {
         console.error(err);
@@ -378,7 +391,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       isArchived: log.isArchived || false,
     };
 
-    setWorklogs((prev) => [item, ...prev]);
+    setWorklogs((prev) => [normalizeWorklog(item), ...prev]);
 
     const parsedStages = item.stages ? (typeof item.stages === 'string' ? JSON.parse(item.stages) : item.stages) : [];
     const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
@@ -416,7 +429,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
 
-    setTasks((prev) => [newTask, ...prev]);
+    setTasks((prev) => [normalizeTask(newTask), ...prev]);
 
     if (item.clientId || item.clientName) {
       setClients((prev) =>
@@ -456,11 +469,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateWorklog = async (updatedItem: WorklogItem) => {
-    setWorklogs((prev) => prev.map((w) => (w.id === updatedItem.id ? updatedItem : w)));
+    // Optimistic local state updates for immediate UI reaction
+    setWorklogs((prev) => prev.map((w) => (w.id === updatedItem.id ? normalizeWorklog(updatedItem) : w)));
     setTasks((prev) =>
       prev.map((t) =>
         t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
-          ? {
+          ? normalizeTask({
               ...t,
               title: updatedItem.contentTitle,
               clientId: updatedItem.clientId,
@@ -469,49 +483,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               taskType: updatedItem.taskType,
               format: updatedItem.format,
               stages: updatedItem.stages,
-            }
+              status: updatedItem.status === 'In Progress' ? 'Editing' : (updatedItem.status as any),
+              postingDate: updatedItem.date,
+              deadline: updatedItem.date,
+            })
           : t
       )
     );
 
-    const matchingTask = tasks.find(
-      (t) => t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
-    );
-
     try {
       const isVirtual = updatedItem.id.startsWith('worklog-task-');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (currentUser) {
+        headers['X-User-Id'] = currentUser.id;
+        headers['X-User-Role'] = currentUser.roles.join(',');
+      }
+
+      let res;
       if (isVirtual) {
-        await fetch('/api/worklogs', {
+        res = await fetch('/api/worklogs', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(updatedItem),
         });
       } else {
-        await fetch(`/api/worklogs?id=${updatedItem.id}`, {
+        res = await fetch(`/api/worklogs?id=${updatedItem.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(updatedItem),
         });
       }
 
-      if (matchingTask) {
-        await fetch(`/api/tasks?id=${matchingTask.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-User-Id': currentUser?.id || 'u-system',
-            'X-User-Role': currentUser?.roles.join(',') || '',
-          },
-          body: JSON.stringify({
-            title: updatedItem.contentTitle,
-            clientId: updatedItem.clientId,
-            clientName: updatedItem.clientName,
-            score: updatedItem.score,
-            taskType: updatedItem.taskType,
-            format: updatedItem.format,
-            stages: updatedItem.stages,
-          }),
-        });
+      if (res.ok) {
+        await fetchInitialData();
       }
     } catch (e) {
       console.error('Failed to sync updated worklog:', e);
@@ -662,8 +666,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
-    setWorklogs((prev) => [...formatted, ...prev]);
-    setTasks((prev) => [...formattedTasks, ...prev]);
+    setWorklogs((prev) => [...formatted.map(normalizeWorklog), ...prev]);
+    setTasks((prev) => [...formattedTasks.map(normalizeTask), ...prev]);
 
     setClients((prev) => {
       const clientAddedPoints: Record<string, number> = {};
