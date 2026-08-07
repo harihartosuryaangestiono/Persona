@@ -1618,7 +1618,7 @@ export default function KanbanPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-neutral-700 font-semibold">Preview link</label>
+                    <label className="block text-neutral-700 font-semibold">Post Link (Proof of Posting)</label>
                     <input
                       type="url"
                       value={editPreviewLink}
@@ -1931,7 +1931,7 @@ export default function KanbanPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-neutral-550 font-semibold block">Preview Link</span>
+                    <span className="text-neutral-550 font-semibold block">Post Link</span>
                     {selectedTaskDetail.previewLink ? (
                       <a
                         href={selectedTaskDetail.previewLink}
@@ -1940,13 +1940,13 @@ export default function KanbanPage() {
                         className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 font-semibold hover:bg-emerald-100 transition"
                       >
                         <span className="flex items-center gap-2">
-                          <Video className="w-4 h-4" /> Preview Link
+                          <Video className="w-4 h-4" /> Post Link
                         </span>
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     ) : (
                       <div className="p-3 bg-neutral-50 border border-neutral-200 border-dashed rounded-xl text-neutral-400 text-center">
-                        No Preview Link Added
+                        No Post Link Added
                       </div>
                     )}
                   </div>

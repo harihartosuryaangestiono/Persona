@@ -39,6 +39,7 @@ export async function GET(req: Request) {
         if (userIsScheduler) {
           orClauses.push({ status: 'Scheduling' });
           orClauses.push({ status: 'Ready to Post' });
+          orClauses.push({ status: 'Posted' });
           orClauses.push({ stages: { contains: 'Scheduler' } });
           // also include any stage entries that mention scheduling in taskType
           orClauses.push({ stages: { contains: 'scheduling' } });

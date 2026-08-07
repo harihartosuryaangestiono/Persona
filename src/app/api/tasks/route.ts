@@ -268,6 +268,63 @@ export async function PATCH(req: Request) {
           updateData.handoverTime = new Date();
         }
 
+        // When a task is moved to Scheduling, ensure there's an explicit Scheduler stage and assignment
+        if (dbStatus === 'Scheduling') {
+          try {
+            const existingStages = existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : [];
+            const hasSchedulerStage = Array.isArray(existingStages) && existingStages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
+            if (!hasSchedulerStage) {
+              // Find any user with Scheduler role as a sensible default
+              const schedulerUser = await prisma.user.findFirst();
+              // Attempt to find by roles field if available
+              if (schedulerUser) {
+                const rolesField = typeof schedulerUser.roles === 'string' ? JSON.parse(schedulerUser.roles) : schedulerUser.roles || [];
+                // prefer a user who has Scheduler role
+                let chosenScheduler = null as any;
+                if (Array.isArray(rolesField) && rolesField.includes('Scheduler')) {
+                  chosenScheduler = schedulerUser;
+                } else {
+                  // fallback: try to find any user that contains 'Scheduler' in roles
+                  const maybe = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } }).catch(() => null);
+                  if (maybe) chosenScheduler = maybe;
+                }
+
+                  if (!chosenScheduler) {
+                  // try a direct query for any user with 'Scheduler' substring in roles
+                  const maybe2 = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } }).catch(() => null);
+                  if (maybe2) chosenScheduler = maybe2;
+                }
+
+                if (chosenScheduler) {
+                  const schedId = chosenScheduler.id;
+                  const schedName = chosenScheduler.name;
+                  const newStage = {
+                    id: `stg-${Date.now()}`,
+                    role: 'Scheduler',
+                    userId: schedId,
+                    userName: schedName,
+                    taskType: 'Scheduling',
+                    format: 'Per Post',
+                    qty: 1,
+                    score: 50,
+                  };
+                  const newStages = Array.isArray(existingStages) ? [...existingStages, newStage] : [newStage];
+                  updateData.stages = JSON.stringify(newStages);
+
+                  // ensure assignedUserIds includes scheduler
+                  const assignedArr = existingTask.assignedUserIds ? (typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds) : [];
+                  if (!assignedArr.includes(schedId) && !assignedArr.includes(schedName)) {
+                    assignedArr.push(schedId);
+                    updateData.assignedUserIds = JSON.stringify(assignedArr);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to auto-assign scheduler stage:', e);
+          }
+        }
+
         if (dbStatus === 'Posted' || dbStatus === 'Completed') {
           const settings = await prisma.companySetting.findFirst();
           if (settings && settings.archiveRule === 'IMMEDIATE') {
@@ -338,6 +395,8 @@ export async function PATCH(req: Request) {
       const syncId = body.clientId || existingTask.clientId;
       const tasks = await tx.task.findMany({ where: { clientId: syncId, isArchived: false } });
       const usedPoint = tasks.reduce((sum, t) => sum + (t.score || 0), 0);
+          // Also clear any existing preview link so Scheduler must provide Post Link proof
+          updateData.previewLink = '';
       const client = await tx.client.findUnique({ where: { id: syncId } });
       if (client) {
         await tx.client.update({

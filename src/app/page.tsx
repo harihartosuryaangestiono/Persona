@@ -668,7 +668,7 @@ export default function DynamicDashboardPage() {
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase font-bold">Preview / Reels Link</label>
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase font-bold">Post Link</label>
                   {editPreviewLink && (
                     <a
                       href={editPreviewLink}
@@ -676,7 +676,7 @@ export default function DynamicDashboardPage() {
                       rel="noreferrer"
                       className="text-blue-650 hover:underline flex items-center gap-0.5 text-[9px] font-bold"
                     >
-                      <ExternalLink className="w-2.5 h-2.5" /> Open Preview
+                      <ExternalLink className="w-2.5 h-2.5" /> Open Post Link
                     </a>
                   )}
                 </div>
