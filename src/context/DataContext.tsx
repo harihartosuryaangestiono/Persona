@@ -106,7 +106,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchInitialData();
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const getTaskScore = (t: Partial<TaskItem>) => {
     if (t.stages && Array.isArray(t.stages) && t.stages.length > 0) {
