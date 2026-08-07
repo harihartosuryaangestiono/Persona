@@ -9,8 +9,19 @@ import { useToast } from '@/context/ToastContext';
 
 const PRESET_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#6366F1', '#EF4444', '#14B8A6'];
 
+function getBudgetMonthFormat(month: string, year: number) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const idx = monthNames.indexOf(month);
+  if (idx === -1) return '';
+  const mStr = String(idx + 1).padStart(2, '0');
+  return `${year}-${mStr}`;
+}
+
 export default function ClientsPage() {
-  const { clients, tasks, refreshData } = useData();
+  const { clients, tasks, budgets, refreshData } = useData();
   const { currentWorkspace, workspaces } = useWorkspace();
   const { currentUser } = useUser();
   const { showToast } = useToast();
@@ -170,11 +181,28 @@ export default function ClientsPage() {
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredClients.map((cli) => {
-          const clientTasks = tasks.filter((t) => t.clientId === cli.id);
-          const burnPercent = cli.monthlyPointBudget > 0 ? Math.round((cli.usedPoint / cli.monthlyPointBudget) * 100) : 0;
-          const isExceeded = cli.usedPoint > cli.monthlyPointBudget;
-          const exceededPoints = cli.usedPoint - cli.monthlyPointBudget;
-          const exceededPercent = cli.monthlyPointBudget > 0 ? Math.round((exceededPoints / cli.monthlyPointBudget) * 100) : 0;
+          // Default to current real-world month and year
+          const currentDate = new Date();
+          const monthNames = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+          ];
+          const currentMonth = monthNames[currentDate.getMonth()];
+          const currentYear = currentDate.getFullYear();
+
+          const budgetMonthKey = getBudgetMonthFormat(currentMonth, currentYear);
+          const monthlyBudgetObj = budgets.find((b) => b.clientId === cli.id && b.month === budgetMonthKey);
+          const budgetPoints = monthlyBudgetObj ? monthlyBudgetObj.budget : cli.monthlyPointBudget;
+
+          const usedPoints = tasks
+            .filter((t) => t.clientId === cli.id && !t.isArchived && t.month === currentMonth && Number(t.year) === currentYear)
+            .reduce((sum, t) => sum + (t.score || 0), 0);
+
+          const remainingPoints = Math.max(0, budgetPoints - usedPoints);
+          const burnPercent = budgetPoints > 0 ? Math.round((usedPoints / budgetPoints) * 100) : 0;
+          const isExceeded = usedPoints > budgetPoints;
+          const exceededPoints = usedPoints - budgetPoints;
+          const exceededPercent = budgetPoints > 0 ? Math.round((exceededPoints / budgetPoints) * 100) : 0;
 
           // Status & Badge styles
           let statusText = cli.status || (cli.active ? 'Active' : 'Inactive');
@@ -213,7 +241,7 @@ export default function ClientsPage() {
 
                   <div className="text-right">
                     <span className="text-xs font-mono font-bold text-neutral-900">
-                      {cli.monthlyPointBudget} pts
+                      {budgetPoints} pts
                     </span>
                     <p className="text-[10px] text-neutral-400">Budget</p>
                   </div>
@@ -222,14 +250,14 @@ export default function ClientsPage() {
                 {/* Point Usage Progress */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-neutral-500">Used: {cli.usedPoint} pts</span>
+                    <span className="text-neutral-500">Used: {usedPoints} pts</span>
                     {isExceeded ? (
                       <span className="font-bold text-red-600">
-                        Rem: {cli.remainingPoint} pts ({burnPercent}%)
+                        Rem: {remainingPoints} pts ({burnPercent}%)
                       </span>
                     ) : (
                       <span className="font-bold text-emerald-700">
-                        Rem: {cli.remainingPoint} pts ({burnPercent}%)
+                        Rem: {remainingPoints} pts ({burnPercent}%)
                       </span>
                     )}
                   </div>

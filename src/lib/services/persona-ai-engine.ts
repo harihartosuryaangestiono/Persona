@@ -120,7 +120,12 @@ export class FunctionRegistry {
     const revision = cLogs.filter((w) => w.status === 'Revision').length;
     const approval = cLogs.filter((w) => w.status === 'Waiting for Approval' || w.status === 'Approval').length;
 
-    const totalUsedPts = targetClients.reduce((sum, c) => sum + (c.usedPoint || 0), 0);
+    const totalUsedPts = targetClients.reduce((sum, c) => {
+      const usedPoints = tasks
+        .filter((t) => t.clientId === c.id && !t.isArchived && t.month === month && Number(t.year) === year)
+        .reduce((sum2, t) => sum2 + (t.score || 0), 0);
+      return sum + usedPoints;
+    }, 0);
     const totalBudgetPts = targetClients.reduce((sum, c) => sum + (c.monthlyPointBudget || 5000), 0);
     const remainingBudget = Math.max(0, totalBudgetPts - totalUsedPts);
     const budgetPct = totalBudgetPts > 0 ? Math.round((totalUsedPts / totalBudgetPts) * 100) : 0;
@@ -788,8 +793,27 @@ export class PersonaAIEngine {
 
     // Budget Usage
     const clientBudgetsList = clients.map((c) => {
-      const pct = c.monthlyPointBudget > 0 ? Math.round((c.usedPoint / c.monthlyPointBudget) * 100) : 0;
-      return { name: c.name, percent: pct };
+      const getBudgetMonthFormat = (month: string, yr: number) => {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        const idx = monthNames.indexOf(month);
+        if (idx === -1) return '';
+        const mStr = String(idx + 1).padStart(2, '0');
+        return `${yr}-${mStr}`;
+      };
+
+      const budgetMonthKey = getBudgetMonthFormat(targetMonth, targetYear);
+      const monthlyBudgetObj = budgets.find((b) => b.clientId === c.id && b.month === budgetMonthKey);
+      const budgetPoints = monthlyBudgetObj ? monthlyBudgetObj.budget : c.monthlyPointBudget;
+
+      const usedPoints = tasks
+        .filter((t) => t.clientId === c.id && !t.isArchived && t.month === targetMonth && Number(t.year) === targetYear)
+        .reduce((sum, t) => sum + (t.score || 0), 0);
+
+      const pct = budgetPoints > 0 ? Math.round((usedPoints / budgetPoints) * 100) : 0;
+      return { name: c.name, percent: pct, usedPoints, budgetPoints };
     }).sort((a, b) => b.percent - a.percent);
 
     const highestBudgetUsage = clientBudgetsList.length > 0 ? clientBudgetsList[0] : { name: 'None', percent: 0 };
@@ -807,7 +831,7 @@ export class PersonaAIEngine {
     const highestWorkloadUser = userScores.sort((a, b) => b.percent - a.percent)[0] || { name: 'Jabin', percent: 0 };
     const mostAvailableCapacityUser = userScores.sort((a, b) => b.remainingPts - a.remainingPts)[0] || { name: 'Dinda', remainingPts: 16000 };
 
-    const exceededBudgets = clients.filter((c) => c.usedPoint >= c.monthlyPointBudget).length;
+    const exceededBudgets = clientBudgetsList.filter((c) => c.usedPoints >= c.budgetPoints).length;
     const highCapacityEmployees = userScores.filter((u) => u.percent >= 90).length;
 
     // MoM quick insights

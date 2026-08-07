@@ -34,9 +34,20 @@ function formatUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
+function getBudgetMonthFormat(month: string, year: number) {
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const idx = monthNames.indexOf(month);
+  if (idx === -1) return '';
+  const mStr = String(idx + 1).padStart(2, '0');
+  return `${year}-${mStr}`;
+}
+
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
-  const { tasks, worklogs, clients, attendances, approveTask, updateTask } = useData();
+  const { tasks, worklogs, clients, attendances, approveTask, updateTask, budgets } = useData();
   const { currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
 
@@ -324,15 +335,23 @@ export default function DynamicDashboardPage() {
               </h3>
               <div className="space-y-3 text-xs">
                 {clients.slice(0, 4).map((c) => {
-                  const percent = c.monthlyPointBudget > 0 ? Math.round((c.usedPoint / c.monthlyPointBudget) * 100) : 0;
-                  const isOver = c.usedPoint > c.monthlyPointBudget;
+                  const budgetMonthKey = getBudgetMonthFormat(selectedMonth, selectedYear);
+                  const monthlyBudgetObj = budgets.find((b) => b.clientId === c.id && b.month === budgetMonthKey);
+                  const budgetPoints = monthlyBudgetObj ? monthlyBudgetObj.budget : c.monthlyPointBudget;
+
+                  const usedPoints = tasks
+                    .filter((t) => t.clientId === c.id && !t.isArchived && t.month === selectedMonth && Number(t.year) === selectedYear)
+                    .reduce((sum, t) => sum + (t.score || 0), 0);
+
+                  const percent = budgetPoints > 0 ? Math.round((usedPoints / budgetPoints) * 100) : 0;
+                  const isOver = usedPoints > budgetPoints;
 
                   return (
                     <div key={c.id} className="space-y-1">
                       <div className="flex justify-between font-semibold">
                         <span>{c.name}</span>
                         <span className={isOver ? 'text-red-600 font-bold' : 'text-neutral-700'}>
-                          {c.usedPoint} / {c.monthlyPointBudget} pts ({percent}%)
+                          {usedPoints} / {budgetPoints} pts ({percent}%)
                         </span>
                       </div>
                       <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200">
