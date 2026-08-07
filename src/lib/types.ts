@@ -115,6 +115,7 @@ export interface WorklogItem {
   stages?: any;
   deadline?: string;
   previewLink?: string;
+  driveLink?: string;
   month: string;
   year: number;
   contentId: string;
