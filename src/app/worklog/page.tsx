@@ -55,7 +55,7 @@ export default function WorklogPage() {
   const [editQty, setEditQty] = useState(1);
   const [editScore, setEditScore] = useState(10);
   const [editDate, setEditDate] = useState('');
-  const [editStatus, setEditStatus] = useState('Posted');
+  const [editStatus, setEditStatus] = useState('Brief');
   const [editPreviewLink, setEditPreviewLink] = useState('');
 
   // Bulk selection state
@@ -77,7 +77,7 @@ export default function WorklogPage() {
     setEditQty(w.qty || 1);
     setEditScore(w.score || 10);
     setEditDate(w.date ? new Date(w.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-    setEditStatus(getStatusLabel(w.status || 'Posted'));
+    setEditStatus(getStatusLabel(w.status || 'Brief'));
     setEditPreviewLink(w.previewLink || '');
   };
 
@@ -1456,6 +1456,10 @@ export default function WorklogPage() {
                     <option value="Ready to Post">Ready to Post</option>
                     <option value="Waiting for Approval">Waiting for Approval</option>
                     <option value="Draft">Draft</option>
+                    <option value="Editorial Calendar">Editorial Calendar</option>
+                    <option value="Script">Script</option>
+                    <option value="Script & Shotlist">Script & Shotlist</option>
+                    <option value="Shooting">Shooting</option>
                   </select>
                 </div>
                 <div>
