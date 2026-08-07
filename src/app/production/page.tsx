@@ -8,6 +8,16 @@ import { Video, Calendar, MapPin, Users, CheckSquare, Camera, Upload, X, Check, 
  
 import { useToast } from '@/context/ToastContext';
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function ProductionPage() {
   const { tasks, updateTask } = useData();
   const { currentWorkspace } = useWorkspace();
@@ -80,10 +90,11 @@ export default function ProductionPage() {
     if (!driveModalTask) return;
  
     setSubmittingId(driveModalTask.id);
+    const formattedLink = driveLinkInput ? formatUrl(driveLinkInput) : '';
     try {
       await updateTask(driveModalTask.id, {
         status: 'Editing',
-        driveLink: driveLinkInput,
+        driveLink: formattedLink,
       });
       setDriveModalTask(null);
       setSuccessMsg('Shooting completed & forwarded to Editor!');
@@ -213,7 +224,7 @@ export default function ProductionPage() {
                   <Link className="w-3.5 h-3.5 text-neutral-400" /> Asset Drive Link *
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   required
                   value={driveLinkInput}
                   onChange={(e) => setDriveLinkInput(e.target.value)}

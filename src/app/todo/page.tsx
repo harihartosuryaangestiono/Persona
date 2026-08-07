@@ -7,6 +7,16 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { Search, ExternalLink, Plus, Filter, X } from 'lucide-react';
 import { calculateAutoDeadline } from '@/lib/score-calculator';
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function ToDoPage() {
   const { tasks, clients, updateTask, addTask } = useData();
   const { allUsers } = useUser();
@@ -24,7 +34,7 @@ export default function ToDoPage() {
   const [newCategory, setNewCategory] = useState<'Editor' | 'Strategic' | 'Assistant' | 'Scheduler'>('Editor');
   const [newTaskType, setNewTaskType] = useState('Editing');
   const [newFormat, setNewFormat] = useState('Carousel');
-  const [newStatus, setNewStatus] = useState<'Brief' | 'Editing' | 'Approval' | 'Scheduling' | 'Posted'>('Approval');
+  const [newStatus, setNewStatus] = useState<'Brief' | 'Editing' | 'Waiting for Approval' | 'Scheduling' | 'Posted'>('Waiting for Approval');
   const [newPreviewLink, setNewPreviewLink] = useState('');
   const [newQty, setNewQty] = useState(1);
 
@@ -57,7 +67,7 @@ export default function ToDoPage() {
       deadline: deadline,
       status: newStatus,
       assignedUserIds: [assignedUser.id],
-      previewLink: newPreviewLink.trim(),
+      previewLink: newPreviewLink ? formatUrl(newPreviewLink) : '',
       score: newFormat === 'Reels' || newFormat === 'Carousel' ? 150 : 10,
       cogs: (newFormat === 'Reels' || newFormat === 'Carousel' ? 150 : 10) * 250,
     });
@@ -214,7 +224,7 @@ export default function ToDoPage() {
                         className={`bg-white border border-neutral-200 rounded px-2.5 py-1 text-[11px] font-semibold focus:outline-none ${
                           t.status === 'Posted'
                             ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                            : t.status === 'Approval'
+                            : t.status === 'Waiting for Approval' || t.status === 'Approval'
                             ? 'text-amber-700 bg-amber-50 border-amber-200'
                             : t.status === 'Brief'
                             ? 'text-neutral-500 bg-neutral-50'
@@ -224,7 +234,8 @@ export default function ToDoPage() {
                         <option value="Brief">Brief / Dibatalkan</option>
                         <option value="Editing">In Progress / Editing</option>
                         <option value="Revision">Revision</option>
-                        <option value="Approval">Approved / Waiting Approval</option>
+                        <option value="Waiting for Approval">Waiting for Approval</option>
+                        <option value="Approval">Approval</option>
                         <option value="Scheduling">Ready for Scheduling</option>
                         <option value="Posted">Posted</option>
                       </select>
@@ -392,7 +403,8 @@ export default function ToDoPage() {
                   >
                     <option value="Brief">Brief</option>
                     <option value="Editing">In Progress / Editing</option>
-                    <option value="Approval">Approved / Waiting Approval</option>
+                    <option value="Waiting for Approval">Waiting for Approval</option>
+                    <option value="Approval">Approval</option>
                     <option value="Scheduling">Ready for Scheduling</option>
                     <option value="Posted">Posted</option>
                   </select>
@@ -413,7 +425,7 @@ export default function ToDoPage() {
               <div>
                 <label className="block text-neutral-600 font-semibold mb-1">Preview / Drive Link</label>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://drive.google.com/..."
                   value={newPreviewLink}
                   onChange={(e) => setNewPreviewLink(e.target.value)}

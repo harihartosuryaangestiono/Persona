@@ -78,7 +78,7 @@ export function Sidebar() {
   const { currentUser } = useUser();
   const { currentWorkspace } = useWorkspace();
  
-  const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
+  const pendingApprovalsCount = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
   const editingCount = tasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
 
   // Dynamic capacity calculation

@@ -24,6 +24,16 @@ import Link from 'next/link';
 import { useToast } from '@/context/ToastContext';
 import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
   const { tasks, worklogs, clients, attendances, approveTask, updateTask } = useData();
@@ -57,10 +67,12 @@ export default function DynamicDashboardPage() {
     if (!selectedTask || isSaving) return;
     setIsSaving(true);
     try {
+      const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
+      const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
       await updateTask(selectedTask.id, {
         status: editStatus as any,
-        driveLink: editDriveLink,
-        previewLink: editPreviewLink,
+        driveLink: formattedDrive,
+        previewLink: formattedPreview,
         checklist: editChecklist,
       });
       showToast('Task updated successfully!', 'success');
@@ -81,8 +93,9 @@ export default function DynamicDashboardPage() {
     if (isSaving) return;
     setIsSaving(true);
     const link = submittingDrive[taskId] || '';
+    const formattedLink = link ? formatUrl(link) : '';
     try {
-      await updateTask(taskId, { driveLink: link });
+      await updateTask(taskId, { driveLink: formattedLink });
       showToast('Drive link submitted successfully!', 'success');
       setActiveSubmitId(null);
     } catch (err) {
@@ -102,7 +115,7 @@ export default function DynamicDashboardPage() {
         {activeSubmitId === t.id ? (
           <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
             <input
-              type="url"
+              type="text"
               placeholder="Paste Drive URL..."
               disabled={isSaving}
               value={submittingDrive[t.id] || ''}
@@ -193,7 +206,7 @@ export default function DynamicDashboardPage() {
   const totalAgencyCOGS = totalAgencyPoints * 250; // Employee Point COGS: Rp250 / point
 
   // Filter pending approvals for Admin
-  const pendingApprovals = tasks.filter((t) => t.status === 'Approval' && !t.isArchived);
+  const pendingApprovals = tasks.filter((t) => (t.status === 'Waiting for Approval' || t.status === 'Approval') && !t.isArchived);
 
   // Filter today's attendance
   const todayStr = new Date().toISOString().split('T')[0];
@@ -453,30 +466,30 @@ export default function DynamicDashboardPage() {
             <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
               <FileText className="w-4 h-4 text-neutral-700" /> Strategic Tasks & Content Proposals Queue
             </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            {workspaceTasks
-              .filter((t) => t.category === 'Strategic' && t.status !== 'Posted')
-              .slice(0, 4)
-              .map((t) => (
-                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
-                  <div>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
-                    <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
-                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.taskType} ({t.format}) • Deadline: {t.deadline}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {workspaceTasks
+                .filter((t) => t.category === 'Strategic' && t.status !== 'Posted')
+                .slice(0, 4)
+                .map((t) => (
+                  <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                    <div>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
+                      <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
+                      <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.taskType} ({t.format}) • Deadline: {t.deadline}</p>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
+                      <span className="font-semibold text-amber-700">Stage: {t.status}</span>
+                      <span className="font-mono font-bold">{t.score} pts</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
-                    <span className="font-semibold text-amber-700">Stage: {t.status}</span>
-                    <span className="font-mono font-bold">{t.score} pts</span>
-                  </div>
-                </div>
-              ))}
-            {workspaceTasks.filter((t) => t.category === 'Strategic' && t.status !== 'Posted').length === 0 && (
-              <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active strategic proposals queued.</p>
-            )}
+                ))}
+              {workspaceTasks.filter((t) => t.category === 'Strategic' && t.status !== 'Posted').length === 0 && (
+                <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active strategic proposals queued.</p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
       {/* ---------------- PRODUCTION ASSISTANT DASHBOARD SECTION ---------------- */}
       {!isOwner && isPA && (
@@ -642,7 +655,7 @@ export default function DynamicDashboardPage() {
                 >
                   {(selectedTask.category === 'Strategic'
                     ? ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed']
-                    : ['Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
+                    : ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
                   ).map((st) => (
                     <option key={st} value={st}>
                       {st}
@@ -666,7 +679,7 @@ export default function DynamicDashboardPage() {
                   )}
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://drive.google.com/..."
                   value={editDriveLink}
                   onChange={(e) => setEditDriveLink(e.target.value)}
@@ -689,7 +702,7 @@ export default function DynamicDashboardPage() {
                   )}
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://instagram.com/p/..."
                   value={editPreviewLink}
                   onChange={(e) => setEditPreviewLink(e.target.value)}

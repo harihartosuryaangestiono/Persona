@@ -111,6 +111,7 @@ export function getStageOwnerRole(stage: string): UserRole {
     case 'Revision':
       return 'Editor';
     case 'Approval':
+    case 'Waiting for Approval':
       return 'Owner';
     case 'Scheduling':
       return 'Scheduler';
@@ -140,6 +141,7 @@ export function getEditableFieldsForStage(stage: string): string[] {
     case 'Revision':
       return ['previewLink', 'driveLink', 'files', 'status', 'checklist', 'comments'];
     case 'Approval':
+    case 'Waiting for Approval':
       return ['status', 'comments'];
     case 'Scheduling':
       return ['postingDate', 'previewLink', 'status'];

@@ -29,6 +29,16 @@ interface AssetFile {
   link: string;
 }
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function AssetLibraryPage() {
   const { clients } = useData();
 
@@ -79,7 +89,7 @@ export default function AssetLibraryPage() {
       clientName: targetClient ? targetClient.name : 'General Client',
       size: newAssetSize,
       type: newAssetType,
-      link: newAssetLink || 'https://drive.google.com',
+      link: newAssetLink ? formatUrl(newAssetLink) : 'https://drive.google.com',
     };
 
     setAssets((prev) => [newAsset, ...prev]);
@@ -404,7 +414,7 @@ export default function AssetLibraryPage() {
               <div>
                 <label className="block text-neutral-600 font-semibold mb-1">Drive / Cloud Link</label>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://drive.google.com/..."
                   value={newAssetLink}
                   onChange={(e) => setNewAssetLink(e.target.value)}

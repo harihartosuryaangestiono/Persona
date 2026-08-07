@@ -30,7 +30,7 @@ export default function ApprovalPage() {
   const canApprove = isAdmin || isAnggiInWorkspace || isGigieInWorkspace;
 
   // Filter tasks in Approval stage
-  const rawQueue = tasks.filter((t) => t.status === 'Approval');
+  const rawQueue = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval');
 
   // Filter Approval Queue based on assignment & workspace permissions
   const approvalQueue = rawQueue.filter((t) => {

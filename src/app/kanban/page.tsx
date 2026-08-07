@@ -31,10 +31,10 @@ import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 
 // Updated column configurations (Requirement 12)
 const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed'];
-const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
+const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
 const MAIN_COLUMNS: TaskItem['status'][] = [
   'Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed',
-  'Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
+  'Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
 ];
 
 interface TaskStage {
@@ -49,6 +49,16 @@ interface TaskStage {
 }
 
 import { useToast } from '@/context/ToastContext';
+
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
 
 export default function KanbanPage() {
   const { tasks, clients, worklogs, addTask, updateTask, updateTaskStatus, deleteTask, addWorklog, addNotification, activities, addActivity } = useData();
@@ -237,6 +247,8 @@ export default function KanbanPage() {
       allowed.add('Scheduling');
       allowed.add('Posted');
     }
+
+    allowed.add('Waiting for Approval');
 
     return columns.filter((col) => allowed.has(col));
   };
@@ -472,6 +484,7 @@ export default function KanbanPage() {
       const assignedIds = Array.from(new Set(newStages.map((s) => s.userId)));
       const startingStatus = getFirstStatus(newCategory);
 
+      const formattedDriveLink = newDriveLink ? formatUrl(newDriveLink) : '';
       await addTask({
         title: newTitle,
         clientId: targetClient.id,
@@ -484,7 +497,7 @@ export default function KanbanPage() {
         assignedUserIds: assignedIds,
         score: totalScore,
         cogs: totalScore * 250,
-        driveLink: newDriveLink,
+        driveLink: formattedDriveLink,
         stages: newStages,
         category: newCategory,
         month: newMonth,
@@ -548,6 +561,8 @@ export default function KanbanPage() {
       }
     }
 
+    const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
+    const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
@@ -559,8 +574,8 @@ export default function KanbanPage() {
       assignedUserIds: assignedIds,
       score: totalScore,
       cogs: totalScore * 250,
-      driveLink: editDriveLink,
-      previewLink: editPreviewLink,
+      driveLink: formattedDrive,
+      previewLink: formattedPreview,
       stages: editStages,
       month: editMonth,
       year: editYear,
@@ -1317,7 +1332,7 @@ export default function KanbanPage() {
               <div className="space-y-1">
                 <label className="block text-neutral-700 font-semibold">Asset Folder (Drive Link)</label>
                 <input
-                  type="url"
+                  type="text"
                   value={newDriveLink}
                   onChange={(e) => setNewDriveLink(e.target.value)}
                   placeholder="https://drive.google.com/..."
@@ -1594,7 +1609,7 @@ export default function KanbanPage() {
                   <div className="space-y-1">
                     <label className="block text-neutral-700 font-semibold">Drive link</label>
                     <input
-                      type="url"
+                      type="text"
                       value={editDriveLink}
                       onChange={(e) => setEditDriveLink(e.target.value)}
                       className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
@@ -1604,7 +1619,7 @@ export default function KanbanPage() {
                   <div className="space-y-1">
                     <label className="block text-neutral-700 font-semibold">Post Link (Proof of Posting)</label>
                     <input
-                      type="url"
+                      type="text"
                       value={editPreviewLink}
                       onChange={(e) => setEditPreviewLink(e.target.value)}
                       className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"

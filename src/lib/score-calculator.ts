@@ -221,7 +221,7 @@ export function calculatePriority(
 
     const isPrePostedStage = [
       'Brief', 'Content Proposal', 'Script', 'Script & Shotlist', 'Editorial Calendar',
-      'Ready for Production', 'Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling'
+      'Ready for Production', 'Production', 'Editing', 'Revision', 'Approval', 'Waiting for Approval', 'Ready to Post', 'Scheduling'
     ].includes(status);
 
     if (daysToPost <= 1 && isPrePostedStage) {

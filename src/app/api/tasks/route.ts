@@ -472,8 +472,6 @@ export async function PATCH(req: Request) {
       const syncId = body.clientId || existingTask.clientId;
       const tasks = await tx.task.findMany({ where: { clientId: syncId, isArchived: false } });
       const usedPoint = tasks.reduce((sum, t) => sum + (t.score || 0), 0);
-          // Also clear any existing preview link so Scheduler must provide Post Link proof
-          updateData.previewLink = '';
       const client = await tx.client.findUnique({ where: { id: syncId } });
       if (client) {
         await tx.client.update({

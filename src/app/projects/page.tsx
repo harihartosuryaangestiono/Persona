@@ -17,12 +17,12 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const STRATEGIC_STAGES = ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production'];
-  const PRODUCTION_STAGES = ['Production', 'Shooting', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling'];
+  const PRODUCTION_STAGES = ['Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling'];
   const COMPLETED_STAGES = ['Posted', 'Completed'];
 
   const ALL_STAGES = [
     'Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production',
-    'Production', 'Shooting', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted', 'Completed'
+    'Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted', 'Completed'
   ];
 
   // Filter clients by scope

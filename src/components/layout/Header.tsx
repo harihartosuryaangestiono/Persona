@@ -26,7 +26,7 @@ export function Header() {
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
+  const pendingApprovalsCount = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
 
   const handleCreateNewWs = () => {
     const wsName = prompt('Enter new Workspace Name:');

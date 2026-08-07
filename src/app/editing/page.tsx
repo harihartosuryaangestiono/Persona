@@ -17,6 +17,16 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function EditingQueuePage() {
   const { currentUser, allUsers } = useUser();
   const { tasks, clients, updateTask } = useData();
@@ -56,10 +66,12 @@ export default function EditingQueuePage() {
     if (!selectedTask || isSaving) return;
     setIsSaving(true);
     try {
+      const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
+      const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
       await updateTask(selectedTask.id, {
         status: editStatus as any,
-        driveLink: editDriveLink,
-        previewLink: editPreviewLink,
+        driveLink: formattedDrive,
+        previewLink: formattedPreview,
         checklist: editChecklist,
       });
       showToast('Task updated successfully!', 'success');
@@ -76,8 +88,9 @@ export default function EditingQueuePage() {
     if (isSaving) return;
     setIsSaving(true);
     const link = submittingDrive[taskId] || '';
+    const formattedLink = link ? formatUrl(link) : '';
     try {
-      await updateTask(taskId, { driveLink: link });
+      await updateTask(taskId, { driveLink: formattedLink });
       showToast('Drive link submitted successfully!', 'success');
       setActiveSubmitId(null);
     } catch (err) {
@@ -138,13 +151,13 @@ export default function EditingQueuePage() {
         {activeSubmitId === t.id ? (
           <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
             <input
-              type="url"
-              placeholder="Paste Drive URL..."
-              disabled={isSaving}
-              value={submittingDrive[t.id] || ''}
-              onChange={(e) => setSubmittingDrive(prev => ({ ...prev, [t.id]: e.target.value }))}
-              className="bg-white border border-neutral-200 rounded px-2 py-1 text-[10px] focus:outline-hidden flex-1 font-mono text-neutral-800 disabled:opacity-50"
-            />
+               type="text"
+               placeholder="Paste Drive URL..."
+               disabled={isSaving}
+               value={submittingDrive[t.id] || ''}
+               onChange={(e) => setSubmittingDrive(prev => ({ ...prev, [t.id]: e.target.value }))}
+               className="bg-white border border-neutral-200 rounded px-2 py-1 text-[10px] focus:outline-hidden flex-1 font-mono text-neutral-808 disabled:opacity-50"
+             />
             <button
               onClick={() => handleQuickSubmitDrive(t.id)}
               disabled={isSaving}
@@ -490,7 +503,7 @@ export default function EditingQueuePage() {
                 >
                   {(selectedTask.category === 'Strategic'
                     ? ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed']
-                    : ['Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
+                    : ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
                   ).map((st) => (
                     <option key={st} value={st}>
                       {st}
@@ -514,7 +527,7 @@ export default function EditingQueuePage() {
                   )}
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://drive.google.com/..."
                   value={editDriveLink}
                   onChange={(e) => setEditDriveLink(e.target.value)}
@@ -527,7 +540,7 @@ export default function EditingQueuePage() {
                   <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase">Post Link (Preview)</label>
                   {editPreviewLink && (
                     <a
-                      href={editPreviewLink}
+                      href={formatUrl(editPreviewLink)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-blue-650 hover:underline flex items-center gap-0.5 text-[9px] font-bold"
@@ -537,7 +550,7 @@ export default function EditingQueuePage() {
                   )}
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://instagram.com/p/..."
                   value={editPreviewLink}
                   onChange={(e) => setEditPreviewLink(e.target.value)}

@@ -70,6 +70,7 @@ export interface TaskItem {
     | 'Editing'
     | 'Revision'
     | 'Approval'
+    | 'Waiting for Approval'
     | 'Ready to Post'
     | 'Scheduling'
     | 'Posted'

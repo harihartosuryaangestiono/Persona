@@ -396,7 +396,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="block text-neutral-500 mb-1 font-medium">Atau URL Foto Image Link:</label>
                   <input
-                    type="url"
+                    type="text"
                     placeholder="https://..."
                     value={editAvatar}
                     onChange={(e) => setEditAvatar(e.target.value)}

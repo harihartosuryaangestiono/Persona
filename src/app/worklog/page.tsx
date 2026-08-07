@@ -21,6 +21,16 @@ interface WorklogStage {
   score: number;
 }
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function WorklogPage() {
   const { worklogs, tasks, clients, addWorklog, updateWorklog, deleteWorklog, importWorklogs } = useData();
   const { currentUser, allUsers } = useUser();
@@ -122,7 +132,7 @@ export default function WorklogPage() {
       cogs: calculateCOGS(editScore),
       date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
       status: getDbStatus(editStatus) as any,
-      previewLink: editPreviewLink.trim(),
+      previewLink: editPreviewLink ? formatUrl(editPreviewLink) : '',
       stages: hasMultipleStages
         ? parsedStages
         : [
@@ -1449,12 +1459,12 @@ export default function WorklogPage() {
                     <option value="Brief">Brief</option>
                     <option value="Production">Production</option>
                     <option value="Scheduling">Scheduling</option>
-                    <option value="Approval">Approval</option>
                     <option value="Completed">Completed</option>
                     <option value="Revision">Revision</option>
                     <option value="Ready for Production">Ready for Production</option>
                     <option value="Ready to Post">Ready to Post</option>
                     <option value="Waiting for Approval">Waiting for Approval</option>
+                    <option value="Approval">Approval</option>
                     <option value="Draft">Draft</option>
                     <option value="Editorial Calendar">Editorial Calendar</option>
                     <option value="Script">Script</option>
@@ -1465,7 +1475,7 @@ export default function WorklogPage() {
                 <div>
                   <label className="block text-neutral-700 font-bold mb-1">Preview Link</label>
                   <input
-                    type="url"
+                    type="text"
                     placeholder="https://..."
                     value={editPreviewLink}
                     onChange={(e) => setEditPreviewLink(e.target.value)}

@@ -118,7 +118,7 @@ export class FunctionRegistry {
     const posted = cLogs.filter((w) => w.status === 'Posted' || w.status === 'Completed').length;
     const draft = cLogs.filter((w) => w.status === 'Brief' || w.status === 'Draft').length;
     const revision = cLogs.filter((w) => w.status === 'Revision').length;
-    const approval = cLogs.filter((w) => w.status === 'Approval').length;
+    const approval = cLogs.filter((w) => w.status === 'Waiting for Approval' || w.status === 'Approval').length;
 
     const totalUsedPts = targetClients.reduce((sum, c) => sum + (c.usedPoint || 0), 0);
     const totalBudgetPts = targetClients.reduce((sum, c) => sum + (c.monthlyPointBudget || 5000), 0);
@@ -198,7 +198,7 @@ export class FunctionRegistry {
 
     const totalContents = monthLogs.length;
     const posted = monthLogs.filter((w) => w.status === 'Posted' || w.status === 'Completed').length;
-    const approvalQueue = monthLogs.filter((w) => w.status === 'Approval').length + monthTasks.filter((t) => t.status === 'Approval').length;
+    const approvalQueue = monthLogs.filter((w) => w.status === 'Waiting for Approval' || w.status === 'Approval').length + monthTasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
     const revisionQueue = monthLogs.filter((w) => w.status === 'Revision').length;
     const overdueCount = monthTasks.filter((t) => t.status !== 'Posted' && t.status !== 'Completed' && t.deadline && new Date(t.deadline) < new Date()).length;
 
@@ -763,7 +763,7 @@ export class PersonaAIEngine {
     const totalContents = monthLogs.length;
     const postedCount = monthLogs.filter((w) => w.status === 'Posted' || w.status === 'Completed').length;
     const inProgressCount = monthLogs.filter((w) => w.status === 'In Progress' || w.status === 'Editing' || w.status === 'Brief').length;
-    const waitingApprovalCount = monthLogs.filter((w) => w.status === 'Approval' || w.status === 'Content Proposal').length + monthTasks.filter((t) => t.status === 'Approval').length;
+    const waitingApprovalCount = monthLogs.filter((w) => w.status === 'Waiting for Approval' || w.status === 'Approval' || w.status === 'Content Proposal').length + monthTasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
     const overdueCount = monthTasks.filter((t) => t.status !== 'Posted' && t.status !== 'Completed' && t.deadline && new Date(t.deadline) < new Date()).length;
 
     // Format breakdown

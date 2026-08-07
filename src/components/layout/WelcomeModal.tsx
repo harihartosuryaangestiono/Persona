@@ -106,7 +106,7 @@ export function WelcomeModal() {
   ).length;
 
   const pendingApprovalsCount = isOwnerOrAdmin || isStrategist
-    ? tasks.filter((t) => t.status === 'Approval').length
+    ? tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length
     : 0;
 
   const shootScheduleCount = tasks.filter(

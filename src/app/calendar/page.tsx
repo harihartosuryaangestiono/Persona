@@ -346,7 +346,7 @@ export default function CalendarPage() {
           <option value="Production">Production</option>
           <option value="Editing">Editing</option>
           <option value="Revision">Revision</option>
-          <option value="Approval">Approval</option>
+          <option value="Waiting for Approval">Waiting for Approval</option>
           <option value="Ready to Post">Ready to Post</option>
           <option value="Scheduling">Scheduling</option>
           <option value="Posted">Posted</option>

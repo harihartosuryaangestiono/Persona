@@ -27,6 +27,16 @@ interface BrandSpec {
   secondaryColor?: string;
 }
 
+function formatUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
 export default function BrandHubPage() {
   const { clients } = useData();
   const [selectedClientId, setSelectedClientId] = useState(clients[0]?.id || '');
@@ -99,7 +109,7 @@ export default function BrandHubPage() {
       targetAudience: editAudience,
       dos: editDosText.split('\n').filter((line) => line.trim().length > 0),
       donts: editDontsText.split('\n').filter((line) => line.trim().length > 0),
-      driveLink: editDriveLink,
+      driveLink: editDriveLink ? formatUrl(editDriveLink) : '',
       primaryColor: activeSpec.primaryColor,
       secondaryColor: activeSpec.secondaryColor,
     };
@@ -394,7 +404,7 @@ export default function BrandHubPage() {
               <div>
                 <label className="block text-neutral-600 font-semibold mb-1">Master Google Drive Link</label>
                 <input
-                  type="url"
+                  type="text"
                   value={editDriveLink}
                   onChange={(e) => setEditDriveLink(e.target.value)}
                   className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
