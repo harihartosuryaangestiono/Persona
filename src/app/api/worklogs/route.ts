@@ -276,27 +276,31 @@ export async function POST(req: Request) {
             if (body.status !== undefined) {
               const dbStatusVal = getDbStatus(body.status);
               taskUpdateData.status = dbStatusVal;
+              const timeline = Array.isArray(matchingTask.workflowTimeline)
+                ? matchingTask.workflowTimeline
+                : (matchingTask.workflowTimeline ? JSON.parse(matchingTask.workflowTimeline) : []);
 
               if (dbStatusVal !== matchingTask.status) {
-              timeline.push({
-                status: dbStatusVal,
-                timestamp: new Date().toISOString(),
-                userId: currentUserId,
-              });
-              taskUpdateData.workflowTimeline = JSON.stringify(timeline);
+                timeline.push({
+                  status: dbStatusVal,
+                  timestamp: new Date().toISOString(),
+                  userId: currentUserId,
+                });
+                taskUpdateData.workflowTimeline = JSON.stringify(timeline);
 
-              if (dbStatusVal === 'Production' && matchingTask.category === 'Strategic') {
-                taskUpdateData.category = 'Production';
-                taskUpdateData.handoverUserId = currentUserId;
-                taskUpdateData.handoverTime = new Date();
-              }
+                if (dbStatusVal === 'Production' && matchingTask.category === 'Strategic') {
+                  taskUpdateData.category = 'Production';
+                  taskUpdateData.handoverUserId = currentUserId;
+                  taskUpdateData.handoverTime = new Date();
+                }
 
-              if (dbStatusVal === 'Posted' || dbStatusVal === 'Completed') {
-                const settings = await tx.companySetting.findFirst();
-                if (settings && settings.archiveRule === 'IMMEDIATE') {
-                  taskUpdateData.isArchived = true;
-                  taskUpdateData.archivedAt = new Date();
-                  taskUpdateData.archivedBy = currentUserId;
+                if (dbStatusVal === 'Posted' || dbStatusVal === 'Completed') {
+                  const settings = await tx.companySetting.findFirst();
+                  if (settings && settings.archiveRule === 'IMMEDIATE') {
+                    taskUpdateData.isArchived = true;
+                    taskUpdateData.archivedAt = new Date();
+                    taskUpdateData.archivedBy = currentUserId;
+                  }
                 }
               }
             }
