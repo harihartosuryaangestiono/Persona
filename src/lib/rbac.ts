@@ -177,21 +177,39 @@ export function isPicAllowedForTaskType(roles: string[], taskType: string): bool
   return false;
 }
 
-export function checkTaskAccess(user: { id: string; name: string; roles: string[] }, task: { assignedUserIds: string; stages?: string | null }): boolean {
+export function checkTaskAccess(
+  user: { id: string; name: string; roles: string[] },
+  task: { assignedUserIds: string; stages?: string | null; status?: string }
+): boolean {
+  // Executive roles always have access
   if (user.roles.includes('Admin') || user.roles.includes('Owner') || user.roles.includes('Strategist')) {
     return true;
   }
-  
+
+  // Allow Scheduler role to access scheduling-stage tasks globally
+  const userIsScheduler = user.roles.includes('Scheduler');
+  const taskStatus = task.status || '';
+  if (userIsScheduler && (taskStatus === 'Scheduling' || taskStatus === 'Ready to Post')) {
+    return true;
+  }
+
+  // Check assigned user IDs
   const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
   if (assignedIds.includes(user.id) || assignedIds.includes(user.name)) {
     return true;
   }
-  
+
+  // Check explicit stages for ownership (including scheduler presence in stages)
   const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
   if (Array.isArray(stages) && stages.some((s: any) => s.userId === user.id || s.userName === user.name)) {
     return true;
   }
-  
+
+  // If scheduler role is present in stages, allow access
+  if (userIsScheduler && Array.isArray(stages) && stages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')))) {
+    return true;
+  }
+
   return false;
 }
 

@@ -26,14 +26,25 @@ export async function GET(req: Request) {
     if (userRecord) {
       const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
       if (!isExecutive) {
-        tasksQuery.where = {
-          OR: [
-            { assignedUserIds: { contains: userRecord.id } },
-            { assignedUserIds: { contains: userRecord.name } },
-            { stages: { contains: userRecord.id } },
-            { stages: { contains: userRecord.name } }
-          ]
-        };
+        // Default: only fetch tasks that reference the user by assignedUserIds or stages
+        const orClauses: any[] = [
+          { assignedUserIds: { contains: userRecord.id } },
+          { assignedUserIds: { contains: userRecord.name } },
+          { stages: { contains: userRecord.id } },
+          { stages: { contains: userRecord.name } },
+        ];
+
+        // If user has Scheduler role, also include scheduling-stage tasks or tasks that mention Scheduler role
+        const userIsScheduler = dbRoles.includes('Scheduler');
+        if (userIsScheduler) {
+          orClauses.push({ status: 'Scheduling' });
+          orClauses.push({ status: 'Ready to Post' });
+          orClauses.push({ stages: { contains: 'Scheduler' } });
+          // also include any stage entries that mention scheduling in taskType
+          orClauses.push({ stages: { contains: 'scheduling' } });
+        }
+
+        tasksQuery.where = { OR: orClauses };
 
         worklogsQuery.where = {
           OR: [

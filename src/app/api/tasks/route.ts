@@ -201,7 +201,7 @@ export async function PATCH(req: Request) {
     // Ownership & Access Control Check
     const hasAccess = checkTaskAccess(
       { id: userRecord.id, name: userRecord.name, roles: dbRoles },
-      { assignedUserIds: existingTask.assignedUserIds, stages: existingTask.stages }
+      { assignedUserIds: existingTask.assignedUserIds, stages: existingTask.stages, status: existingTask.status }
     );
     if (!hasAccess) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });

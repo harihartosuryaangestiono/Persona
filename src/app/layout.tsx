@@ -21,13 +21,13 @@ export default function RootLayout({
       <body className="min-h-screen bg-[#F8F9FB] text-neutral-900 flex antialiased selection:bg-neutral-900 selection:text-white font-sans">
         <UserProvider>
           <WorkspaceProvider>
-            <DataProvider>
-              <ToastProvider>
+            <ToastProvider>
+              <DataProvider>
                 <AuthWrapper>
                   {children}
                 </AuthWrapper>
-              </ToastProvider>
-            </DataProvider>
+              </DataProvider>
+            </ToastProvider>
           </WorkspaceProvider>
         </UserProvider>
       </body>

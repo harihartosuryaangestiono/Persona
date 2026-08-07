@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useUser } from './UserContext';
+import { useToast } from './ToastContext';
 import {
   TaskItem,
   ClientItem,
@@ -62,6 +63,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { syncUsers, currentUser } = useUser();
+  const { showToast } = useToast();
 
   const normalizeTask = (t: TaskItem): TaskItem => ({
     ...t,
@@ -190,6 +192,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
+    const oldTask = tasks.find((t) => t.id === taskId);
+
     // Optimistic local state update
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? normalizeTask({ ...t, status: newStatus, updatedAt: new Date().toISOString() }) : t))
@@ -210,9 +214,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const saved = await res.json();
           setTasks((prev) => prev.map((t) => (t.id === taskId ? normalizeTask(saved) : t)));
+
+          if (oldTask && oldTask.category === 'Strategic' && newStatus === 'Production') {
+            showToast('Task successfully handed over to the Production Board!', 'success');
+          } else {
+            showToast(`Task status updated to ${newStatus}`, 'success');
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(errData.error || 'Failed to update task status. Reverting...', 'error');
+          await fetchInitialData();
         }
       } catch (err) {
         console.error(err);
+        showToast('Connection error. Reverting task status...', 'error');
+        await fetchInitialData();
       }
     }
   };
@@ -318,9 +334,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const saved = await res.json();
           setTasks((prev) => prev.map((t) => (t.id === taskId ? normalizeTask(saved) : t)));
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(errData.error || 'Failed to save changes. Reverting...', 'error');
+          await fetchInitialData();
         }
       } catch (err) {
         console.error(err);
+        showToast('Connection error. Reverting changes...', 'error');
+        await fetchInitialData();
       }
     }
   };

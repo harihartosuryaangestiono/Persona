@@ -61,10 +61,16 @@ export default function KanbanPage() {
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
     if (isExecutive) return true;
 
+    // Scheduler should be able to access scheduling-stage tasks even if not explicitly assigned
+    const isSchedulerRole = currentUser.roles.includes('Scheduler');
+    const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
+    const isSchedulingStatus = task.status === 'Scheduling' || task.status === 'Ready to Post';
+    const hasSchedulingStage = Array.isArray(stages) && stages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
+    if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
+
     const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
     const isAssigned = assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name);
 
-    const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
     const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
 
     return isAssigned || isStageAssignee;
@@ -208,8 +214,8 @@ export default function KanbanPage() {
   const getVisibleColumns = () => {
     if (!currentUser) return [];
     const roles = currentUser.roles;
-    const isManager = ['Devi', 'Anggi', 'Gigie'].includes(currentUser.name);
-    if (roles.includes('Admin') || roles.includes('Owner') || isManager) {
+    const isManager = roles.includes('Admin') || roles.includes('Owner') || roles.includes('Strategist');
+    if (isManager) {
       return columns;
     }
 
@@ -274,7 +280,7 @@ export default function KanbanPage() {
 
     // Role & Task Visibility Constraint:
     const isAdmin = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
-    const isManager = ['Devi', 'Anggi', 'Gigie'].includes(currentUser.name);
+    const isManager = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
     if (isAdmin || isManager) return true;
 
     const assignedIds = t.assignedUserIds
@@ -293,6 +299,12 @@ export default function KanbanPage() {
     if (currentUser.roles.includes('Production Assistant') && (catStr === 'Production' || catStr === 'Assistant')) matchesCategory = true;
 
     const isCreator = (t as any).createdBy === currentUser.id || (t as any).createdBy === currentUser.name;
+
+    // Allow any Scheduler role to view Scheduling-stage tasks (workspace-wide visibility for scheduling)
+    const isSchedulerRole = currentUser.roles.includes('Scheduler');
+    const isSchedulingStatus = t.status === 'Scheduling' || t.status === 'Ready to Post';
+    const hasSchedulingStage = Array.isArray(logStages) && logStages.some((s: any) => (s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))));
+    if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
 
     return isAssigned || isStageAssignee || matchesCategory || isCreator;
   });

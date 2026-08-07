@@ -41,8 +41,10 @@ export default function DynamicDashboardPage() {
   const [editDriveLink, setEditDriveLink] = useState('');
   const [editPreviewLink, setEditPreviewLink] = useState('');
   const [editChecklist, setEditChecklist] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleOpenTask = (t: any) => {
+    if (isSaving) return;
     setSelectedTask(t);
     setEditStatus(t.status);
     setEditDriveLink(t.driveLink || '');
@@ -52,7 +54,8 @@ export default function DynamicDashboardPage() {
 
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTask) return;
+    if (!selectedTask || isSaving) return;
+    setIsSaving(true);
     try {
       await updateTask(selectedTask.id, {
         status: editStatus as any,
@@ -65,6 +68,8 @@ export default function DynamicDashboardPage() {
     } catch (err) {
       console.error(err);
       showToast('Failed to update task.', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -73,6 +78,8 @@ export default function DynamicDashboardPage() {
   const [submittingDrive, setSubmittingDrive] = useState<Record<string, string>>({});
 
   const handleQuickSubmitDrive = async (taskId: string) => {
+    if (isSaving) return;
+    setIsSaving(true);
     const link = submittingDrive[taskId] || '';
     try {
       await updateTask(taskId, { driveLink: link });
@@ -81,6 +88,8 @@ export default function DynamicDashboardPage() {
     } catch (err) {
       console.error(err);
       showToast('Failed to submit drive link.', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -95,19 +104,22 @@ export default function DynamicDashboardPage() {
             <input
               type="url"
               placeholder="Paste Drive URL..."
+              disabled={isSaving}
               value={submittingDrive[t.id] || ''}
               onChange={(e) => setSubmittingDrive(prev => ({ ...prev, [t.id]: e.target.value }))}
-              className="bg-white border border-neutral-200 rounded px-2 py-1 text-[10px] focus:outline-hidden flex-1 font-mono text-neutral-805"
+              className="bg-white border border-neutral-200 rounded px-2 py-1 text-[10px] focus:outline-hidden flex-1 font-mono text-neutral-805 disabled:opacity-50"
             />
             <button
               onClick={() => handleQuickSubmitDrive(t.id)}
-              className="bg-neutral-900 hover:bg-neutral-800 text-white px-2.5 py-1 rounded text-[10px] font-semibold"
+              disabled={isSaving}
+              className={`bg-neutral-900 hover:bg-neutral-800 text-white px-2.5 py-1 rounded text-[10px] font-semibold transition ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              Save
+              {isSaving ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={() => setActiveSubmitId(null)}
-              className="bg-neutral-100 hover:bg-neutral-200 text-neutral-500 px-2 py-1 rounded text-[10px]"
+              disabled={isSaving}
+              className="bg-neutral-100 hover:bg-neutral-200 text-neutral-500 px-2 py-1 rounded text-[10px] disabled:opacity-50"
             >
               ✕
             </button>
@@ -706,15 +718,17 @@ export default function DynamicDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedTask(null)}
-                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2 rounded-lg transition"
+                  disabled={isSaving}
+                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
+                  disabled={isSaving}
+                  className={`bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Save Changes
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
