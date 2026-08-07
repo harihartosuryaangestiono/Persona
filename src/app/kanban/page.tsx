@@ -208,7 +208,8 @@ export default function KanbanPage() {
   const getVisibleColumns = () => {
     if (!currentUser) return [];
     const roles = currentUser.roles;
-    if (roles.includes('Admin') || roles.includes('Owner')) {
+    const isManager = ['Devi', 'Anggi', 'Gigie'].includes(currentUser.name);
+    if (roles.includes('Admin') || roles.includes('Owner') || isManager) {
       return columns;
     }
 
@@ -273,7 +274,8 @@ export default function KanbanPage() {
 
     // Role & Task Visibility Constraint:
     const isAdmin = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
-    if (isAdmin) return true;
+    const isManager = ['Devi', 'Anggi', 'Gigie'].includes(currentUser.name);
+    if (isAdmin || isManager) return true;
 
     const assignedIds = t.assignedUserIds
       ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)

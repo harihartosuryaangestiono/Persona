@@ -26,13 +26,126 @@ import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@
 
 export default function DynamicDashboardPage() {
   const { currentUser } = useUser();
-  const { tasks, worklogs, clients, attendances, approveTask } = useData();
+  const { tasks, worklogs, clients, attendances, approveTask, updateTask } = useData();
   const { currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
 
   const handleQuickApprove = async (taskId: string) => {
     await approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
     showToast('Task approved! Moved to Scheduling stage.', 'success');
+  };
+
+  // Quick Task Edit & Modal State
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [editStatus, setEditStatus] = useState('');
+  const [editDriveLink, setEditDriveLink] = useState('');
+  const [editPreviewLink, setEditPreviewLink] = useState('');
+  const [editChecklist, setEditChecklist] = useState<any[]>([]);
+
+  const handleOpenTask = (t: any) => {
+    setSelectedTask(t);
+    setEditStatus(t.status);
+    setEditDriveLink(t.driveLink || '');
+    setEditPreviewLink(t.previewLink || '');
+    setEditChecklist(t.checklist ? (typeof t.checklist === 'string' ? JSON.parse(t.checklist) : t.checklist) : []);
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask) return;
+    try {
+      await updateTask(selectedTask.id, {
+        status: editStatus as any,
+        driveLink: editDriveLink,
+        previewLink: editPreviewLink,
+        checklist: editChecklist,
+      });
+      showToast('Task updated successfully!', 'success');
+      setSelectedTask(null);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update task.', 'error');
+    }
+  };
+
+  // Quick Card Drive Submission & Preview State
+  const [activeSubmitId, setActiveSubmitId] = useState<string | null>(null);
+  const [submittingDrive, setSubmittingDrive] = useState<Record<string, string>>({});
+
+  const handleQuickSubmitDrive = async (taskId: string) => {
+    const link = submittingDrive[taskId] || '';
+    try {
+      await updateTask(taskId, { driveLink: link });
+      showToast('Drive link submitted successfully!', 'success');
+      setActiveSubmitId(null);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to submit drive link.', 'error');
+    }
+  };
+
+  const renderCardActions = (t: any) => {
+    const hasPreview = !!t.previewLink;
+    const hasDrive = !!t.driveLink;
+
+    return (
+      <div className="mt-2.5 pt-2 border-t border-neutral-100 space-y-2">
+        {activeSubmitId === t.id ? (
+          <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+            <input
+              type="url"
+              placeholder="Paste Drive URL..."
+              value={submittingDrive[t.id] || ''}
+              onChange={(e) => setSubmittingDrive(prev => ({ ...prev, [t.id]: e.target.value }))}
+              className="bg-white border border-neutral-200 rounded px-2 py-1 text-[10px] focus:outline-hidden flex-1 font-mono text-neutral-805"
+            />
+            <button
+              onClick={() => handleQuickSubmitDrive(t.id)}
+              className="bg-neutral-900 hover:bg-neutral-800 text-white px-2.5 py-1 rounded text-[10px] font-semibold"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setActiveSubmitId(null)}
+              className="bg-neutral-100 hover:bg-neutral-200 text-neutral-500 px-2 py-1 rounded text-[10px]"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {hasPreview ? (
+              <a
+                href={t.previewLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 text-neutral-700 font-semibold px-2.5 py-1 rounded-lg text-[9px] flex items-center gap-1 transition"
+              >
+                <ExternalLink className="w-3 h-3" /> Preview
+              </a>
+            ) : (
+              <button
+                disabled
+                className="bg-neutral-50 border border-neutral-200 text-neutral-450 font-semibold px-2.5 py-1 rounded-lg text-[9px] flex items-center gap-1 cursor-not-allowed opacity-50"
+              >
+                <ExternalLink className="w-3 h-3" /> No Preview
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveSubmitId(t.id);
+                setSubmittingDrive(prev => ({ ...prev, [t.id]: t.driveLink || '' }));
+              }}
+              className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-2.5 py-1 rounded-lg text-[9px] flex items-center gap-1 transition"
+            >
+              <FolderOpen className="w-3.5 h-3.5" /> {hasDrive ? 'Update Drive' : 'Submit Drive'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   // Role Checks
@@ -369,22 +482,17 @@ export default function DynamicDashboardPage() {
               })
               .slice(0, 4)
               .map((t) => (
-                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                <div
+                  key={t.id}
+                  onClick={() => handleOpenTask(t)}
+                  className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3 cursor-pointer hover:shadow-xs hover:border-neutral-300 transition"
+                >
                   <div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
                     <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
                     <p className="text-[10px] text-neutral-500 font-mono mt-0.5">{t.taskType} • Deadline: {t.deadline}</p>
                   </div>
-                  {t.driveLink && (
-                    <a
-                      href={t.driveLink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-650 hover:underline flex items-center gap-1 text-[10px] font-semibold"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5" /> Open Drive Assets
-                    </a>
-                  )}
+                  {renderCardActions(t)}
                 </div>
               ))}
             {workspaceTasks.filter((t) => t.status === 'Shooting' || t.category === 'Assistant').length === 0 && (
@@ -405,7 +513,11 @@ export default function DynamicDashboardPage() {
               .filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor')
               .slice(0, 4)
               .map((t) => (
-                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                <div
+                  key={t.id}
+                  onClick={() => handleOpenTask(t)}
+                  className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3 cursor-pointer hover:shadow-xs hover:border-neutral-300 transition"
+                >
                   <div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
                     <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
@@ -415,6 +527,7 @@ export default function DynamicDashboardPage() {
                     <span>Deadline: <strong className="text-neutral-700">{t.deadline}</strong></span>
                     <span className="font-mono font-bold">{t.score} pts</span>
                   </div>
+                  {renderCardActions(t)}
                 </div>
               ))}
             {workspaceTasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor').length === 0 && (
@@ -435,7 +548,11 @@ export default function DynamicDashboardPage() {
               .filter((t) => t.status === 'Scheduling')
               .slice(0, 4)
               .map((t) => (
-                <div key={t.id} className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3">
+                <div
+                  key={t.id}
+                  onClick={() => handleOpenTask(t)}
+                  className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between space-y-3 cursor-pointer hover:shadow-xs hover:border-neutral-300 transition"
+                >
                   <div>
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-800 font-mono">{t.clientName}</span>
                     <h4 className="font-bold text-neutral-900 mt-2">{t.title}</h4>
@@ -445,11 +562,162 @@ export default function DynamicDashboardPage() {
                     <span className="font-bold text-purple-700 uppercase font-mono">{t.status}</span>
                     <span className="font-mono font-bold">{t.score} pts</span>
                   </div>
+                  {renderCardActions(t)}
                 </div>
               ))}
             {workspaceTasks.filter((t) => t.status === 'Scheduling').length === 0 && (
               <p className="col-span-2 text-neutral-400 text-center py-8 italic">No contents ready to post.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Task Details and Quick Edit Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl shadow-xl p-6 space-y-4 text-xs text-neutral-700 animate-fadeIn">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-neutral-100 text-neutral-805 border border-neutral-200 font-mono">
+                  {selectedTask.clientName}
+                </span>
+                <h3 className="text-sm font-bold text-neutral-900 mt-2">
+                  {selectedTask.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTask(null)}
+                className="p-1 text-neutral-400 hover:text-neutral-700 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveTask} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase">Format</label>
+                  <p className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 font-medium">
+                    {selectedTask.format || 'N/A'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase">Score</label>
+                  <p className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-850 font-bold font-mono">
+                    {selectedTask.score} pts
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase">Status / Stage</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 font-medium focus:outline-hidden"
+                >
+                  {(selectedTask.category === 'Strategic'
+                    ? ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed']
+                    : ['Production', 'Editing', 'Revision', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
+                  ).map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase font-bold">Google Drive Link</label>
+                  {editDriveLink && (
+                    <a
+                      href={editDriveLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-650 hover:underline flex items-center gap-0.5 text-[9px] font-bold"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5" /> Open
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://drive.google.com/..."
+                  value={editDriveLink}
+                  onChange={(e) => setEditDriveLink(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase font-bold">Preview / Reels Link</label>
+                  {editPreviewLink && (
+                    <a
+                      href={editPreviewLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-650 hover:underline flex items-center gap-0.5 text-[9px] font-bold"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5" /> Open Preview
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://instagram.com/p/..."
+                  value={editPreviewLink}
+                  onChange={(e) => setEditPreviewLink(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden font-mono"
+                />
+              </div>
+
+              {/* Checklist rendering */}
+              {editChecklist.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-neutral-100">
+                  <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase mb-1">Checklist Progress</label>
+                  <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                    {editChecklist.map((item, idx) => (
+                      <label key={item.id || idx} className="flex items-center gap-2 cursor-pointer text-[11px] font-medium text-neutral-700">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={() => {
+                            setEditChecklist((prev) =>
+                              prev.map((c, i) => (i === idx ? { ...c, done: !c.done } : c))
+                            );
+                          }}
+                          className="rounded border-neutral-350 text-neutral-900 focus:ring-neutral-950"
+                        />
+                        <span className={item.done ? 'line-through text-neutral-450' : ''}>{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTask(null)}
+                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
