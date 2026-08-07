@@ -44,7 +44,22 @@ async function validateCategoryAssignments(assignedUserIds: string[], category: 
     });
     if (!assignedUser) continue;
     const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
-    const isAllowed = isPicAllowedForTaskType(roles, category);
+
+    const categoryLower = category.toLowerCase();
+    let isAllowed = false;
+
+    if (categoryLower === 'strategic') {
+      isAllowed = roles.includes('Strategist');
+    } else if (categoryLower === 'production') {
+      isAllowed = roles.some((r) => ['Production Assistant', 'Editor', 'Scheduler'].includes(r));
+    } else if (categoryLower === 'editing' || categoryLower === 'editor') {
+      isAllowed = roles.some((r) => ['Editor', 'Scheduler'].includes(r));
+    } else if (categoryLower === 'scheduling' || categoryLower === 'scheduler') {
+      isAllowed = roles.includes('Scheduler');
+    } else {
+      isAllowed = isPicAllowedForTaskType(roles, category);
+    }
+
     if (!isAllowed) {
       return `${assignedUser.name} (${roles.join(', ')}) is not authorized for category ${category}`;
     }
@@ -128,6 +143,55 @@ export async function POST(req: Request) {
     ];
 
     const task = await prisma.$transaction(async (tx) => {
+      if (body.contentId) {
+        const existingTask = await tx.task.findFirst({ where: { contentId: body.contentId } });
+        if (existingTask) {
+          const existingAssigned = existingTask.assignedUserIds ? (typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds) : [];
+          const newAssigned = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : (body.assignedUserIds ? JSON.parse(body.assignedUserIds) : []);
+          const mergedAssigned = Array.from(new Set([...(existingAssigned || []), ...(newAssigned || [])]));
+          const existingStages = existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : [];
+          const newStages = body.stages ? (Array.isArray(body.stages) ? body.stages : JSON.parse(body.stages)) : [];
+          const mergedStages = [...existingStages];
+          for (const stage of newStages) {
+            if (!mergedStages.some((s: any) => s.id === stage.id || (s.userId === stage.userId && s.role === stage.role && s.taskType === stage.taskType))) {
+              mergedStages.push(stage);
+            }
+          }
+
+          const updated = await tx.task.update({
+            where: { id: existingTask.id },
+            data: {
+              title: body.title || existingTask.title,
+              description: body.description !== undefined ? body.description : existingTask.description,
+              category,
+              taskType: body.taskType || existingTask.taskType,
+              format: body.format || existingTask.format,
+              qty: body.qty !== undefined ? body.qty : existingTask.qty,
+              priority: computedPriority,
+              status: body.status ? getDbStatus(body.status) : existingTask.status,
+              clientId: body.clientId || existingTask.clientId,
+              workspaceId: targetWorkspaceId,
+              postingDate: body.postingDate ? new Date(body.postingDate) : existingTask.postingDate,
+              deadline,
+              assignedUserIds: JSON.stringify(mergedAssigned),
+              score: body.score !== undefined ? body.score : existingTask.score,
+              cogs: body.cogs !== undefined ? body.cogs : existingTask.cogs,
+              driveLink: body.driveLink !== undefined ? body.driveLink : existingTask.driveLink,
+              previewLink: body.previewLink !== undefined ? body.previewLink : existingTask.previewLink,
+              checklist: JSON.stringify(body.checklist || (existingTask.checklist ? JSON.parse(existingTask.checklist) : [])),
+              comments: JSON.stringify(body.comments || (existingTask.comments ? JSON.parse(existingTask.comments) : [])),
+              stages: mergedStages.length ? JSON.stringify(mergedStages) : existingTask.stages,
+              month: body.month || existingTask.month,
+              year: body.year ? Number(body.year) : existingTask.year,
+              contentId: body.contentId,
+              isArchived: body.isArchived !== undefined ? body.isArchived : existingTask.isArchived,
+              workflowTimeline: existingTask.workflowTimeline || JSON.stringify(timeline),
+            },
+          });
+          return updated;
+        }
+      }
+
       const created = await tx.task.create({
         data: {
           title: body.title,
@@ -217,35 +281,15 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // Validate category assignments only if assigned users or category actually change
-    {
-      const finalCategory = body.category !== undefined ? body.category : existingTask.category;
+    // Validate category assignments only when category itself changes
+    if (body.category !== undefined && body.category !== existingTask.category) {
       const finalAssignedUserIds = body.assignedUserIds !== undefined
         ? (Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]'))
         : JSON.parse(existingTask.assignedUserIds || '[]');
 
-      let shouldValidate = false;
-      // if category is being changed to a different value, validate
-      if (body.category !== undefined && body.category !== existingTask.category) {
-        shouldValidate = true;
-      }
-
-      // if assignedUserIds provided and different from existing, validate
-      if (body.assignedUserIds !== undefined) {
-        const originalAssigned: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
-        const newAssigned = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]');
-        const origSorted = [...originalAssigned].sort();
-        const newSorted = [...newAssigned].sort();
-        if (JSON.stringify(origSorted) !== JSON.stringify(newSorted)) {
-          shouldValidate = true;
-        }
-      }
-
-      if (shouldValidate) {
-        const err = await validateCategoryAssignments(finalAssignedUserIds, finalCategory);
-        if (err) {
-          return NextResponse.json({ error: err }, { status: 400 });
-        }
+      const err = await validateCategoryAssignments(finalAssignedUserIds, body.category);
+      if (err) {
+        return NextResponse.json({ error: err }, { status: 400 });
       }
     }
 
@@ -293,56 +337,43 @@ export async function PATCH(req: Request) {
 
         // When a task is moved to Scheduling, ensure there's an explicit Scheduler stage and assignment
         if (dbStatus === 'Scheduling') {
+          updateData.previewLink = '';
           try {
-            const existingStages = existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : [];
-            const hasSchedulerStage = Array.isArray(existingStages) && existingStages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
+            const existingStages = existingTask.stages
+              ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages)
+              : [];
+            const hasSchedulerStage = Array.isArray(existingStages) && existingStages.some((s: any) =>
+              s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))
+            );
             if (!hasSchedulerStage) {
-              // Find any user with Scheduler role as a sensible default
-              const schedulerUser = await prisma.user.findFirst();
-              // Attempt to find by roles field if available
-              if (schedulerUser) {
-                const rolesField = typeof schedulerUser.roles === 'string' ? JSON.parse(schedulerUser.roles) : schedulerUser.roles || [];
-                // prefer a user who has Scheduler role
-                let chosenScheduler = null as any;
-                if (Array.isArray(rolesField) && rolesField.includes('Scheduler')) {
-                  chosenScheduler = schedulerUser;
-                } else {
-                  // fallback: try to find any user that contains 'Scheduler' in roles
-                  const maybe = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } }).catch(() => null);
-                  if (maybe) chosenScheduler = maybe;
-                }
+              const chosenScheduler = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } });
 
-                  if (!chosenScheduler) {
-                  // try a direct query for any user with 'Scheduler' substring in roles
-                  const maybe2 = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } }).catch(() => null);
-                  if (maybe2) chosenScheduler = maybe2;
-                }
+              if (chosenScheduler) {
+                const schedId = chosenScheduler.id;
+                const schedName = chosenScheduler.name;
+                autoAssignedSchedulerId = schedId;
+                autoAssignedSchedulerName = schedName;
+                const newStage = {
+                  id: `stg-${Date.now()}`,
+                  role: 'Scheduler',
+                  userId: schedId,
+                  userName: schedName,
+                  taskType: 'Scheduling',
+                  format: 'Per Post',
+                  qty: 1,
+                  score: 50,
+                };
+                const newStages = [...existingStages, newStage];
+                updateData.stages = JSON.stringify(newStages);
 
-                if (chosenScheduler) {
-                  const schedId = chosenScheduler.id;
-                  const schedName = chosenScheduler.name;
-                  // record for later logging/notification
-                  autoAssignedSchedulerId = schedId;
-                  autoAssignedSchedulerName = schedName;
-                  const newStage = {
-                    id: `stg-${Date.now()}`,
-                    role: 'Scheduler',
-                    userId: schedId,
-                    userName: schedName,
-                    taskType: 'Scheduling',
-                    format: 'Per Post',
-                    qty: 1,
-                    score: 50,
-                  };
-                  const newStages = Array.isArray(existingStages) ? [...existingStages, newStage] : [newStage];
-                  updateData.stages = JSON.stringify(newStages);
-
-                  // ensure assignedUserIds includes scheduler
-                  const assignedArr = existingTask.assignedUserIds ? (typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds) : [];
-                  if (!assignedArr.includes(schedId) && !assignedArr.includes(schedName)) {
-                    assignedArr.push(schedId);
-                    updateData.assignedUserIds = JSON.stringify(assignedArr);
-                  }
+                const assignedArr = existingTask.assignedUserIds
+                  ? (typeof existingTask.assignedUserIds === 'string'
+                      ? JSON.parse(existingTask.assignedUserIds)
+                      : existingTask.assignedUserIds)
+                  : [];
+                if (!assignedArr.includes(schedId) && !assignedArr.includes(schedName)) {
+                  assignedArr.push(schedId);
+                  updateData.assignedUserIds = JSON.stringify(assignedArr);
                 }
               }
             }

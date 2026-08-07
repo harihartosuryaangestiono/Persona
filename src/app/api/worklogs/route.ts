@@ -155,10 +155,13 @@ export async function POST(req: Request) {
         }
       }
 
-      // Check if a worklog with the same contentId already exists to prevent duplicate rows (Requirement 9)
+      // Check if a worklog with the same contentId and userId already exists so different employees can still share content IDs
       if (!resolvedLog && contentId && contentId.trim() !== '') {
         const existing = await tx.worklog.findFirst({
-          where: { contentId },
+          where: {
+            contentId,
+            userId: resolvedUserId,
+          },
         });
         if (existing) {
           // Enforce ownership check for existing log update
@@ -240,18 +243,41 @@ export async function POST(req: Request) {
           if (score !== undefined) taskUpdateData.score = Number(score);
           if (taskType !== undefined) taskUpdateData.taskType = taskType;
           if (format !== undefined) taskUpdateData.format = format;
-          if (stages !== undefined) taskUpdateData.stages = JSON.stringify(stages);
-          if (date !== undefined) {
-            taskUpdateData.postingDate = new Date(date);
-            taskUpdateData.deadline = new Date(date);
-          }
-          
-          if (status !== undefined) {
-            const dbStatusVal = getDbStatus(status);
-            taskUpdateData.status = dbStatusVal;
+            if (date !== undefined) {
+              taskUpdateData.postingDate = new Date(date);
+              taskUpdateData.deadline = new Date(date);
+            }
 
-            if (dbStatusVal !== matchingTask.status) {
-              const timeline = JSON.parse(matchingTask.workflowTimeline || '[]');
+            const existingAssignedIds: string[] = matchingTask.assignedUserIds
+              ? (typeof matchingTask.assignedUserIds === 'string' ? JSON.parse(matchingTask.assignedUserIds) : matchingTask.assignedUserIds)
+              : [];
+            const logAssignedIds = resolvedLog.userId ? [resolvedLog.userId] : [];
+            const stageAssignedIds = Array.isArray(stages) ? stages.map((s: any) => s.userId).filter(Boolean) : [];
+            const mergedAssignedIds = Array.from(new Set([...existingAssignedIds, ...logAssignedIds, ...stageAssignedIds]));
+            if (mergedAssignedIds.length) {
+              taskUpdateData.assignedUserIds = JSON.stringify(mergedAssignedIds);
+            }
+
+            const existingStages = matchingTask.stages ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages) : [];
+            const newStages = Array.isArray(stages) ? stages : [];
+            const mergedStages = [...existingStages];
+            for (const s of newStages) {
+              const duplicate = mergedStages.some((es: any) =>
+                es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
+              );
+              if (!duplicate) mergedStages.push(s);
+            }
+            if (mergedStages.length) {
+              taskUpdateData.stages = JSON.stringify(mergedStages);
+            } else if (stages !== undefined) {
+              taskUpdateData.stages = JSON.stringify(stages);
+            }
+
+            if (body.status !== undefined) {
+              const dbStatusVal = getDbStatus(body.status);
+              taskUpdateData.status = dbStatusVal;
+
+              if (dbStatusVal !== matchingTask.status) {
               timeline.push({
                 status: dbStatusVal,
                 timestamp: new Date().toISOString(),
@@ -392,12 +418,38 @@ export async function PATCH(req: Request) {
           if (body.score !== undefined) taskUpdateData.score = body.score;
           if (body.taskType !== undefined) taskUpdateData.taskType = body.taskType;
           if (body.format !== undefined) taskUpdateData.format = body.format;
-          if (body.stages !== undefined) taskUpdateData.stages = JSON.stringify(body.stages);
           if (body.date !== undefined) {
             taskUpdateData.postingDate = new Date(body.date);
             taskUpdateData.deadline = new Date(body.date);
           }
-          
+
+          const existingAssignedIds: string[] = matchingTask.assignedUserIds
+            ? (typeof matchingTask.assignedUserIds === 'string' ? JSON.parse(matchingTask.assignedUserIds) : matchingTask.assignedUserIds)
+            : [];
+          const logAssignedIds = res.userId ? [res.userId] : [];
+          const stageAssignedIds = Array.isArray(res.stages) ? res.stages.map((s: any) => s.userId).filter(Boolean) : [];
+          const mergedAssignedIds = Array.from(new Set([...existingAssignedIds, ...logAssignedIds, ...stageAssignedIds]));
+          if (mergedAssignedIds.length) {
+            taskUpdateData.assignedUserIds = JSON.stringify(mergedAssignedIds);
+          }
+
+          const existingStages = matchingTask.stages ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages) : [];
+          const newStages = Array.isArray(res.stages) ? res.stages : [];
+          const mergedStages = [...existingStages];
+          for (const s of newStages) {
+            const duplicate = mergedStages.some((es: any) =>
+              es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
+            );
+            if (!duplicate) mergedStages.push(s);
+          }
+          if (mergedStages.length) {
+            taskUpdateData.stages = JSON.stringify(mergedStages);
+          } else if (body.stages !== undefined) {
+            taskUpdateData.stages = JSON.stringify(body.stages);
+          }
+          if (body.stages !== undefined && !taskUpdateData.stages) {
+            taskUpdateData.stages = JSON.stringify(body.stages);
+          }
           if (body.status !== undefined) {
             const dbStatus = getDbStatus(body.status);
             taskUpdateData.status = dbStatus;

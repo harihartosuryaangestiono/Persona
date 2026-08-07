@@ -64,7 +64,7 @@ export default function KanbanPage() {
     // Scheduler should be able to access scheduling-stage tasks even if not explicitly assigned
     const isSchedulerRole = currentUser.roles.includes('Scheduler');
     const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
-    const isSchedulingStatus = task.status === 'Scheduling' || task.status === 'Ready to Post';
+    const isSchedulingStatus = ['Scheduling', 'Ready to Post', 'Posted'].includes(task.status);
     const hasSchedulingStage = Array.isArray(stages) && stages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
     if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
 
@@ -1034,9 +1034,16 @@ export default function KanbanPage() {
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                     {colTasks.map((task) => {
                       const isBeingDragged = draggedTaskId === task.id;
-                      const uniqueUserNames = task.stages
+                      const stageNames = task.stages
                         ? Array.from(new Set((typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages).map((s: any) => s.userName)))
                         : [];
+                      const assignedIds = task.assignedUserIds
+                        ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds)
+                        : [];
+                      const assignedNames = assignedIds
+                        .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
+                        .filter(Boolean);
+                      const uniqueUserNames = Array.from(new Set([...stageNames, ...assignedNames]));
 
                       // Calculate Dynamic Priority (Requirement 3)
                       const dynamicPriority = calculatePriority(task.deadline, task.status, task.postingDate);

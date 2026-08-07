@@ -105,7 +105,7 @@ export default function CalendarPage() {
       postingDate: w.date ? w.date.substring(0, 10) : null,
       deadline: w.deadline ? w.deadline.substring(0, 10) : (w.date ? w.date.substring(0, 10) : null),
       status: w.status,
-      assignedUserIds: JSON.stringify(assignedUserIds),
+      assignedUserIds: assignedUserIds,
       files: null,
       driveLink: '',
       previewLink: w.previewLink || '',
@@ -114,6 +114,8 @@ export default function CalendarPage() {
       stages: w.stages,
       month: w.month,
       year: w.year,
+      score: w.score || 0,
+      cogs: w.cogs || 0,
       contentId: w.contentId,
       isArchived: w.isArchived,
       createdAt: w.createdAt?.toString() || new Date().toISOString(),
@@ -569,7 +571,7 @@ export default function CalendarPage() {
 
                   <div className="text-right font-mono font-bold">
                     <p className="text-neutral-900">{t.postingDate || t.deadline}</p>
-                    <p className="text-[10px] opacity-75">{t.score} points</p>
+                    <p className="text-[10px] opacity-75">{(t.score ?? 0)} points</p>
                   </div>
                 </div>
               ))}

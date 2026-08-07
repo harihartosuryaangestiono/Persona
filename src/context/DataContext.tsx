@@ -416,13 +416,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setWorklogs((prev) => [normalizeWorklog(item), ...prev]);
 
     const parsedStages = item.stages ? (typeof item.stages === 'string' ? JSON.parse(item.stages) : item.stages) : [];
-    const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
+    const assignedStageIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
+    const assignedUserIds = Array.from(new Set([...(assignedStageIds || []), item.userId].filter(Boolean)));
 
     const matchedClient = clients.find((c) => c.id === item.clientId);
     const targetWorkspaceId = matchedClient?.workspaceId || 'ws-team-anggi';
+    const existingTask = tasks.find((t) => t.contentId === item.contentId && item.contentId);
+
+    const mergedAssignedUserIds = existingTask
+      ? Array.from(new Set([...(typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds || []), ...assignedUserIds]))
+      : assignedUserIds;
+
+    const existingStages = existingTask
+      ? (existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : [])
+      : [];
+    const mergedStages = [...existingStages];
+    for (const stage of parsedStages) {
+      if (!mergedStages.some((s: any) => s.id === stage.id || (s.userId === stage.userId && s.role === stage.role && s.taskType === stage.taskType))) {
+        mergedStages.push(stage);
+      }
+    }
 
     const newTask: TaskItem = {
-      id: `task-${item.id}`,
+      id: existingTask ? existingTask.id : `task-${item.id}`,
       title: item.contentTitle,
       description: 'Automatically synchronized task from manual worklog.',
       category: item.taskType === 'Content Plan' ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor'),
@@ -435,23 +451,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       workspaceId: targetWorkspaceId,
       postingDate: item.date,
       deadline: item.date,
-      assignedUserIds: assignedUserIds,
+      assignedUserIds: mergedAssignedUserIds,
       score: item.score,
       cogs: item.cogs,
       driveLink: '',
       previewLink: item.previewLink || '',
       checklist: [],
       comments: [],
-      stages: parsedStages,
+      stages: mergedStages,
       month: item.month,
       year: item.year,
       contentId: item.contentId,
       isArchived: item.isArchived,
-      createdAt: new Date().toISOString(),
+      createdAt: existingTask ? existingTask.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    setTasks((prev) => [normalizeTask(newTask), ...prev]);
+    if (existingTask) {
+      setTasks((prev) => prev.map((t) => (t.contentId === item.contentId ? normalizeTask(newTask) : t)));
+    } else {
+      setTasks((prev) => [normalizeTask(newTask), ...prev]);
+    }
 
     if (item.clientId || item.clientName) {
       setClients((prev) =>
@@ -493,6 +513,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateWorklog = async (updatedItem: WorklogItem) => {
     // Optimistic local state updates for immediate UI reaction
     setWorklogs((prev) => prev.map((w) => (w.id === updatedItem.id ? normalizeWorklog(updatedItem) : w)));
+    const updatedAssignedIds = updatedItem.stages
+      ? Array.from(new Set([
+          ...(Array.isArray(updatedItem.stages) ? updatedItem.stages.map((s: any) => s.userId).filter(Boolean) : []),
+          updatedItem.userId,
+        ].filter(Boolean)))
+      : updatedItem.userId
+      ? [updatedItem.userId]
+      : undefined;
+
     setTasks((prev) =>
       prev.map((t) =>
         t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
@@ -505,6 +534,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               taskType: updatedItem.taskType,
               format: updatedItem.format,
               stages: updatedItem.stages,
+              assignedUserIds: updatedAssignedIds !== undefined ? updatedAssignedIds : t.assignedUserIds,
               status: updatedItem.status === 'In Progress' ? 'Editing' : (updatedItem.status as any),
               postingDate: updatedItem.date,
               deadline: updatedItem.date,
@@ -548,10 +578,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const cleanId = worklogId.replace(/^worklog-task-/, '');
 
     const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId || w.contentId === worklogId || w.contentId === cleanId);
-    const targetTask = tasks.find((t) => t.id === worklogId || t.id === cleanId || t.contentId === worklogId || t.contentId === cleanId);
-    const targetScore = targetWl?.score || targetTask?.score || 0;
-    const targetClientId = targetWl?.clientId || targetTask?.clientId;
-    const targetClientName = targetWl?.clientName || targetTask?.clientName;
+    const targetScore = targetWl?.score || 0;
+    const targetClientId = targetWl?.clientId;
+    const targetClientName = targetWl?.clientName;
+    const targetContentId = targetWl?.contentId;
+
+    const matchingTaskIds = new Set<string>();
+    if (targetContentId) {
+      tasks.forEach((t) => {
+        if (t.contentId === targetContentId) matchingTaskIds.add(t.id);
+      });
+    }
+    if (cleanId) {
+      matchingTaskIds.add(cleanId);
+    }
 
     if (targetScore > 0 && (targetClientId || targetClientName)) {
       setClients((prev) =>
@@ -574,24 +614,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         (w) =>
           w.id !== worklogId &&
           w.id !== cleanId &&
-          (w.contentId ? w.contentId !== worklogId && w.contentId !== cleanId : true)
+          (w.contentId ? w.contentId !== worklogId && w.contentId !== cleanId && w.contentId !== targetContentId : true)
       )
     );
 
     setTasks((prev) =>
-      prev.filter(
-        (t) =>
-          t.id !== worklogId &&
-          t.id !== cleanId &&
-          (t.contentId ? t.contentId !== worklogId && t.contentId !== cleanId : true)
-      )
+      prev.filter((t) => {
+        if (matchingTaskIds.has(t.id)) return false;
+        if (targetContentId && t.contentId === targetContentId) return false;
+        return t.id !== worklogId && t.id !== cleanId && (t.contentId ? t.contentId !== worklogId && t.contentId !== cleanId : true);
+      })
     );
 
     try {
-      await Promise.all([
-        fetch(`/api/worklogs?id=${cleanId}`, { method: 'DELETE' }),
-        fetch(`/api/tasks?id=${cleanId}`, { method: 'DELETE' }),
-      ]);
+      const requests = [];
+      if (!worklogId.startsWith('worklog-task-')) {
+        requests.push(fetch(`/api/worklogs?id=${cleanId}`, { method: 'DELETE' }));
+      }
+      matchingTaskIds.forEach((taskId) => {
+        requests.push(fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' }));
+      });
+      await Promise.all(requests);
     } catch (e) {
       console.error('Failed to delete worklog:', e);
     }

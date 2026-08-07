@@ -155,8 +155,34 @@ export default function WorklogPage() {
   const activeTaskLogs: WorklogItem[] = (tasks || [])
     .filter((t) => !t.isArchived && (!t.contentId || !loggedContentIds.has(t.contentId)))
     .map((t) => {
-      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
-      const primaryUser = allUsers.find((u) => assignedIds.includes(u.id) || assignedIds.includes(u.name)) || currentUser;
+      const parsedStages = t.stages
+        ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages)
+        : [];
+      const assignedIdsFromStages = Array.isArray(parsedStages)
+        ? parsedStages.map((s: any) => s.userId).filter(Boolean)
+        : [];
+      const assignedIds = typeof t.assignedUserIds === 'string'
+        ? JSON.parse(t.assignedUserIds)
+        : (t.assignedUserIds || []);
+      const allAssignedIds = Array.from(new Set([...(assignedIds || []), ...assignedIdsFromStages]));
+      const assignedNames = allAssignedIds
+        .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
+        .filter(Boolean) as string[];
+      const primaryUser = allUsers.find((u) => allAssignedIds.includes(u.id) || allAssignedIds.includes(u.name)) || currentUser;
+      const fallbackStages = allAssignedIds.map((id: string) => ({
+        id: `assigned-${id}`,
+        role: 'Assignee',
+        userId: id,
+        userName: allUsers.find((u) => u.id === id)?.name || id,
+        taskType: t.taskType || 'Editing',
+        format: t.format || 'Single Foto',
+        qty: t.qty || 1,
+        score: 0,
+      }));
+      const stageScore = Array.isArray(parsedStages)
+        ? parsedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
+        : 0;
+      const totalScore = stageScore || t.score || 0;
       return {
         id: `worklog-task-${t.id}`,
         clientId: t.clientId,
@@ -165,17 +191,17 @@ export default function WorklogPage() {
         taskType: t.taskType || 'Content Plan',
         format: t.format || '4 Jam',
         qty: t.qty || 1,
-        score: t.score || 0,
-        cogs: t.cogs || (t.score || 0) * 250,
-        userName: primaryUser?.name || 'Unknown',
-        userId: primaryUser?.id || '',
+        score: totalScore,
+        cogs: t.cogs || totalScore * 250,
+        userName: assignedNames.length > 0 ? assignedNames.join(', ') : primaryUser?.name || 'Unknown',
+        userId: primaryUser?.id || allAssignedIds[0] || '',
         date: t.postingDate || t.createdAt,
         status: t.status as any,
         source: 'Automated',
         deadline: t.deadline || '',
         previewLink: t.previewLink || '',
         driveLink: t.driveLink || '',
-        stages: t.stages || null,
+        stages: Array.isArray(parsedStages) && parsedStages.length ? parsedStages : (allAssignedIds.length ? fallbackStages : null),
         month: t.month || 'August',
         year: t.year || 2026,
         contentId: t.contentId || '',
@@ -183,7 +209,66 @@ export default function WorklogPage() {
       };
     });
 
-  const combinedLogs = [...worklogs, ...activeTaskLogs];
+  const taskByContentId = new Map<string, typeof tasks[number]>();
+  tasks.forEach((t) => {
+    if (t.contentId) {
+      taskByContentId.set(t.contentId, t);
+    }
+  });
+
+  const normalizedWorklogs = worklogs.map((w) => {
+    if (!w.contentId) return w;
+    const task = taskByContentId.get(w.contentId);
+    if (!task) return w;
+
+    const parsedStages = task.stages
+      ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages)
+      : [];
+    const assignedIdsFromStages = Array.isArray(parsedStages)
+      ? parsedStages.map((s: any) => s.userId).filter(Boolean)
+      : [];
+    const assignedIds = typeof task.assignedUserIds === 'string'
+      ? JSON.parse(task.assignedUserIds)
+      : (task.assignedUserIds || []);
+    const allAssignedIds = Array.from(new Set([...(assignedIds || []), ...assignedIdsFromStages]));
+    const assignedNames = allAssignedIds
+      .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
+      .filter(Boolean) as string[];
+    const primaryUser = allUsers.find((u) => allAssignedIds.includes(u.id) || allAssignedIds.includes(u.name)) || currentUser;
+    const fallbackStages = allAssignedIds.map((id: string) => ({
+      id: `assigned-${id}`,
+      role: 'Assignee',
+      userId: id,
+      userName: allUsers.find((u) => u.id === id)?.name || id,
+      taskType: task.taskType || 'Editing',
+      format: task.format || 'Single Foto',
+      qty: task.qty || 1,
+      score: 0,
+    }));
+    const stageScore = Array.isArray(parsedStages)
+      ? parsedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
+      : 0;
+    const totalScore = stageScore || task.score || w.score || 0;
+
+    return {
+      ...w,
+      userName: assignedNames.length > 0 ? assignedNames.join(', ') : primaryUser?.name || w.userName || 'Unknown',
+      userId: primaryUser?.id || allAssignedIds[0] || w.userId,
+      score: totalScore,
+      cogs: task.cogs || totalScore * 250,
+      stages: Array.isArray(parsedStages) && parsedStages.length ? parsedStages : (allAssignedIds.length ? fallbackStages : null),
+      taskType: task.taskType || w.taskType,
+      format: task.format || w.format,
+      contentTitle: task.title || w.contentTitle,
+      clientId: task.clientId || w.clientId,
+      clientName: task.clientName || w.clientName,
+      status: task.status || w.status,
+      previewLink: task.previewLink || w.previewLink,
+      driveLink: task.driveLink || w.driveLink,
+    };
+  });
+
+  const combinedLogs = [...normalizedWorklogs, ...activeTaskLogs];
 
   const filteredLogs = combinedLogs.filter((w) => {
     if (deletedRowIds.includes(w.id) || (w.contentId && deletedRowIds.includes(w.contentId))) {

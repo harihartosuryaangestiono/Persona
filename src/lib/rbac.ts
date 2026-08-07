@@ -181,8 +181,8 @@ export function checkTaskAccess(
   user: { id: string; name: string; roles: string[] },
   task: { assignedUserIds: string; stages?: string | null; status?: string }
 ): boolean {
-  // Executive roles always have access (Strategist removed from blanket access)
-  if (user.roles.includes('Admin') || user.roles.includes('Owner')) {
+  // Executive roles always have access
+  if (user.roles.includes('Admin') || user.roles.includes('Owner') || user.roles.includes('Strategist')) {
     return true;
   }
 
