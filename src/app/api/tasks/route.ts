@@ -273,6 +273,18 @@ export async function PATCH(req: Request) {
 
     const body = await req.json();
 
+    function safeJsonArray(raw: any, fallback: any[] = []): any[] {
+      if (!raw) return fallback;
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw !== 'string') return fallback;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
     // Validate stage assignments
     if (body.stages) {
       const err = await validateTaskAssignments(body.stages);
@@ -285,7 +297,7 @@ export async function PATCH(req: Request) {
     if (body.category !== undefined && body.category !== existingTask.category) {
       const finalAssignedUserIds = body.assignedUserIds !== undefined
         ? (Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]'))
-        : JSON.parse(existingTask.assignedUserIds || '[]');
+        : safeJsonArray(existingTask.assignedUserIds);
 
       const err = await validateCategoryAssignments(finalAssignedUserIds, body.category);
       if (err) {
@@ -320,7 +332,15 @@ export async function PATCH(req: Request) {
       const dbStatus = getDbStatus(body.status);
       updateData.status = dbStatus;
       if (dbStatus !== existingTask.status) {
-        const timeline = JSON.parse(existingTask.workflowTimeline || '[]');
+        const rawTimeline = existingTask.workflowTimeline || '[]';
+        let timeline: any[] = [];
+        try {
+          const parsed = JSON.parse(rawTimeline);
+          timeline = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          timeline = [];
+        }
+
         timeline.push({
           status: dbStatus,
           timestamp: new Date().toISOString(),
@@ -417,9 +437,9 @@ export async function PATCH(req: Request) {
       const newAssignedIds = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]');
       const isAdmin = dbRoles.includes('Admin') || dbRoles.includes('Owner');
       if (!isAdmin && !dbRoles.includes('Strategist')) {
-        const originalAssigned: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
+        const originalAssigned: string[] = safeJsonArray(existingTask.assignedUserIds);
         const isSelfAssign = newAssignedIds.length <= 1 && (newAssignedIds.length === 0 || newAssignedIds[0] === currentUserId);
-        const noChange = JSON.stringify(newAssignedIds.sort()) === JSON.stringify(originalAssigned.sort());
+        const noChange = JSON.stringify(newAssignedIds.slice().sort()) === JSON.stringify(originalAssigned.slice().sort());
         if (!isSelfAssign && !noChange) {
           return NextResponse.json({ error: 'You are not authorized to assign other employees' }, { status: 403 });
         }

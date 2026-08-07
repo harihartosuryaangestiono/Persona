@@ -177,6 +177,19 @@ export function isPicAllowedForTaskType(roles: string[], taskType: string): bool
   return false;
 }
 
+function safeReadJsonArray(value: string | unknown | null | undefined): any[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function checkTaskAccess(
   user: { id: string; name: string; roles: string[] },
   task: { assignedUserIds: string; stages?: string | null; status?: string }
@@ -194,13 +207,13 @@ export function checkTaskAccess(
   }
 
   // Check assigned user IDs
-  const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
+  const assignedIds: string[] = safeReadJsonArray(task.assignedUserIds);
   if (assignedIds.includes(user.id) || assignedIds.includes(user.name)) {
     return true;
   }
 
   // Check explicit stages for ownership (including scheduler presence in stages)
-  const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
+  const stages = safeReadJsonArray(task.stages);
   if (Array.isArray(stages) && stages.some((s: any) => s.userId === user.id || s.userName === user.name)) {
     return true;
   }
