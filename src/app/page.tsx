@@ -41,8 +41,8 @@ export default function DynamicDashboardPage() {
   const { showToast } = useToast();
 
   const handleQuickApprove = async (taskId: string) => {
-    await approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
-    showToast('Task approved! Moved to Scheduling stage.', 'success');
+    await approveTask(taskId, 'Ready to Post', currentUser?.id || 'u-system');
+    showToast('Task approved! Moved to Ready to Post stage.', 'success');
   };
 
   // Quick Task Edit & Modal State

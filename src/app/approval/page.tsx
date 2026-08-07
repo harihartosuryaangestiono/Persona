@@ -46,8 +46,8 @@ export default function ApprovalPage() {
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
     } catch (e) {}
 
-    await approveTask(taskId, 'Scheduling', currentUser?.id || 'u-system');
-    showToast('Task approved! Moved to Scheduling pipeline stage and sent to Scheduler.', 'success');
+    await approveTask(taskId, 'Ready to Post', currentUser?.id || 'u-system');
+    showToast('Task approved! Moved to Ready to Post stage.', 'success');
   };
 
   const handleRequestRevision = (taskId: string) => {
