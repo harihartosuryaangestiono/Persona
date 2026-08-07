@@ -60,6 +60,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Asset Library (DAM)', href: '/assets', icon: FolderKanban, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Resource Planner', href: '/resource-planner', icon: CalendarRange, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Approval Queue', href: '/approval', icon: CheckCircle, badgeKey: 'approval', allowedRoles: ['Admin', 'Owner', 'Strategist'] },
+  { name: 'Editing Queue', href: '/editing', icon: Video, badgeKey: 'editing', allowedRoles: ['Admin', 'Owner', 'Editor'] },
   { name: 'Scheduling', href: '/scheduling', icon: Clock, allowedRoles: ['Admin', 'Owner', 'Scheduler'] },
   { name: 'Attendance', href: '/attendance', icon: UserCheck, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Editor', 'Scheduler'] },
   { name: 'Leave Request', href: '/leave-request', icon: CalendarOff },
@@ -78,6 +79,7 @@ export function Sidebar() {
   const { currentWorkspace } = useWorkspace();
  
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Approval').length;
+  const editingCount = tasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
 
   // Dynamic capacity calculation
   const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);
@@ -165,6 +167,12 @@ export function Sidebar() {
                 {item.badgeKey === 'approval' && pendingApprovalsCount > 0 && (
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200 shrink-0">
                     {pendingApprovalsCount}
+                  </span>
+                )}
+
+                {item.badgeKey === 'editing' && editingCount > 0 && (
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200 shrink-0">
+                    {editingCount}
                   </span>
                 )}
               </Link>

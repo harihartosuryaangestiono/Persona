@@ -517,8 +517,16 @@ export default function DynamicDashboardPage() {
       {/* ---------------- EDITOR DASHBOARD SECTION ---------------- */}
       {!isOwner && isEditor && (
         <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
-            <Video className="w-4 h-4 text-neutral-700" /> Active Editing & Revision Queue
+          <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Video className="w-4 h-4 text-neutral-700" /> Active Editing & Revision Queue ({workspaceTasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor').length})
+            </span>
+            <Link
+              href="/editing"
+              className="text-xs font-bold text-neutral-600 hover:text-neutral-900 flex items-center gap-1 transition"
+            >
+              View All <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {workspaceTasks

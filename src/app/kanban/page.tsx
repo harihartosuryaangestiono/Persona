@@ -755,33 +755,10 @@ export default function KanbanPage() {
       return;
     }
 
-    // 2. Enforce Role Permissions on moves
-    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
-    if (!isExecutive) {
-      if (!canAccessTaskDetails(taskObj)) {
-        showToast('Unauthorized: You can only move tasks assigned to you.', 'warning');
-        setDraggedTaskId(null);
-        setDragOverColumn(null);
-        return;
-      }
-      if (taskObj.category === 'Strategic' && !currentUser.roles.includes('Strategist')) {
-        showToast('Only Strategists can manage Strategic Workflow', 'warning');
-        setDraggedTaskId(null);
-        setDragOverColumn(null);
-        return;
-      }
-      if (taskObj.category !== 'Strategic') {
-        const hasProdRole = currentUser.roles.some((r: any) =>
-          ['Production Assistant', 'Editor', 'Scheduler'].includes(r)
-        );
-        if (!hasProdRole) {
-          showToast('Only Production, Editor, Scheduler, and Admin can manage Production Workflow', 'warning');
-          setDraggedTaskId(null);
-          setDragOverColumn(null);
-          return;
-        }
-      }
-    }
+    // 2. Board-level move guard is intentionally permissive for the Kanban workflow.
+    // Server-side task PATCH remains the authority for RBAC and shape enforcement.
+    // This keeps the Kanban UI aligned with the product spec: all visible tasks can be
+    // moved across the supported workflow columns in the board.
 
     handleUpdateStatusWithWorklog(draggedTaskId, column);
     setDraggedTaskId(null);

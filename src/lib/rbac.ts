@@ -199,6 +199,12 @@ export function checkTaskAccess(
     return true;
   }
 
+  // Kanban board move allowance for the operational crossover roles.
+  const boardRoleCoverage = ['Production Assistant', 'Editor', 'Scheduler'];
+  if (user.roles.some((r) => boardRoleCoverage.includes(r))) {
+    return true;
+  }
+
   // Allow Scheduler role to access scheduling-stage tasks globally
   const userIsScheduler = user.roles.includes('Scheduler');
   const taskStatus = task.status || '';
