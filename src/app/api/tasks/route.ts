@@ -217,16 +217,35 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // Validate category assignments
-    if (body.assignedUserIds || body.category) {
+    // Validate category assignments only if assigned users or category actually change
+    {
       const finalCategory = body.category !== undefined ? body.category : existingTask.category;
       const finalAssignedUserIds = body.assignedUserIds !== undefined
         ? (Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]'))
         : JSON.parse(existingTask.assignedUserIds || '[]');
 
-      const err = await validateCategoryAssignments(finalAssignedUserIds, finalCategory);
-      if (err) {
-        return NextResponse.json({ error: err }, { status: 400 });
+      let shouldValidate = false;
+      // if category is being changed to a different value, validate
+      if (body.category !== undefined && body.category !== existingTask.category) {
+        shouldValidate = true;
+      }
+
+      // if assignedUserIds provided and different from existing, validate
+      if (body.assignedUserIds !== undefined) {
+        const originalAssigned: string[] = JSON.parse(existingTask.assignedUserIds || '[]');
+        const newAssigned = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]');
+        const origSorted = [...originalAssigned].sort();
+        const newSorted = [...newAssigned].sort();
+        if (JSON.stringify(origSorted) !== JSON.stringify(newSorted)) {
+          shouldValidate = true;
+        }
+      }
+
+      if (shouldValidate) {
+        const err = await validateCategoryAssignments(finalAssignedUserIds, finalCategory);
+        if (err) {
+          return NextResponse.json({ error: err }, { status: 400 });
+        }
       }
     }
 
@@ -247,6 +266,10 @@ export async function PATCH(req: Request) {
     if (body.postingDate !== undefined) {
       updateData.postingDate = body.postingDate ? new Date(body.postingDate) : null;
     }
+
+    // capture auto-assigned scheduler to create logs/notifications later
+    let autoAssignedSchedulerId: string | null = null;
+    let autoAssignedSchedulerName: string | null = null;
 
     // Set stage status and track transition log (Requirement 7)
     if (body.status !== undefined) {
@@ -298,6 +321,9 @@ export async function PATCH(req: Request) {
                 if (chosenScheduler) {
                   const schedId = chosenScheduler.id;
                   const schedName = chosenScheduler.name;
+                  // record for later logging/notification
+                  autoAssignedSchedulerId = schedId;
+                  autoAssignedSchedulerName = schedName;
                   const newStage = {
                     id: `stg-${Date.now()}`,
                     role: 'Scheduler',
@@ -421,6 +447,33 @@ export async function PATCH(req: Request) {
             },
           });
         }
+      }
+
+      // If we auto-assigned a scheduler above, create an activity log and notification atomically
+      try {
+        if (autoAssignedSchedulerId) {
+          await tx.activityLog.create({
+            data: {
+              userId: currentUserId,
+              entityType: 'TASK',
+              entityId: res.id,
+              action: 'AUTO_ASSIGN_SCHEDULER',
+              details: `Assigned ${autoAssignedSchedulerName} as Scheduler`,
+            },
+          });
+
+          await tx.notification.create({
+            data: {
+              userId: autoAssignedSchedulerId,
+              type: 'ASSIGNMENT',
+              title: 'Assigned as Scheduler',
+              message: `You were assigned to schedule \"${res.title}\"`,
+              link: '/kanban',
+            },
+          });
+        }
+      } catch (e) {
+        console.error('Failed to create activity log/notification for auto-assigned scheduler:', e);
       }
 
       return res;
