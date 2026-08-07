@@ -238,69 +238,76 @@ export async function POST(req: Request) {
 
         if (matchingTask) {
           const taskUpdateData: any = {};
+
           if (contentTitle !== undefined) taskUpdateData.title = contentTitle;
           if (clientId !== undefined) taskUpdateData.clientId = resolvedClientId;
           if (score !== undefined) taskUpdateData.score = Number(score);
           if (taskType !== undefined) taskUpdateData.taskType = taskType;
           if (format !== undefined) taskUpdateData.format = format;
-            if (date !== undefined) {
-              taskUpdateData.postingDate = new Date(date);
-              taskUpdateData.deadline = new Date(date);
-            }
+          if (date !== undefined) {
+            taskUpdateData.postingDate = new Date(date);
+            taskUpdateData.deadline = new Date(date);
+          }
 
-            const existingAssignedIds: string[] = matchingTask.assignedUserIds
-              ? (typeof matchingTask.assignedUserIds === 'string' ? JSON.parse(matchingTask.assignedUserIds) : matchingTask.assignedUserIds)
-              : [];
-            const logAssignedIds = resolvedLog.userId ? [resolvedLog.userId] : [];
-            const stageAssignedIds = Array.isArray(stages) ? stages.map((s: any) => s.userId).filter(Boolean) : [];
-            const mergedAssignedIds = Array.from(new Set([...existingAssignedIds, ...logAssignedIds, ...stageAssignedIds]));
-            if (mergedAssignedIds.length) {
-              taskUpdateData.assignedUserIds = JSON.stringify(mergedAssignedIds);
-            }
+          const existingAssignedIds: string[] = matchingTask.assignedUserIds
+            ? (typeof matchingTask.assignedUserIds === 'string' ? JSON.parse(matchingTask.assignedUserIds) : matchingTask.assignedUserIds)
+            : [];
+          const logAssignedIds = resolvedLog.userId ? [resolvedLog.userId] : [];
+          const stageAssignedIds = Array.isArray(stages) ? stages.map((s: any) => s.userId).filter(Boolean) : [];
+          const mergedAssignedIds = Array.from(new Set([...existingAssignedIds, ...logAssignedIds, ...stageAssignedIds]));
+          if (mergedAssignedIds.length) {
+            taskUpdateData.assignedUserIds = JSON.stringify(mergedAssignedIds);
+          }
 
-            const existingStages = matchingTask.stages ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages) : [];
-            const newStages = Array.isArray(stages) ? stages : [];
-            const mergedStages = [...existingStages];
-            for (const s of newStages) {
-              const duplicate = mergedStages.some((es: any) =>
-                es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
-              );
-              if (!duplicate) mergedStages.push(s);
-            }
-            if (mergedStages.length) {
-              taskUpdateData.stages = JSON.stringify(mergedStages);
-            } else if (stages !== undefined) {
-              taskUpdateData.stages = JSON.stringify(stages);
-            }
+          const existingStages = matchingTask.stages
+            ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages)
+            : [];
+          const newStages = Array.isArray(stages) ? stages : [];
+          const mergedStages = [...existingStages];
 
-            if (body.status !== undefined) {
-              const dbStatusVal = getDbStatus(body.status);
-              taskUpdateData.status = dbStatusVal;
-              const timeline = Array.isArray(matchingTask.workflowTimeline)
-                ? matchingTask.workflowTimeline
-                : (matchingTask.workflowTimeline ? JSON.parse(matchingTask.workflowTimeline) : []);
+          for (const s of newStages) {
+            const duplicate = mergedStages.some((es: any) =>
+              es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
+            );
+            if (!duplicate) mergedStages.push(s);
+          }
 
-              if (dbStatusVal !== matchingTask.status) {
-                timeline.push({
-                  status: dbStatusVal,
-                  timestamp: new Date().toISOString(),
-                  userId: currentUserId,
-                });
-                taskUpdateData.workflowTimeline = JSON.stringify(timeline);
+          if (mergedStages.length) {
+            taskUpdateData.stages = JSON.stringify(mergedStages);
+          } else if (stages !== undefined) {
+            taskUpdateData.stages = JSON.stringify(stages);
+          }
 
-                if (dbStatusVal === 'Production' && matchingTask.category === 'Strategic') {
-                  taskUpdateData.category = 'Production';
-                  taskUpdateData.handoverUserId = currentUserId;
-                  taskUpdateData.handoverTime = new Date();
-                }
+          if (body.status !== undefined) {
+            const dbStatusVal = getDbStatus(body.status);
+            taskUpdateData.status = dbStatusVal;
 
-                if (dbStatusVal === 'Posted' || dbStatusVal === 'Completed') {
-                  const settings = await tx.companySetting.findFirst();
-                  if (settings && settings.archiveRule === 'IMMEDIATE') {
-                    taskUpdateData.isArchived = true;
-                    taskUpdateData.archivedAt = new Date();
-                    taskUpdateData.archivedBy = currentUserId;
-                  }
+            if (dbStatusVal !== matchingTask.status) {
+              const existingTimeline = matchingTask.workflowTimeline
+                ? JSON.parse(matchingTask.workflowTimeline)
+                : [];
+
+              const timeline = Array.isArray(existingTimeline) ? existingTimeline : [];
+              timeline.push({
+                status: dbStatusVal,
+                timestamp: new Date().toISOString(),
+                userId: currentUserId,
+              });
+
+              taskUpdateData.workflowTimeline = JSON.stringify(timeline);
+
+              if (dbStatusVal === 'Production' && matchingTask.category === 'Strategic') {
+                taskUpdateData.category = 'Production';
+                taskUpdateData.handoverUserId = currentUserId;
+                taskUpdateData.handoverTime = new Date();
+              }
+
+              if (dbStatusVal === 'Posted' || dbStatusVal === 'Completed') {
+                const settings = await tx.companySetting.findFirst();
+                if (settings && settings.archiveRule === 'IMMEDIATE') {
+                  taskUpdateData.isArchived = true;
+                  taskUpdateData.archivedAt = new Date();
+                  taskUpdateData.archivedBy = currentUserId;
                 }
               }
             }
