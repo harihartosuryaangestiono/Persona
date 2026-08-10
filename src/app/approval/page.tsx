@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link, Filter, X } from 'lucide-react';
+import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link, Filter, X, ChevronUp, ChevronDown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 import { useToast } from '@/context/ToastContext';
@@ -24,6 +24,19 @@ export default function ApprovalPage() {
   const [selectedPIC, setSelectedPIC] = useState('ALL');
   const [selectedFormat, setSelectedFormat] = useState('ALL');
 
+  // Sorting State
+  const [sortField, setSortField] = useState<'title' | 'clientName' | 'deadline' | 'status' | 'priority'>('deadline');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
   // Authenticated review checks
   const isAnggi = currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi';
   const isGigie = currentUser?.name === 'Gigie' || currentUser?.id === 'u-gigie';
@@ -41,7 +54,7 @@ export default function ApprovalPage() {
   const uniqueFormats = Array.from(new Set(tasks.map((t) => t.format).filter(Boolean)));
 
   // Filter Approval Queue based on assignment & workspace permissions and user selected filters
-  const approvalQueue = rawQueue.filter((t) => {
+  const filteredQueue = rawQueue.filter((t) => {
     if (t.workspaceId !== currentWorkspace?.id) return false;
     
     let allowed = false;
@@ -70,6 +83,24 @@ export default function ApprovalPage() {
     if (selectedFormat !== 'ALL' && t.format !== selectedFormat) return false;
 
     return true;
+  });
+
+  // Sort queue dynamically
+  const approvalQueue = [...filteredQueue].sort((a, b) => {
+    let valA: any = a[sortField] || '';
+    let valB: any = b[sortField] || '';
+
+    if (sortField === 'deadline') {
+      valA = new Date(a.deadline).getTime();
+      valB = new Date(b.deadline).getTime();
+    } else if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    }
+
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
   });
 
   const handleApprove = async (taskId: string) => {
@@ -289,20 +320,55 @@ export default function ApprovalPage() {
           </div>
         ) : (
           /* TABLE VIEW (Requirement 12) */
+          /* TABLE VIEW */
           <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
                   <tr>
-                    <th className="px-4 py-3.5">Content</th>
-                    <th className="px-4 py-3.5">Client</th>
+                    <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('title')}>
+                      <div className="flex items-center gap-1">
+                        Content
+                        {sortField === 'title' && (
+                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('clientName')}>
+                      <div className="flex items-center gap-1">
+                        Client
+                        {sortField === 'clientName' && (
+                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">Preview Link</th>
                     <th className="px-4 py-3.5">Assignee</th>
-                    <th className="px-4 py-3.5">Deadline</th>
-                    <th className="px-4 py-3.5">Status</th>
-                    <th className="px-4 py-3.5">Priority</th>
+                    <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('deadline')}>
+                      <div className="flex items-center gap-1">
+                        Deadline
+                        {sortField === 'deadline' && (
+                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('status')}>
+                      <div className="flex items-center gap-1">
+                        Status
+                        {sortField === 'status' && (
+                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('priority')}>
+                      <div className="flex items-center gap-1">
+                        Priority
+                        {sortField === 'priority' && (
+                          sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">Workspace</th>
-                    <th className="px-4 py-3.5">Approval Date (Last Update)</th>
                     <th className="px-4 py-3.5 font-bold">Reviewer</th>
                     {canApprove && <th className="px-4 py-3.5 text-center">Actions</th>}
                   </tr>

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useToast } from '@/context/ToastContext';
-import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2, Pencil } from 'lucide-react';
+import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp, FolderOpen, Trash2, Pencil, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { calculateTaskScore, normalizeFormat, calculateCOGS, parseExcelDate } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
@@ -40,6 +40,24 @@ export default function WorklogPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [parsedImportLogs, setParsedImportLogs] = useState<Partial<WorklogItem>[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
+
+  // Filters State
+  const [selectedClientId, setSelectedClientId] = useState('ALL');
+  const [selectedPIC, setSelectedPIC] = useState('ALL');
+  const [selectedFormat, setSelectedFormat] = useState('ALL');
+
+  // Sorting State
+  const [sortField, setSortField] = useState<'date' | 'clientName' | 'contentTitle' | 'userName' | 'score' | 'status' | 'source'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Manual Log Entry State
   const [newTitle, setNewTitle] = useState('');
@@ -280,6 +298,9 @@ export default function WorklogPage() {
 
   const combinedLogs = [...normalizedWorklogs, ...activeTaskLogs];
 
+  // Formats list for filtering
+  const uniqueFormats = Array.from(new Set(combinedLogs.map((w) => w.format).filter(Boolean)));
+
   const filteredLogs = combinedLogs.filter((w) => {
     if (deletedRowIds.includes(w.id) || (w.contentId && deletedRowIds.includes(w.contentId))) {
       return false;
@@ -301,12 +322,45 @@ export default function WorklogPage() {
       }
     }
 
+    // Apply Client Filter
+    if (selectedClientId !== 'ALL' && w.clientId !== selectedClientId) return false;
+
+    // Apply PIC Filter
+    if (selectedPIC !== 'ALL') {
+      const stages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === selectedPIC || s.userName === selectedPIC);
+      const isDirectOwner = w.userId === selectedPIC || w.userName === selectedPIC;
+
+      if (!isStageAssignee && !isDirectOwner) return false;
+    }
+
+    // Apply Format Filter
+    if (selectedFormat !== 'ALL' && w.format !== selectedFormat) return false;
+
     const query = searchQuery.toLowerCase();
     const matchSearch =
       w.contentTitle.toLowerCase().includes(query) ||
       w.userName?.toLowerCase().includes(query) ||
       w.clientName?.toLowerCase().includes(query);
     return matchSearch;
+  });
+
+  // Sort logs dynamically
+  const sortedLogs = [...filteredLogs].sort((a, b) => {
+    let valA: any = a[sortField] || '';
+    let valB: any = b[sortField] || '';
+
+    if (sortField === 'date') {
+      valA = new Date(a.date).getTime();
+      valB = new Date(b.date).getTime();
+    } else if (typeof valA === 'string') {
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+    }
+
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
   });
 
   // Excel File Upload Ingestion
@@ -728,17 +782,83 @@ export default function WorklogPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="p-3 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
-        <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
-          <Search className="w-4 h-4 text-neutral-400" />
-          <input
-            type="text"
-            placeholder="Search worklog by judul konten, nama, or klien..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent focus:outline-hidden w-full placeholder-neutral-400 font-normal text-neutral-900"
-          />
+      {/* Search & Filters */}
+      <div className="space-y-4">
+        <div className="p-3 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
+          <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
+            <Search className="w-4 h-4 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Search worklog by judul konten, nama, or klien..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent focus:outline-hidden w-full placeholder-neutral-400 font-normal text-neutral-900"
+            />
+          </div>
+        </div>
+
+        {/* Advanced Filters */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex flex-wrap items-center gap-4 text-xs font-medium shadow-xs">
+          <div className="flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-neutral-450" />
+            <span className="text-neutral-500">Filters:</span>
+          </div>
+
+          {/* Client */}
+          <select
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+          >
+            <option value="ALL">All Clients</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          {/* PIC */}
+          <select
+            value={selectedPIC}
+            onChange={(e) => setSelectedPIC(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+          >
+            <option value="ALL">All Employees</option>
+            {allUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Format */}
+          <select
+            value={selectedFormat}
+            onChange={(e) => setSelectedFormat(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+          >
+            <option value="ALL">All Formats</option>
+            {uniqueFormats.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+
+          {/* Clear Filters */}
+          {(selectedClientId !== 'ALL' || selectedPIC !== 'ALL' || selectedFormat !== 'ALL') && (
+            <button
+              onClick={() => {
+                setSelectedClientId('ALL');
+                setSelectedPIC('ALL');
+                setSelectedFormat('ALL');
+              }}
+              className="text-red-500 hover:text-red-700 font-semibold flex items-center gap-0.5 ml-auto"
+            >
+              Clear Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -760,19 +880,68 @@ export default function WorklogPage() {
                   )}
                 </th>
                 <th className="px-4 py-3.5 w-10"></th>
-                <th className="px-4 py-3.5">Tanggal</th>
-                <th className="px-4 py-3.5">Klien</th>
-                <th className="px-4 py-3.5">Judul Konten</th>
-                <th className="px-4 py-3.5">Employee(s)</th>
-                <th className="px-4 py-3.5 text-center">Score</th>
-                <th className="px-4 py-3.5">Status</th>
-                <th className="px-4 py-3.5">Sumber</th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('date')}>
+                  <div className="flex items-center gap-1">
+                    Tanggal
+                    {sortField === 'date' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('clientName')}>
+                  <div className="flex items-center gap-1">
+                    Klien
+                    {sortField === 'clientName' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('contentTitle')}>
+                  <div className="flex items-center gap-1">
+                    Judul Konten
+                    {sortField === 'contentTitle' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('userName')}>
+                  <div className="flex items-center gap-1">
+                    Employee(s)
+                    {sortField === 'userName' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none text-center" onClick={() => handleSort('score')}>
+                  <div className="flex items-center justify-center gap-1">
+                    Score
+                    {sortField === 'score' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('status')}>
+                  <div className="flex items-center gap-1">
+                    Status
+                    {sortField === 'status' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3.5 cursor-pointer select-none" onClick={() => handleSort('source')}>
+                  <div className="flex items-center gap-1">
+                    Sumber
+                    {sortField === 'source' && (
+                      sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3.5 text-center">Preview</th>
                 <th className="px-4 py-3.5 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {filteredLogs.map((w) => {
+              {sortedLogs.map((w) => {
                 const isExpanded = expandedRowIds.includes(w.id);
                 const logStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
                 const hasStages = logStages.length > 0;
