@@ -47,7 +47,7 @@ export const UI_TO_DATABASE_STATUS: Record<string, string> = {
   'Scheduling': 'Scheduling',
   'Completed': 'Completed',
   'Editorial Plan': 'Brief',
-  'Shooting': 'Production',
+  'Shooting': 'Shooting',
 };
 
 /**
