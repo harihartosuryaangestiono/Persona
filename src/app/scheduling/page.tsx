@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { Calendar as CalendarIcon, ListTodo, Filter, ExternalLink } from 'lucide-react';
+import { Calendar as CalendarIcon, ListTodo, Filter, ExternalLink, FolderOpen } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 export default function SchedulingPage() {
@@ -20,6 +20,8 @@ export default function SchedulingPage() {
   const [postUrlError, setPostUrlError] = useState('');
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
+  const [subQueueTab, setSubQueueTab] = useState<'pending' | 'posted'>('pending');
+
   // Workspace restriction
   const workspaceTasks = tasks.filter((t) => !t.isArchived && (!t.workspaceId || t.workspaceId === currentWorkspace.id));
 
@@ -28,8 +30,11 @@ export default function SchedulingPage() {
     (t) => selectedClientId === 'ALL' || t.clientId === selectedClientId
   );
 
-  // Queue List tasks (status is Scheduling or Ready to Post)
-  const schedulingQueue = filteredTasks.filter((t) => t.status === 'Scheduling' || t.status === 'Ready to Post');
+  // Pending Queue List (Scheduling or Ready to Post)
+  const pendingQueue = filteredTasks.filter((t) => t.status === 'Scheduling' || t.status === 'Ready to Post');
+
+  // Posted Queue List (Posted)
+  const postedQueue = filteredTasks.filter((t) => t.status === 'Posted');
 
   // Calendar dates math
   const year = currentDate.getFullYear();
@@ -117,7 +122,7 @@ export default function SchedulingPage() {
               activeTab === 'list' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
-            <ListTodo className="w-3.5 h-3.5" /> Queue List ({schedulingQueue.length})
+            <ListTodo className="w-3.5 h-3.5" /> Queue List ({pendingQueue.length})
           </button>
           <button
             onClick={() => setActiveTab('calendar')}
@@ -155,65 +160,153 @@ export default function SchedulingPage() {
 
       {/* Main Content Area */}
       {activeTab === 'list' ? (
-        /* QUEUE LIST TABLE VIEW */
-        <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
-              <tr>
-                <th className="px-4 py-3.5">Content Title</th>
-                <th className="px-4 py-3.5">Client</th>
-                <th className="px-4 py-3.5">Posting Date</th>
-                <th className="px-4 py-3.5">Format</th>
-                <th className="px-4 py-3.5 text-center">Score</th>
-                <th className="px-4 py-3.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {schedulingQueue.map((t) => (
-                <tr key={t.id} className="hover:bg-neutral-50 transition">
-                  <td className="px-4 py-3.5 font-bold text-neutral-900">{t.title}</td>
-                  <td className="px-4 py-3.5 font-semibold text-neutral-800">
-                    <span
-                      className="px-2 py-0.5 rounded text-[10px]"
-                      style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor }}
-                    >
-                      {t.clientName}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 font-mono text-neutral-900 font-semibold">{t.postingDate || t.deadline}</td>
-                  <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{t.format}</td>
-                  <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{t.score} pts</td>
-                  <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
-                    {t.previewLink && (
-                      <a
-                        href={t.previewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-neutral-500 hover:text-neutral-950 p-1.5 rounded-lg border border-neutral-200 bg-white"
-                        title="View Live Post"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                    <button
-                      onClick={() => handleMarkAsPosted(t)}
-                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition"
-                    >
-                      Mark as Posted
-                    </button>
-                  </td>
-                </tr>
-              ))}
+        <div className="space-y-4">
+          {/* Sub Queue Tab Selector */}
+          <div className="flex border-b border-neutral-200/80 text-xs font-semibold">
+            <button
+              onClick={() => setSubQueueTab('pending')}
+              className={`pb-2.5 px-4 border-b-2 transition ${
+                subQueueTab === 'pending'
+                  ? 'border-neutral-900 text-neutral-900'
+                  : 'border-transparent text-neutral-450 hover:text-neutral-900'
+              }`}
+            >
+              Pending Queue ({pendingQueue.length})
+            </button>
+            <button
+              onClick={() => setSubQueueTab('posted')}
+              className={`pb-2.5 px-4 border-b-2 transition ${
+                subQueueTab === 'posted'
+                  ? 'border-neutral-900 text-neutral-900'
+                  : 'border-transparent text-neutral-450 hover:text-neutral-900'
+              }`}
+            >
+              Posted History ({postedQueue.length})
+            </button>
+          </div>
 
-              {schedulingQueue.length === 0 && (
+          {/* QUEUE LIST TABLE VIEW */}
+          <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-neutral-400 italic">
-                    No items currently queued for scheduling.
-                  </td>
+                  <th className="px-4 py-3.5">Content Title</th>
+                  <th className="px-4 py-3.5">Client</th>
+                  <th className="px-4 py-3.5">Posting Date</th>
+                  <th className="px-4 py-3.5">Format</th>
+                  <th className="px-4 py-3.5 text-center">Score</th>
+                  <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                {subQueueTab === 'pending' ? (
+                  <>
+                    {pendingQueue.map((t) => (
+                      <tr key={t.id} className="hover:bg-neutral-50 transition">
+                        <td className="px-4 py-3.5 font-bold text-neutral-900">{t.title}</td>
+                        <td className="px-4 py-3.5 font-semibold text-neutral-800">
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px]"
+                            style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor }}
+                          >
+                            {t.clientName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-900 font-semibold">{t.postingDate || t.deadline}</td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{t.format}</td>
+                        <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{t.score} pts</td>
+                        <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
+                          {t.previewLink ? (
+                            <a
+                              href={t.previewLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-50 text-neutral-700 hover:text-neutral-950 border border-neutral-250 font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition"
+                              title="Open Preview Assets"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 text-neutral-400" />
+                              Preview
+                            </a>
+                          ) : (
+                            <button
+                              disabled
+                              className="inline-flex items-center gap-1.5 bg-neutral-50 text-neutral-350 border border-neutral-100 font-bold text-xs px-3.5 py-1.5 rounded-lg cursor-not-allowed"
+                              title="No preview link added"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 text-neutral-200" />
+                              Preview
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleMarkAsPosted(t)}
+                            className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition"
+                          >
+                            Mark as Posted
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {pendingQueue.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-neutral-400 italic">
+                          No items currently queued for scheduling.
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {postedQueue.map((t) => (
+                      <tr key={t.id} className="hover:bg-neutral-50 transition">
+                        <td className="px-4 py-3.5 font-bold text-neutral-900">{t.title}</td>
+                        <td className="px-4 py-3.5 font-semibold text-neutral-800">
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px]"
+                            style={{ backgroundColor: `${t.clientColor}15`, color: t.clientColor }}
+                          >
+                            {t.clientName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-900 font-semibold">{t.postingDate || t.deadline}</td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{t.format}</td>
+                        <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{t.score} pts</td>
+                        <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
+                          {t.previewLink ? (
+                            <a
+                              href={t.previewLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-700 hover:text-emerald-800 p-1.5 rounded-lg border border-emerald-250 bg-emerald-50/50 font-bold font-mono text-[9px] flex items-center gap-1.5 transition"
+                              title="View Live Post"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> View Post
+                            </a>
+                          ) : (
+                            <span className="text-[10px] text-neutral-400 italic">No Link</span>
+                          )}
+                          <button
+                            onClick={() => handleMarkAsPosted(t)}
+                            className="bg-neutral-100 hover:bg-neutral-200 text-neutral-750 font-semibold text-xs px-3.5 py-1.5 rounded-lg border border-neutral-200 transition"
+                          >
+                            Edit Link
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {postedQueue.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-neutral-400 italic">
+                          No items have been marked as posted yet.
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         /* SCHEDULING CALENDAR VIEW */
