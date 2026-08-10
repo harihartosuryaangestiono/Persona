@@ -29,6 +29,13 @@ If the user's query asks about a specific client (e.g. "Karihome", "BEGS", "Sama
 3. In the "reasoning.calculation" field, specify the client, e.g. "getContentStatistics(Format=\"Reels\", Client=\"Karihome\")".
 4. Filter out any records belonging to other clients from your calculation BEFORE producing the response.
 
+CRITICAL RULE FOR RESPONSE RELEVANCE:
+You MUST dynamically customize the "summaryCards", "answerText", and "autoInsights" to ONLY present information that is relevant to the user's specific query.
+1. If the user asks about a client/brand (e.g. "siapa brand dengan total reels terbanyak?"), you MUST NOT include any "Top Contributor" card or mention "Kontributor Utama" in the text, as that is irrelevant to their question. Instead, create cards like "Top Brand" (value: Baking Empire Gading Serpong) and "Total Reels" (value: 23 Posts).
+2. If the user asks about an employee, do not show client-specific summary cards.
+3. Only show "Top Contributor" or employee metrics if the user's query specifically involves contributors, team members, or PICs.
+4. Keep the response clean and strictly focused on what the user asked. Avoid cluttering the answer with unrelated database metrics.
+
 FUNCTION REGISTRY MANIFEST (AVAILABLE ANALYTICS TOOLS):
 - getClientSummary(client, month, year): Client Executive Summary, total contents, status, budget remaining, top format, top editor.
 - getCompanySummary(month, year): Company-wide operations summary, total contents, approval queue, overdue tasks, top client.
