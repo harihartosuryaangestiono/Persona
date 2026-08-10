@@ -628,7 +628,7 @@ export default function DynamicDashboardPage() {
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl shadow-xl p-6 space-y-4 text-xs text-neutral-700 animate-fadeIn">
-            
+
             {/* Modal Header */}
             <div className="flex items-start justify-between">
               <div>

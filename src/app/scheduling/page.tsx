@@ -202,20 +202,32 @@ export default function SchedulingPage() {
                 <div key={dayNum} className="min-h-[85px] p-2 rounded-xl border border-neutral-200 bg-white text-left space-y-1">
                   <span className="text-xs font-mono font-bold text-neutral-700">{dayNum}</span>
                   <div className="space-y-1 overflow-y-auto max-h-[55px]">
-                    {dayTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        className="p-1 rounded text-[9px] font-bold truncate bg-indigo-50 border border-indigo-100 text-indigo-700 cursor-pointer hover:bg-indigo-100 transition flex items-center justify-between"
-                        onClick={() => {
-                          if (confirm(`Mark "${t.title}" as posted?`)) {
-                            updateTaskStatus(t.id, 'Posted');
-                          }
-                        }}
-                        title="Click to mark as posted"
-                      >
-                        <span className="truncate">{t.title}</span>
-                      </div>
-                    ))}
+                    {dayTasks.map((t) => {
+                      const isPostDate = t.postingDate === dateStr;
+                      const isDeadline = t.deadline === dateStr;
+                      return (
+                        <div
+                          key={t.id}
+                          className="p-1 rounded text-[9px] font-bold truncate bg-indigo-50 border border-indigo-100 text-indigo-700 cursor-pointer hover:bg-indigo-100 transition flex items-center justify-between gap-1"
+                          onClick={() => {
+                            if (confirm(`Mark "${t.title}" as posted?`)) {
+                              updateTaskStatus(t.id, 'Posted');
+                            }
+                          }}
+                          title="Click to mark as posted"
+                        >
+                          <span className="truncate flex-1">{t.title}</span>
+                          <span className="flex items-center gap-0.5 shrink-0">
+                            {isPostDate && (
+                              <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm font-mono font-bold" title="Posting Date">P</span>
+                            )}
+                            {isDeadline && (!isPostDate || t.postingDate !== t.deadline) && (
+                              <span className="text-[8px] bg-amber-200 text-amber-900 px-1 rounded-sm font-mono font-bold" title="Deadline">DL</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

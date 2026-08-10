@@ -495,19 +495,31 @@ export default function CalendarPage() {
                   </div>
 
                   <div className="space-y-1 overflow-y-auto max-h-[75px] flex-1">
-                    {dayTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={() => setSelectedTask(t)}
-                        className={`p-1.5 rounded text-[9px] font-bold truncate shadow-2xs cursor-pointer transition flex items-center justify-between gap-1 ${getStatusColorClass(
-                          t.status,
-                          isToday
-                        )}`}
-                      >
-                        <span className="truncate">{t.title}</span>
-                        <span className="font-mono opacity-80">{t.score}p</span>
-                      </div>
-                    ))}
+                    {dayTasks.map((t) => {
+                      const isPostDate = t.postingDate === dateStr;
+                      const isDeadline = t.deadline === dateStr;
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => setSelectedTask(t)}
+                          className={`p-1.5 rounded text-[9px] font-bold truncate shadow-2xs cursor-pointer transition flex items-center justify-between gap-1 ${getStatusColorClass(
+                            t.status,
+                            isToday
+                          )}`}
+                        >
+                          <span className="truncate flex-1">{t.title}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isPostDate && (
+                              <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm uppercase tracking-wider font-mono font-bold" title="Posting Date">P</span>
+                            )}
+                            {isDeadline && (!isPostDate || t.postingDate !== t.deadline) && (
+                              <span className="text-[8px] bg-amber-200 text-amber-900 px-1 rounded-sm uppercase tracking-wider font-mono font-bold" title="Deadline">DL</span>
+                            )}
+                            <span className="font-mono opacity-80">{t.score}p</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -544,7 +556,17 @@ export default function CalendarPage() {
                           )}`}
                         >
                           <p className="truncate">{t.title}</p>
-                          <p className="text-[9px] font-medium opacity-80 mt-0.5">{t.status} • {t.score} pts</p>
+                          <p className="text-[9px] font-medium opacity-80 mt-0.5 flex items-center justify-between gap-1">
+                            <span>{t.status} • {t.score} pts</span>
+                            <span className="flex items-center gap-0.5">
+                              {t.postingDate === dateStr && (
+                                <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm uppercase tracking-wider font-mono font-bold" title="Posting Date">P</span>
+                              )}
+                              {t.deadline === dateStr && (t.postingDate !== dateStr) && (
+                                <span className="text-[8px] bg-amber-200 text-amber-900 px-1 rounded-sm uppercase tracking-wider font-mono font-bold" title="Deadline">DL</span>
+                              )}
+                            </span>
+                          </p>
                         </div>
                       ))}
                       {dayTasks.length === 0 && <p className="text-[10px] text-neutral-400 italic">No posts</p>}
