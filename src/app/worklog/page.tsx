@@ -394,7 +394,7 @@ export default function WorklogPage() {
         const data: any[] = XLSX.utils.sheet_to_json(ws);
 
         let dupes = 0;
-        const parsed: Partial<WorklogItem>[] = data.map((row, idx) => {
+        const parsed: Partial<WorklogItem>[] = data.reduce((acc: Partial<WorklogItem>[], row, idx) => {
           const contentTitle = String(
             row['Judul konten'] || row['Judul Konten'] || row['Content Title'] || row['Title'] || `Task #${idx + 1}`
           ).trim();
@@ -441,10 +441,17 @@ export default function WorklogPage() {
           const cleanDateStr = parseExcelDate(rawDate);
           const dateVal = new Date(cleanDateStr).toISOString();
 
+          // Skip this row entirely if an identical entry already exists in the DB
           const isDup = worklogs.some(
-            (existing) => existing.contentTitle.toLowerCase() === contentTitle.toLowerCase()
+            (existing) =>
+              existing.contentTitle.toLowerCase() === contentTitle.toLowerCase() &&
+              new Date(existing.date).toDateString() === new Date(dateVal).toDateString() &&
+              (existing.clientName || '').toLowerCase() === finalClientName.toLowerCase()
           );
-          if (isDup) dupes++;
+          if (isDup) {
+            dupes++;
+            return acc; // Skip — do not add to import list
+          }
 
           const defaultStageRole =
             category === 'Strategic'
@@ -468,7 +475,7 @@ export default function WorklogPage() {
             },
           ];
 
-          return {
+          acc.push({
             contentTitle,
             taskType,
             format,
@@ -485,8 +492,9 @@ export default function WorklogPage() {
             deadline: row['Deadline'] || '',
             previewLink: row['Preview Link'] || '',
             stages: autoStage,
-          };
-        });
+          });
+          return acc;
+        }, []);
 
         setParsedImportLogs(parsed);
         setDuplicateCount(dupes);
