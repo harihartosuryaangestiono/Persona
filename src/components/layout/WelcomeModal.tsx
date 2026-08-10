@@ -73,15 +73,18 @@ export function WelcomeModal() {
 
   // Check if we should display the modal
   const todayStr = new Date().toDateString();
-  const hasCheckedInToday = attendances.some(
-    (a) =>
-      a.userId === currentUser.id &&
-      new Date(a.date).toDateString() === todayStr
-  );
+  const hasCheckedInToday = currentUser
+    ? attendances.some(
+        (a) =>
+          a.userId === currentUser.id &&
+          new Date(a.date).toDateString() === todayStr
+      )
+    : false;
 
   useEffect(() => {
+    if (!currentUser) return;
     // Admin / Owner is never blocked by the clock-in modal
-    const isAdminOrOwner = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+    const isAdminOrOwner = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (isAdminOrOwner) {
       setIsOpen(false);
       return;
@@ -94,7 +97,7 @@ export function WelcomeModal() {
     }
   }, [currentUser, todayStr, hasSeenWelcomeToday]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !currentUser) return null;
 
   // Role Checks
   const isOwnerOrAdmin = currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin');
