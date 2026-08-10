@@ -65,10 +65,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { syncUsers, currentUser } = useUser();
   const { showToast } = useToast();
 
-  const normalizeTask = (t: TaskItem): TaskItem => ({
-    ...t,
-    status: getDbStatus(getStatusLabel(t.status)) as any
-  });
+  const normalizeTask = (t: TaskItem): TaskItem => {
+    const matchedClient = clients.find((c) => c.id === t.clientId);
+    return {
+      ...t,
+      clientName: t.clientName || matchedClient?.name || 'Unknown Client',
+      clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
+      status: getDbStatus(getStatusLabel(t.status)) as any
+    };
+  };
 
   const normalizeWorklog = (w: WorklogItem): WorklogItem => ({
     ...w,
