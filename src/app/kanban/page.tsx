@@ -109,6 +109,7 @@ export default function KanbanPage() {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const isSubmittingRef = React.useRef(false);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskItem | null>(null);
   const [isEditingDetail, setIsEditingDetail] = useState(false);
@@ -462,17 +463,20 @@ export default function KanbanPage() {
   // Create task submit
   const handleCreateTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || isCreatingTask) return;
+    if (!newTitle.trim() || isCreatingTask || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     // Permissions check (Requirement 7)
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (!isExecutive) {
       if (newCategory === 'Strategic' && !currentUser.roles.includes('Strategist')) {
         showToast('Unauthorized: Only Strategists can create Strategic tasks', 'warning');
+        isSubmittingRef.current = false;
         return;
       }
       if (newCategory === 'Production' && currentUser.roles.includes('Scheduler')) {
         showToast('Unauthorized: Schedulers cannot create Production tasks', 'warning');
+        isSubmittingRef.current = false;
         return;
       }
     }
@@ -520,6 +524,7 @@ export default function KanbanPage() {
       console.error(err);
       showToast('Failed to create task. Please try again.', 'error');
     } finally {
+      isSubmittingRef.current = false;
       setIsCreatingTask(false);
     }
   };

@@ -24,7 +24,7 @@ import { calculatePriority, getPriorityColorClass } from '@/lib/score-calculator
 import { useToast } from '@/context/ToastContext';
 
 export default function CalendarPage() {
-  const { tasks, clients, worklogs, updateTask } = useData();
+  const { tasks, clients, worklogs, updateTask, updateWorklog } = useData();
   const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
@@ -226,15 +226,27 @@ export default function CalendarPage() {
     if (!selectedTask) return;
 
     const targetClient = clients.find((c) => c.id === editClientId);
-    
-    updateTask(selectedTask.id, {
-      title: editTitle,
-      clientId: editClientId,
-      clientName: targetClient?.name,
-      clientColor: targetClient?.clientColor,
-      postingDate: editPostingDate,
-      deadline: editDeadline,
-    });
+    const matchedWorklog = worklogs.find((w) => w.id === selectedTask.id);
+
+    if (matchedWorklog) {
+      updateWorklog({
+        ...matchedWorklog,
+        contentTitle: editTitle,
+        clientId: editClientId,
+        clientName: targetClient?.name || matchedWorklog.clientName,
+        date: editPostingDate ? new Date(editPostingDate).toISOString() : matchedWorklog.date,
+        deadline: editDeadline ? new Date(editDeadline).toISOString() : matchedWorklog.deadline,
+      });
+    } else {
+      updateTask(selectedTask.id, {
+        title: editTitle,
+        clientId: editClientId,
+        clientName: targetClient?.name,
+        clientColor: targetClient?.clientColor,
+        postingDate: editPostingDate,
+        deadline: editDeadline,
+      });
+    }
 
     setIsEditing(false);
     setSelectedTask(null);
