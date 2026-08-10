@@ -45,6 +45,7 @@ interface DataContextType {
   approveLeave: (leaveId: string, approvedByUserId: string) => void;
   approveTask: (taskId: string, nextStage: string, reviewerId: string, notes?: string) => void;
   addActivity: (userId: string, entityType: string, entityId: string, action: string, details: string) => void;
+  saveClientBudget: (clientId: string, month: string, budget: number) => Promise<any>;
   refreshData: () => Promise<void>;
 }
 
@@ -921,11 +922,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
 
     try {
-      await fetch('/api/leave-request', {
+      const res = await fetch('/api/leave-request', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: leaveId, status: 'APPROVED', approvedByUserId }),
       });
+      if (res.ok) {
+        const saved = await res.json();
+        setLeaveRequests((prev) =>
+          prev.map((l) => (l.id === leaveId ? saved : l))
+        );
+      }
     } catch (e) {
       console.error('Failed to approve leave request:', e);
     }
@@ -988,6 +995,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const saveClientBudget = async (clientId: string, month: string, budget: number) => {
+    try {
+      const res = await fetch('/api/client-budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, month, budget }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setBudgets((prev) => {
+          const exists = prev.some((b) => b.clientId === clientId && b.month === month);
+          if (exists) {
+            return prev.map((b) => (b.clientId === clientId && b.month === month ? saved : b));
+          } else {
+            return [...prev, saved];
+          }
+        });
+        return saved;
+      } else {
+        console.error('Failed to save monthly budget on server');
+      }
+    } catch (e) {
+      console.error('Error saving client budget:', e);
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -1019,6 +1052,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         approveLeave,
         approveTask,
         addActivity,
+        saveClientBudget,
         refreshData: fetchInitialData,
       }}
     >

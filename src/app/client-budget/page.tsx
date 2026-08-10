@@ -19,7 +19,7 @@ const getBudgetMonthFormat = (month: string, year: number) => {
 };
 
 export default function ClientBudgetPage() {
-  const { clients, budgets, setBudgets, tasks } = useData();
+  const { clients, budgets, setBudgets, tasks, saveClientBudget } = useData();
   const [selectedMonth, setSelectedMonth] = useState('ALL');
 
   // Modal State for Add & Edit Budget
@@ -52,55 +52,17 @@ export default function ClientBudgetPage() {
         };
       });
 
-  const handleAddBudget = (e: React.FormEvent) => {
+  const handleAddBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
-
-    const newItem: ClientMonthlyBudgetItem = {
-      id: `bgt-${Date.now()}`,
-      clientId: targetClient.id,
-      clientName: targetClient.name,
-      month: newMonth,
-      budget: newBudgetPoints,
-      used: 0,
-      remaining: newBudgetPoints,
-    };
-
-    setBudgets((prev) => [...prev, newItem]);
+    await saveClientBudget(targetClient.id, newMonth, newBudgetPoints);
     setIsAddModalOpen(false);
   };
 
-  const handleUpdateBudget = (e: React.FormEvent) => {
+  const handleUpdateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBudget) return;
-
-    setBudgets((prev) => {
-      const exists = prev.some(b => b.id === editingBudget.id || (b.clientId === editingBudget.clientId && b.month === editingBudget.month));
-      if (exists) {
-        return prev.map((b) =>
-          (b.id === editingBudget.id || (b.clientId === editingBudget.clientId && b.month === editingBudget.month))
-            ? {
-                ...b,
-                budget: editingBudget.budget,
-                remaining: Math.max(0, editingBudget.budget - b.used),
-              }
-            : b
-        );
-      } else {
-        // Create as a real budget entry if it was a default fallback item
-        const newItem: ClientMonthlyBudgetItem = {
-          id: `bgt-${Date.now()}`,
-          clientId: editingBudget.clientId,
-          clientName: editingBudget.clientName,
-          month: editingBudget.month,
-          budget: editingBudget.budget,
-          used: editingBudget.used || 0,
-          remaining: Math.max(0, editingBudget.budget - (editingBudget.used || 0)),
-        };
-        return [...prev, newItem];
-      }
-    });
-
+    await saveClientBudget(editingBudget.clientId, editingBudget.month, editingBudget.budget);
     setIsEditModalOpen(false);
     setEditingBudget(null);
   };
