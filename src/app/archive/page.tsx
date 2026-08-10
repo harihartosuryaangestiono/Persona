@@ -29,6 +29,8 @@ export default function ArchivePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('ALL');
   const [selectedMonth, setSelectedMonth] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskItem | null>(null);
 
   // Filter archived tasks for this workspace
@@ -36,10 +38,25 @@ export default function ArchivePage() {
     return t.isArchived === true && t.workspaceId === currentWorkspace.id;
   });
 
-  // Apply filters
   const filteredTasks = archivedTasks.filter((t) => {
     if (selectedClientId !== 'ALL' && t.clientId !== selectedClientId) return false;
     if (selectedMonth !== 'ALL' && t.month !== selectedMonth) return false;
+
+    // Apply Date Range Filter (based on postingDate or deadline)
+    const taskDateStr = t.postingDate || t.deadline;
+    if (taskDateStr) {
+      const taskTime = new Date(taskDateStr).getTime();
+      if (startDate !== '') {
+        const startTime = new Date(startDate).getTime();
+        if (isNaN(taskTime) || taskTime < startTime) return false;
+      }
+      if (endDate !== '') {
+        const endTime = new Date(endDate + 'T23:59:59.999Z').getTime();
+        if (isNaN(taskTime) || taskTime > endTime) return false;
+      }
+    } else if (startDate !== '' || endDate !== '') {
+      return false;
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -107,6 +124,42 @@ export default function ArchivePage() {
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
+
+        {/* Start Date */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-neutral-500">Start Date:</span>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden font-mono"
+          />
+        </div>
+
+        {/* End Date */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-neutral-500">End Date:</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden font-mono"
+          />
+        </div>
+
+        {(selectedClientId !== 'ALL' || selectedMonth !== 'ALL' || startDate !== '' || endDate !== '') && (
+          <button
+            onClick={() => {
+              setSelectedClientId('ALL');
+              setSelectedMonth('ALL');
+              setStartDate('');
+              setEndDate('');
+            }}
+            className="text-red-500 hover:text-red-700 font-semibold"
+          >
+            Clear
+          </button>
+        )}
 
         <span className="text-[10px] text-neutral-450 font-mono ml-auto">
           {filteredTasks.length} archived tasks found

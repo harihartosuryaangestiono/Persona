@@ -16,7 +16,24 @@ export default function LeaveRequestPage() {
   const [reason, setReason] = useState('');
   const [type, setType] = useState<'ANNUAL' | 'SICK' | 'EMERGENCY'>('ANNUAL');
 
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+
   const canApprove = currentUser?.name === 'Devi' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+
+  const filteredLeaves = leaveRequests.filter((l) => {
+    if (filterStartDate !== '') {
+      const lStart = new Date(l.startDate).getTime();
+      const filterStart = new Date(filterStartDate).getTime();
+      if (isNaN(lStart) || lStart < filterStart) return false;
+    }
+    if (filterEndDate !== '') {
+      const lEnd = new Date(l.endDate).getTime();
+      const filterEnd = new Date(filterEndDate + 'T23:59:59.999Z').getTime();
+      if (isNaN(lEnd) || lEnd > filterEnd) return false;
+    }
+    return true;
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,8 +73,44 @@ export default function LeaveRequestPage() {
 
       {/* Leave Requests Table */}
       <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-neutral-100 font-semibold text-xs text-neutral-900">
-          Agency Time Off Submissions
+        <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-4 font-semibold text-xs text-neutral-900">
+          <span>Agency Time Off Submissions</span>
+          
+          <div className="flex flex-wrap items-center gap-3 font-semibold text-[11px] text-neutral-605">
+            {/* Start Date */}
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-500 font-medium">Start:</span>
+              <input
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-0.5 text-neutral-805 focus:outline-hidden font-mono font-medium"
+              />
+            </div>
+
+            {/* End Date */}
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-500 font-medium">End:</span>
+              <input
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-0.5 text-neutral-805 focus:outline-hidden font-mono font-medium"
+              />
+            </div>
+
+            {(filterStartDate !== '' || filterEndDate !== '') && (
+              <button
+                onClick={() => {
+                  setFilterStartDate('');
+                  setFilterEndDate('');
+                }}
+                className="text-red-500 hover:text-red-700 font-semibold"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -72,7 +125,7 @@ export default function LeaveRequestPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {leaveRequests.map((l) => (
+              {filteredLeaves.map((l) => (
                 <tr key={l.id} className="hover:bg-neutral-50 transition">
                   <td className="px-4 py-3 font-semibold text-neutral-900">{l.userName}</td>
                   <td className="px-4 py-3 font-mono text-neutral-500">
@@ -110,7 +163,7 @@ export default function LeaveRequestPage() {
                 </tr>
               ))}
 
-              {leaveRequests.length === 0 && (
+              {filteredLeaves.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-10 text-center text-neutral-400 italic">
                     No leave requests submitted yet.

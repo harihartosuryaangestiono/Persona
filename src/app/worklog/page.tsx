@@ -45,6 +45,8 @@ export default function WorklogPage() {
   const [selectedClientId, setSelectedClientId] = useState('ALL');
   const [selectedPIC, setSelectedPIC] = useState('ALL');
   const [selectedFormat, setSelectedFormat] = useState('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Sorting State
   const [sortField, setSortField] = useState<'date' | 'clientName' | 'contentTitle' | 'userName' | 'score' | 'status' | 'source'>('date');
@@ -336,6 +338,20 @@ export default function WorklogPage() {
 
     // Apply Format Filter
     if (selectedFormat !== 'ALL' && w.format !== selectedFormat) return false;
+
+    // Apply Start Date Filter
+    if (startDate !== '') {
+      const logTime = new Date(w.date).getTime();
+      const startTime = new Date(startDate).getTime();
+      if (isNaN(logTime) || logTime < startTime) return false;
+    }
+
+    // Apply End Date Filter
+    if (endDate !== '') {
+      const logTime = new Date(w.date).getTime();
+      const endTime = new Date(endDate + 'T23:59:59.999Z').getTime();
+      if (isNaN(logTime) || logTime > endTime) return false;
+    }
 
     const query = searchQuery.toLowerCase();
     const matchSearch =
@@ -846,13 +862,37 @@ export default function WorklogPage() {
             ))}
           </select>
 
+          {/* Start Date */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-neutral-500">Start Date:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden font-mono"
+            />
+          </div>
+
+          {/* End Date */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-neutral-500">End Date:</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-neutral-800 focus:outline-hidden font-mono"
+            />
+          </div>
+
           {/* Clear Filters */}
-          {(selectedClientId !== 'ALL' || selectedPIC !== 'ALL' || selectedFormat !== 'ALL') && (
+          {(selectedClientId !== 'ALL' || selectedPIC !== 'ALL' || selectedFormat !== 'ALL' || startDate !== '' || endDate !== '') && (
             <button
               onClick={() => {
                 setSelectedClientId('ALL');
                 setSelectedPIC('ALL');
                 setSelectedFormat('ALL');
+                setStartDate('');
+                setEndDate('');
               }}
               className="text-red-500 hover:text-red-700 font-semibold flex items-center gap-0.5 ml-auto"
             >

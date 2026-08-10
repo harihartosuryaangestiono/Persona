@@ -12,6 +12,8 @@ export default function AttendancePage() {
   const [locationMode, setLocationMode] = useState<'OFFICE' | 'REMOTE' | 'GPS'>('OFFICE');
   const [gpsCoords, setGpsCoords] = useState<string>('');
   const [gpsError, setGpsError] = useState<string>('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const todayAtt = attendances.find(
     (a) =>
@@ -47,6 +49,20 @@ export default function AttendancePage() {
     const finalMode = locationMode === 'GPS' ? (gpsCoords || 'GPS') : locationMode;
     clockIn(currentUser?.id || 'u-system', finalMode as any);
   };
+
+  const filteredAttendances = attendances.filter((a) => {
+    if (startDate !== '') {
+      const attTime = new Date(a.date).getTime();
+      const startTime = new Date(startDate).getTime();
+      if (isNaN(attTime) || attTime < startTime) return false;
+    }
+    if (endDate !== '') {
+      const attTime = new Date(a.date).getTime();
+      const endTime = new Date(endDate + 'T23:59:59.999Z').getTime();
+      if (isNaN(attTime) || attTime > endTime) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6 text-neutral-900 animate-fadeIn">
@@ -141,8 +157,44 @@ export default function AttendancePage() {
 
       {/* Attendance History Table */}
       <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-neutral-100 font-bold text-xs text-neutral-900">
-          Recent Agency Attendance Records
+        <div className="p-4 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-4 font-bold text-xs text-neutral-900">
+          <span>Recent Agency Attendance Records</span>
+          
+          <div className="flex flex-wrap items-center gap-3 font-semibold text-[11px] text-neutral-605">
+            {/* Start Date */}
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-500 font-medium">Start:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-0.5 text-neutral-800 focus:outline-hidden font-mono"
+              />
+            </div>
+
+            {/* End Date */}
+            <div className="flex items-center gap-1">
+              <span className="text-neutral-500 font-medium">End:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-0.5 text-neutral-800 focus:outline-hidden font-mono"
+              />
+            </div>
+
+            {(startDate !== '' || endDate !== '') && (
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="text-red-500 hover:text-red-700 font-semibold"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
@@ -158,7 +210,7 @@ export default function AttendancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {attendances.map((a) => (
+              {filteredAttendances.map((a) => (
                 <tr key={a.id} className="hover:bg-neutral-50 transition">
                   <td className="px-4 py-3 font-semibold text-neutral-900">{a.userName || 'Unknown User'}</td>
                   <td className="px-4 py-3 font-mono text-neutral-500">
