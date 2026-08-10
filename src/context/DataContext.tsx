@@ -298,9 +298,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         // Sync matching worklogs in database
         for (const mw of matchingWorklogs) {
           try {
+            const wlHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+            if (currentUser) {
+              wlHeaders['X-User-Id'] = currentUser.id;
+              wlHeaders['X-User-Role'] = currentUser.roles.join(',');
+            }
             await fetch('/api/worklogs', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: wlHeaders,
               body: JSON.stringify({
                 ...mw,
                 contentTitle: updatedTaskData.title || mw.contentTitle,
@@ -490,9 +495,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const wlHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+      if (currentUser) {
+        wlHeaders['X-User-Id'] = currentUser.id;
+        wlHeaders['X-User-Role'] = currentUser.roles.join(',');
+      }
       await fetch('/api/worklogs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: wlHeaders,
         body: JSON.stringify(item),
       });
 
@@ -628,15 +638,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const requests = [];
+      const headers: HeadersInit = {};
+      if (currentUser) {
+        headers['X-User-Id'] = currentUser.id;
+        headers['X-User-Role'] = currentUser.roles.join(',');
+      }
+
       if (!worklogId.startsWith('worklog-task-')) {
-        requests.push(fetch(`/api/worklogs?id=${cleanId}`, { method: 'DELETE' }));
+        requests.push(
+          fetch(`/api/worklogs?id=${cleanId}`, {
+            method: 'DELETE',
+            headers,
+          })
+        );
       }
       matchingTaskIds.forEach((taskId) => {
-        requests.push(fetch(`/api/tasks?id=${taskId}`, { method: 'DELETE' }));
+        requests.push(
+          fetch(`/api/tasks?id=${taskId}`, {
+            method: 'DELETE',
+            headers,
+          })
+        );
       });
-      await Promise.all(requests);
+      const responses = await Promise.all(requests);
+
+      let hasError = false;
+      for (const res of responses) {
+        if (!res.ok) {
+          hasError = true;
+          const errText = await res.text();
+          console.error('Failed to delete resource on server:', errText);
+        }
+      }
+      if (hasError) {
+        showToast('Gagal menghapus beberapa item di server', 'error');
+        await fetchInitialData();
+      }
     } catch (e) {
       console.error('Failed to delete worklog:', e);
+      showToast('Gagal menghapus worklog', 'error');
+      await fetchInitialData();
     }
   };
 
@@ -760,9 +801,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const log = formatted[j];
       const tsk = formattedTasks[j];
       try {
+        const wlHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+        if (currentUser) {
+          wlHeaders['X-User-Id'] = currentUser.id;
+          wlHeaders['X-User-Role'] = currentUser.roles.join(',');
+        }
         await fetch('/api/worklogs', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: wlHeaders,
           body: JSON.stringify(log),
         });
 
