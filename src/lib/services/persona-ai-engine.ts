@@ -376,8 +376,8 @@ export class FunctionRegistry {
     if (resolvedClient) {
       filtered = filtered.filter((w) => (
         w.clientId === resolvedClient.id ||
-        (w.clientName || '').toLowerCase().includes(resolvedClient.name.toLowerCase()) ||
-        resolvedClient.name.toLowerCase().includes((w.clientName || '').toLowerCase())
+        (w.clientName && w.clientName.toLowerCase().includes(resolvedClient.name.toLowerCase())) ||
+        (w.clientName && resolvedClient.name.toLowerCase().includes(w.clientName.toLowerCase()))
       ));
     }
 
