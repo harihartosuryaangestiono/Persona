@@ -32,7 +32,25 @@ export default function ClientBudgetPage() {
   const [newMonth, setNewMonth] = useState('2026-07');
   const [newBudgetPoints, setNewBudgetPoints] = useState(5000);
 
-  const displayedBudgets = budgets.filter((b) => selectedMonth === 'ALL' || b.month === selectedMonth);
+  // If selectedMonth is 'ALL', we show all actual configured budgets in the DB.
+  // If selectedMonth is a specific month (e.g. '2026-07' or '2026-08'), we iterate over ALL active clients.
+  // If a client has a configured budget for that month in the DB, we use it.
+  // Otherwise, we construct a default temporary budget item using the client's default monthlyPointBudget.
+  const displayedBudgets = selectedMonth === 'ALL'
+    ? budgets
+    : clients.map(client => {
+        const existing = budgets.find(b => b.clientId === client.id && b.month === selectedMonth);
+        if (existing) return existing;
+        return {
+          id: `temp-${client.id}-${selectedMonth}`,
+          clientId: client.id,
+          clientName: client.name,
+          month: selectedMonth,
+          budget: client.monthlyPointBudget || 5000,
+          used: 0,
+          remaining: client.monthlyPointBudget || 5000,
+        };
+      });
 
   const handleAddBudget = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,17 +74,32 @@ export default function ClientBudgetPage() {
     e.preventDefault();
     if (!editingBudget) return;
 
-    setBudgets((prev) =>
-      prev.map((b) =>
-        b.id === editingBudget.id
-          ? {
-              ...b,
-              budget: editingBudget.budget,
-              remaining: Math.max(0, editingBudget.budget - b.used),
-            }
-          : b
-      )
-    );
+    setBudgets((prev) => {
+      const exists = prev.some(b => b.id === editingBudget.id || (b.clientId === editingBudget.clientId && b.month === editingBudget.month));
+      if (exists) {
+        return prev.map((b) =>
+          (b.id === editingBudget.id || (b.clientId === editingBudget.clientId && b.month === editingBudget.month))
+            ? {
+                ...b,
+                budget: editingBudget.budget,
+                remaining: Math.max(0, editingBudget.budget - b.used),
+              }
+            : b
+        );
+      } else {
+        // Create as a real budget entry if it was a default fallback item
+        const newItem: ClientMonthlyBudgetItem = {
+          id: `bgt-${Date.now()}`,
+          clientId: editingBudget.clientId,
+          clientName: editingBudget.clientName,
+          month: editingBudget.month,
+          budget: editingBudget.budget,
+          used: editingBudget.used || 0,
+          remaining: Math.max(0, editingBudget.budget - (editingBudget.used || 0)),
+        };
+        return [...prev, newItem];
+      }
+    });
 
     setIsEditModalOpen(false);
     setEditingBudget(null);
