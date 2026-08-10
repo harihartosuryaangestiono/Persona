@@ -1431,8 +1431,8 @@ export default function WorklogPage() {
                   <input
                     type="number"
                     value={editScore}
-                    onChange={(e) => setEditScore(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 font-bold font-mono focus:outline-hidden"
+                    readOnly
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-500 font-bold font-mono cursor-not-allowed select-none focus:outline-hidden"
                   />
                 </div>
                 <div>
