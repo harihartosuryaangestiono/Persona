@@ -344,10 +344,10 @@ export default function SchedulingPage() {
             {/* Days list */}
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((dayNum) => {
               const dateStr = formatDayString(dayNum);
-              // Show tasks in Ready to Post, Scheduling, or Posted status
+              // Show tasks in Ready to Post, Scheduling, or Posted status on their Posting Date
               const dayTasks = filteredTasks.filter(
                 (t) =>
-                  (t.postingDate === dateStr || t.deadline === dateStr) &&
+                  t.postingDate === dateStr &&
                   (t.status === 'Scheduling' || t.status === 'Ready to Post' || t.status === 'Posted')
               );
 
@@ -356,8 +356,6 @@ export default function SchedulingPage() {
                   <span className="text-xs font-mono font-bold text-neutral-700">{dayNum}</span>
                   <div className="space-y-1 overflow-y-auto max-h-[55px]">
                     {dayTasks.map((t) => {
-                      const isPostDate = t.postingDate === dateStr;
-                      const isDeadline = t.deadline === dateStr;
                       const isPosted = t.status === 'Posted';
                       return (
                         <div
@@ -385,12 +383,7 @@ export default function SchedulingPage() {
                             {t.title}
                           </span>
                           <span className="flex items-center gap-0.5 shrink-0">
-                            {isPostDate && (
-                              <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm font-mono font-bold" title="Posting Date">P</span>
-                            )}
-                            {isDeadline && (!isPostDate || t.postingDate !== t.deadline) && (
-                              <span className="text-[8px] bg-amber-200 text-amber-900 px-1 rounded-sm font-mono font-bold" title="Deadline">DL</span>
-                            )}
+                            <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm font-mono font-bold" title="Posting Date">P</span>
                           </span>
                         </div>
                       );
