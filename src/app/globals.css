@@ -94,3 +94,63 @@ body {
   color: #1F2937;
   border: 1px solid #D1D5DB;
 }
+
+/* Custom Premium UI Transitions & Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideLeft {
+  animation: slideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Global Print Overrides for Clean PDF Exports */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  /* Force background colors & graphics rendering in PDF exports */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Prevent page-breaks slicing through widgets or cards */
+  .bg-white,
+  .rounded-2xl,
+  tr,
+  canvas {
+    page-break-inside: avoid !important;
+  }
+
+  /* Hide print buttons and selects that are useless in print/PDF formats */
+  button,
+  select,
+  input {
+    display: none !important;
+  }
+}
+
+
