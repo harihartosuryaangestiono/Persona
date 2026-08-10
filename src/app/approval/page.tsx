@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link } from 'lucide-react';
+import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSquare, ShieldAlert, Link, Filter, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 import { useToast } from '@/context/ToastContext';
 
 export default function ApprovalPage() {
-  const { currentUser } = useUser();
+  const { currentUser, allUsers } = useUser();
   const { tasks, clients, approveTask, updateTaskStatus } = useData();
   const { workspaces, currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
@@ -18,6 +18,11 @@ export default function ApprovalPage() {
   const [viewType, setViewType] = useState<'card' | 'table'>('card');
   const [revisionNotes, setRevisionNotes] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  // Filters State
+  const [selectedClientId, setSelectedClientId] = useState('ALL');
+  const [selectedPIC, setSelectedPIC] = useState('ALL');
+  const [selectedFormat, setSelectedFormat] = useState('ALL');
 
   // Authenticated review checks
   const isAnggi = currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi';
@@ -32,13 +37,39 @@ export default function ApprovalPage() {
   // Filter tasks in Approval stage
   const rawQueue = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval');
 
-  // Filter Approval Queue based on assignment & workspace permissions
+  // Formats list for filtering
+  const uniqueFormats = Array.from(new Set(tasks.map((t) => t.format).filter(Boolean)));
+
+  // Filter Approval Queue based on assignment & workspace permissions and user selected filters
   const approvalQueue = rawQueue.filter((t) => {
     if (t.workspaceId !== currentWorkspace?.id) return false;
-    if (isAdmin) return true;
-    if (isAnggi && currentWorkspace?.id === 'ws-team-anggi') return true;
-    if (isGigie && currentWorkspace?.id === 'ws-inhouse') return true;
-    return false;
+    
+    let allowed = false;
+    if (isAdmin) allowed = true;
+    else if (isAnggi && currentWorkspace?.id === 'ws-team-anggi') allowed = true;
+    else if (isGigie && currentWorkspace?.id === 'ws-inhouse') allowed = true;
+
+    if (!allowed) return false;
+
+    // Apply client filter
+    if (selectedClientId !== 'ALL' && t.clientId !== selectedClientId) return false;
+
+    // Apply PIC filter
+    if (selectedPIC !== 'ALL') {
+      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+      const userObj = allUsers.find((u) => u.id === selectedPIC);
+      const isAssigned = assignedIds.includes(selectedPIC) || (userObj && assignedIds.includes(userObj.name));
+      
+      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === selectedPIC || (userObj && s.userName === userObj.name));
+
+      if (!isAssigned && !isStageAssignee) return false;
+    }
+
+    // Apply format filter
+    if (selectedFormat !== 'ALL' && t.format !== selectedFormat) return false;
+
+    return true;
   });
 
   const handleApprove = async (taskId: string) => {
@@ -93,6 +124,70 @@ export default function ApprovalPage() {
             <CheckSquare className="w-3.5 h-3.5" /> Table View
           </button>
         </div>
+      </div>
+
+      {/* Advanced Filters */}
+      <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex flex-wrap items-center gap-4 text-xs font-medium shadow-xs">
+        <div className="flex items-center gap-1">
+          <Filter className="w-3.5 h-3.5 text-neutral-450" />
+          <span className="text-neutral-500">Filters:</span>
+        </div>
+
+        {/* Client */}
+        <select
+          value={selectedClientId}
+          onChange={(e) => setSelectedClientId(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+        >
+          <option value="ALL">All Clients</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        {/* PIC */}
+        <select
+          value={selectedPIC}
+          onChange={(e) => setSelectedPIC(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+        >
+          <option value="ALL">All PICs</option>
+          {allUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Format */}
+        <select
+          value={selectedFormat}
+          onChange={(e) => setSelectedFormat(e.target.value)}
+          className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-neutral-800 focus:outline-hidden"
+        >
+          <option value="ALL">All Formats</option>
+          {uniqueFormats.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+
+        {/* Clear Filters */}
+        {(selectedClientId !== 'ALL' || selectedPIC !== 'ALL' || selectedFormat !== 'ALL') && (
+          <button
+            onClick={() => {
+              setSelectedClientId('ALL');
+              setSelectedPIC('ALL');
+              setSelectedFormat('ALL');
+            }}
+            className="text-red-500 hover:text-red-700 font-semibold flex items-center gap-0.5 ml-auto"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Role Alert */}
@@ -235,17 +330,17 @@ export default function ApprovalPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
-                          {t.previewLink ? (
+                          {t.driveLink ? (
                             <a
-                              href={t.previewLink}
+                              href={t.driveLink}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline"
+                              className="text-purple-750 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline"
                             >
                               <ExternalLink className="w-3.5 h-3.5 text-purple-650" /> View Draft
                             </a>
                           ) : (
-                            <span className="text-neutral-450 italic">No Preview</span>
+                            <span className="text-neutral-450 italic">No Draft Link</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 font-semibold text-neutral-600">
