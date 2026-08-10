@@ -381,7 +381,7 @@ export async function PATCH(req: Request) {
                   taskType: 'Scheduling',
                   format: 'Per Post',
                   qty: 1,
-                  score: 50,
+                  score: 5,
                 };
                 const newStages = [...existingStages, newStage];
                 updateData.stages = JSON.stringify(newStages);

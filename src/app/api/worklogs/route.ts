@@ -283,16 +283,24 @@ export async function POST(req: Request) {
 
         if (body.status !== undefined) {
           const dbStatusVal = getDbStatus(body.status);
-          taskUpdateData.status = dbStatusVal;
+          const resolvedTaskType = taskType || matchingTask.taskType || '';
+          const isStrategicTask = resolvedTaskType === 'Content Plan' || resolvedTaskType === 'Meeting Brief' || resolvedTaskType === 'Presentasi';
+          
+          let coercedStatus = dbStatusVal;
+          if (isStrategicTask && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(dbStatusVal)) {
+            coercedStatus = 'Brief';
+          }
+          
+          taskUpdateData.status = coercedStatus;
 
-          if (dbStatusVal !== matchingTask.status) {
+          if (coercedStatus !== matchingTask.status) {
             const existingTimeline = matchingTask.workflowTimeline
               ? JSON.parse(matchingTask.workflowTimeline)
               : [];
 
             const timeline = Array.isArray(existingTimeline) ? existingTimeline : [];
             timeline.push({
-              status: dbStatusVal,
+              status: coercedStatus,
               timestamp: new Date().toISOString(),
               userId: currentUserId,
             });
@@ -468,12 +476,20 @@ export async function PATCH(req: Request) {
         }
         if (body.status !== undefined) {
           const dbStatus = getDbStatus(body.status);
-          taskUpdateData.status = dbStatus;
+          const resolvedTaskType = body.taskType || matchingTask.taskType || '';
+          const isStrategicTask = resolvedTaskType === 'Content Plan' || resolvedTaskType === 'Meeting Brief' || resolvedTaskType === 'Presentasi';
+          
+          let coercedStatus = dbStatus;
+          if (isStrategicTask && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(dbStatus)) {
+            coercedStatus = 'Brief';
+          }
+          
+          taskUpdateData.status = coercedStatus;
 
-          if (dbStatus !== matchingTask.status) {
+          if (coercedStatus !== matchingTask.status) {
             const timeline = JSON.parse(matchingTask.workflowTimeline || '[]');
             timeline.push({
-              status: dbStatus,
+              status: coercedStatus,
               timestamp: new Date().toISOString(),
               userId: currentUserId,
             });

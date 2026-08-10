@@ -673,7 +673,7 @@ export default function DynamicDashboardPage() {
                   className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 font-medium focus:outline-hidden"
                 >
                   {(selectedTask.category === 'Strategic'
-                    ? ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed']
+                    ? ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed']
                     : ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted']
                   ).map((st) => (
                     <option key={st} value={st}>

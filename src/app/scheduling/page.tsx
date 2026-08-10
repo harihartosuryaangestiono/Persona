@@ -15,6 +15,11 @@ export default function SchedulingPage() {
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
+  const [postingTask, setPostingTask] = useState<any | null>(null);
+  const [postUrlInput, setPostUrlInput] = useState('');
+  const [postUrlError, setPostUrlError] = useState('');
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+
   // Workspace restriction
   const workspaceTasks = tasks.filter((t) => !t.isArchived && (!t.workspaceId || t.workspaceId === currentWorkspace.id));
 
@@ -48,15 +53,25 @@ export default function SchedulingPage() {
 
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  const handleMarkAsPosted = async (t: any) => {
-    const postLink = prompt(`Enter live post URL (Proof of Posting) for "${t.title}":`, t.previewLink || '');
-    if (postLink === null) return; // user cancelled
+  const handleMarkAsPosted = (t: any) => {
+    setPostingTask(t);
+    setPostUrlInput(t.previewLink || '');
+    setPostUrlError('');
+    setIsSubmittingPost(false);
+  };
 
-    const trimmed = postLink.trim();
+  const handleSavePosted = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postingTask || isSubmittingPost) return;
+
+    const trimmed = postUrlInput.trim();
     if (!trimmed) {
-      alert('You must provide a valid link to mark this task as posted.');
+      setPostUrlError('Please provide a valid live post URL.');
       return;
     }
+
+    setIsSubmittingPost(true);
+    setPostUrlError('');
 
     let formattedLink = trimmed;
     if (!/^https?:\/\//i.test(trimmed)) {
@@ -64,14 +79,17 @@ export default function SchedulingPage() {
     }
 
     try {
-      await updateTask(t.id, {
+      await updateTask(postingTask.id, {
         status: 'Posted',
         previewLink: formattedLink
       });
       showToast?.('Content successfully marked as Posted!', 'success');
+      setPostingTask(null);
     } catch (err) {
       console.error(err);
-      alert('Failed to mark as posted.');
+      setPostUrlError('Failed to mark content as posted. Please try again.');
+    } finally {
+      setIsSubmittingPost(false);
     }
   };
 
@@ -288,6 +306,89 @@ export default function SchedulingPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+      {/* Proof of Posting Custom Modal */}
+      {postingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl shadow-xl p-6 space-y-4 text-xs text-neutral-700 animate-slideUp">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 uppercase tracking-wide font-mono">
+                  Proof of Posting
+                </span>
+                <h3 className="text-sm font-bold text-neutral-900 mt-1">
+                  Mark as Posted
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPostingTask(null)}
+                className="p-1 text-neutral-400 hover:text-neutral-700 text-sm font-semibold transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSavePosted} className="space-y-4">
+              <div className="space-y-1 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                <label className="block text-neutral-400 font-bold font-mono text-[8px] uppercase tracking-wider">Content Title</label>
+                <p className="font-bold text-neutral-800 text-xs">{postingTask.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: `${postingTask.clientColor}15`, color: postingTask.clientColor }}
+                  >
+                    {postingTask.clientName}
+                  </span>
+                  <span className="text-[9px] text-neutral-400">•</span>
+                  <span className="text-[9px] font-mono text-neutral-500 font-bold">{postingTask.format}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase">Live Post URL (Link Post)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://instagram.com/p/... or https://tiktok.com/..."
+                  value={postUrlInput}
+                  onChange={(e) => {
+                    setPostUrlInput(e.target.value);
+                    if (e.target.value.trim()) setPostUrlError('');
+                  }}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden focus:border-neutral-450 font-mono text-xs transition"
+                />
+                {postUrlError && (
+                  <p className="text-[10px] text-rose-600 font-semibold mt-1">{postUrlError}</p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPostingTask(null)}
+                  disabled={isSubmittingPost}
+                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPost}
+                  className={`bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition text-xs flex items-center gap-1.5 ${
+                    isSubmittingPost ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {isSubmittingPost ? 'Submitting...' : 'Mark as Posted ✓'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

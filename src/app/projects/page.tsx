@@ -16,12 +16,12 @@ export default function ProjectsPage() {
   const [selectedSpecificStage, setSelectedSpecificStage] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const STRATEGIC_STAGES = ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production'];
+  const STRATEGIC_STAGES = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production'];
   const PRODUCTION_STAGES = ['Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling'];
   const COMPLETED_STAGES = ['Posted', 'Completed'];
 
   const ALL_STAGES = [
-    'Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production',
+    'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production',
     'Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted', 'Completed'
   ];
 

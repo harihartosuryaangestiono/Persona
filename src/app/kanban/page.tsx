@@ -30,10 +30,10 @@ import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePrio
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 
 // Updated column configurations (Requirement 12)
-const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed'];
+const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'];
 const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
 const MAIN_COLUMNS: TaskItem['status'][] = [
-  'Brief', 'Content Proposal', 'Script & Shotlist', 'Editorial Calendar', 'Ready for Production', 'Completed',
+  'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed',
   'Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
 ];
 
@@ -347,7 +347,7 @@ export default function KanbanPage() {
     if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
-    if (type === 'Presentasi' || type === 'Meeting Brief') return ['Per Session'];
+    if (type === 'Presentasi' || type === 'Meeting Brief' || type === 'Content Proposal') return ['Per Session'];
     return [];
   };
 
@@ -550,6 +550,13 @@ export default function KanbanPage() {
     e.preventDefault();
     if (!selectedTaskDetail) return;
 
+    const isAnggiOrGigie = currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie';
+    const isProductionTask = selectedTaskDetail.category !== 'Strategic';
+    if (isProductionTask && isAnggiOrGigie) {
+      showToast('Unauthorized: Anggi and Gigie can only view Production tasks and cannot modify them.', 'warning');
+      return;
+    }
+
     const targetClient = clients.find((c) => c.id === editClientId) || clients[0];
     const totalScore = getStagesTotalScore(editStages);
     const assignedIds = Array.from(new Set(editStages.map((s) => s.userId)));
@@ -666,6 +673,13 @@ export default function KanbanPage() {
 
   // Task Status updates (via drag & drop)
   const handleUpdateStatusWithWorklog = (taskId: string, newStatus: TaskItem['status']) => {
+    const isAnggiOrGigie = currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie';
+    const isProductionCol = PRODUCTION_COLUMNS.includes(newStatus);
+    if (isProductionCol && isAnggiOrGigie) {
+      showToast('Unauthorized: Anggi and Gigie can only view the Production Kanban board and cannot modify it.', 'warning');
+      return;
+    }
+
     updateTaskStatus(taskId, newStatus);
 
     const taskObj = tasks.find((t) => t.id === taskId);
@@ -1372,7 +1386,7 @@ export default function KanbanPage() {
 
                     // Types based on role
                     let typeOptions = ['Editing', 'Revisi'];
-                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief'];
+                    if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief', 'Content Proposal'];
                     else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                     else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 
@@ -1658,7 +1672,7 @@ export default function KanbanPage() {
                       });
 
                       let typeOptions = ['Editing', 'Revisi'];
-                      if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief'];
+                      if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief', 'Content Proposal'];
                       else if (stage.role === 'Production Assistant') typeOptions = ['Production Assistant'];
                       else if (stage.role === 'Scheduler') typeOptions = ['Scheduling'];
 
@@ -1977,7 +1991,7 @@ export default function KanbanPage() {
                     </button>
                   )}
 
-                  {(selectedTaskDetail.status === 'Posted' || selectedTaskDetail.status === 'Completed' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
+                  {!(selectedTaskDetail.category !== 'Strategic' && (currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie')) && (selectedTaskDetail.status === 'Posted' || selectedTaskDetail.status === 'Completed' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
                     <button
                       onClick={() => {
                         updateTask(selectedTaskDetail.id, { isArchived: true } as any);
@@ -1990,12 +2004,14 @@ export default function KanbanPage() {
                     </button>
                   )}
 
-                  <button
-                    onClick={startEditing}
-                    className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
-                  >
-                    Edit Specifications
-                  </button>
+                  {!(selectedTaskDetail.category !== 'Strategic' && (currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie')) && (
+                    <button
+                      onClick={startEditing}
+                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-4 py-2 rounded-lg transition"
+                    >
+                      Edit Specifications
+                    </button>
+                  )}
                 </div>
               </div>
             )}

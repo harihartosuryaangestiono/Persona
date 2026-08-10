@@ -447,16 +447,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const isStrategic = item.taskType === 'Content Plan' || item.taskType === 'Meeting Brief' || item.taskType === 'Presentasi';
+    const targetCategory = isStrategic ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor');
+    let taskStatus = item.status as any || 'Completed';
+    if (isStrategic && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(taskStatus)) {
+      taskStatus = 'Brief';
+    }
+
     const newTask: TaskItem = {
       id: existingTask ? existingTask.id : `task-${item.id}`,
       title: item.contentTitle,
       description: 'Automatically synchronized task from manual worklog.',
-      category: item.taskType === 'Content Plan' ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor'),
+      category: targetCategory,
       taskType: item.taskType,
       format: item.format,
       qty: item.qty,
       priority: 'Low',
-      status: item.status as any || 'Completed',
+      status: taskStatus,
       clientId: item.clientId,
       workspaceId: targetWorkspaceId,
       postingDate: item.date,

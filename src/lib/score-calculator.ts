@@ -21,6 +21,7 @@ export const MASTER_SCORES_STATIC: Omit<MasterScoreItem, 'id'>[] = [
   { category: 'Strategic', taskType: 'Supervisi', format: 'Per Check', score: 50 },
   { category: 'Strategic', taskType: 'Presentasi', format: 'Per Session', score: 100 },
   { category: 'Strategic', taskType: 'Meeting Brief', format: 'Per Session', score: 100 },
+  { category: 'Strategic', taskType: 'Content Proposal', format: 'Per Session', score: 100 },
   { category: 'Scheduler', taskType: 'Scheduling', format: 'Per Post', score: 5 },
 ];
 
@@ -220,7 +221,7 @@ export function calculatePriority(
     const daysToPost = Math.ceil((postingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
     const isPrePostedStage = [
-      'Brief', 'Content Proposal', 'Script', 'Script & Shotlist', 'Editorial Calendar',
+      'Brief', 'Content Proposal', 'Script', 'Editorial Calendar', 'Script & Shotlist',
       'Ready for Production', 'Production', 'Editing', 'Revision', 'Approval', 'Waiting for Approval', 'Ready to Post', 'Scheduling'
     ].includes(status);
 
