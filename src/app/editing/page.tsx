@@ -347,6 +347,17 @@ export default function EditingQueuePage() {
                   <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
                     {t.format} • PICs: {t.stages ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName))).join(', ') : 'Unassigned'}
                   </p>
+                  {t.status === 'Revision' && t.comments && (typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments).length > 0 && (
+                    <div className="mt-2 bg-rose-50 border border-rose-100 rounded-lg p-2.5 text-[11px] text-rose-800 leading-snug">
+                      <strong className="font-bold block text-[8px] uppercase tracking-wide text-rose-500 font-mono mb-0.5">Latest Revision Note:</strong>
+                      <p className="line-clamp-2">
+                        {((typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments) as any[])
+                          .filter((c: any) => c.text.includes('REVISION NOTE'))
+                          .slice(-1)[0]?.text.replace('REVISION NOTE: ', '') ||
+                          ((typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments) as any[]).slice(-1)[0]?.text}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] pt-2 border-t border-neutral-100">
@@ -581,6 +592,30 @@ export default function EditingQueuePage() {
                   </div>
                 </div>
               )}
+
+              {/* Revision Notes & Comments rendering */}
+              <div className="space-y-1.5 pt-2 border-t border-neutral-100">
+                <label className="block text-neutral-500 font-bold font-mono text-[9px] uppercase mb-1">
+                  Revision Notes & Comments
+                </label>
+                {selectedTask.comments && (typeof selectedTask.comments === 'string' ? JSON.parse(selectedTask.comments) : selectedTask.comments).length > 0 ? (
+                  <div className="space-y-2 max-h-40 overflow-y-auto bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                    {((typeof selectedTask.comments === 'string' ? JSON.parse(selectedTask.comments) : selectedTask.comments) as any[]).map((comment: any, idx: number) => (
+                      <div key={comment.id || idx} className="text-[11px] leading-snug space-y-0.5">
+                        <div className="flex items-center justify-between text-[9px] text-neutral-450 font-semibold">
+                          <span>{comment.userName}</span>
+                          <span>{new Date(comment.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className={`font-medium ${comment.text.startsWith('REVISION NOTE:') ? 'text-rose-700 font-bold' : 'text-neutral-700'}`}>
+                          {comment.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-neutral-450 italic text-[10px]">No revision notes or comments.</p>
+                )}
+              </div>
 
               {/* Buttons */}
               <div className="pt-3 border-t border-neutral-100 flex items-center justify-end gap-2">

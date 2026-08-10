@@ -61,7 +61,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Resource Planner', href: '/resource-planner', icon: CalendarRange, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Approval Queue', href: '/approval', icon: CheckCircle, badgeKey: 'approval', allowedRoles: ['Admin', 'Owner', 'Strategist'] },
   { name: 'Editing Queue', href: '/editing', icon: Video, badgeKey: 'editing', allowedRoles: ['Admin', 'Owner', 'Editor'] },
-  { name: 'Scheduling', href: '/scheduling', icon: Clock, allowedRoles: ['Admin', 'Owner', 'Scheduler'] },
+  { name: 'Scheduling', href: '/scheduling', icon: Clock, badgeKey: 'scheduling', allowedRoles: ['Admin', 'Owner', 'Scheduler'] },
   { name: 'Attendance', href: '/attendance', icon: UserCheck, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Editor', 'Scheduler'] },
   { name: 'Leave Request', href: '/leave-request', icon: CalendarOff },
   { name: 'Score Summary', href: '/score-summary', icon: Award, allowedRoles: ['Admin', 'Owner'] },
@@ -80,6 +80,7 @@ export function Sidebar() {
  
   const pendingApprovalsCount = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
   const editingCount = tasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
+  const schedulingCount = tasks.filter((t) => (t.status === 'Scheduling' || t.status === 'Ready to Post') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
 
   // Dynamic capacity calculation
   const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);
@@ -173,6 +174,12 @@ export function Sidebar() {
                 {item.badgeKey === 'editing' && editingCount > 0 && (
                   <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200 shrink-0">
                     {editingCount}
+                  </span>
+                )}
+
+                {item.badgeKey === 'scheduling' && schedulingCount > 0 && (
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-amber-200 shrink-0">
+                    {schedulingCount}
                   </span>
                 )}
               </Link>

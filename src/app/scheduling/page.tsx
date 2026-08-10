@@ -4,14 +4,16 @@ import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { Calendar as CalendarIcon, ListTodo, Filter, ExternalLink } from 'lucide-react';
+import { useToast } from '@/context/ToastContext';
 
 export default function SchedulingPage() {
-  const { tasks, clients, updateTaskStatus } = useData();
+  const { tasks, clients, updateTask, updateTaskStatus } = useData();
   const { currentWorkspace } = useWorkspace();
+  const { showToast } = useToast();
 
   const [selectedClientId, setSelectedClientId] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 6, 1)); // Default July 2026
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
   // Workspace restriction
   const workspaceTasks = tasks.filter((t) => !t.isArchived && (!t.workspaceId || t.workspaceId === currentWorkspace.id));
@@ -45,6 +47,33 @@ export default function SchedulingPage() {
   };
 
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const handleMarkAsPosted = async (t: any) => {
+    const postLink = prompt(`Enter live post URL (Proof of Posting) for "${t.title}":`, t.previewLink || '');
+    if (postLink === null) return; // user cancelled
+
+    const trimmed = postLink.trim();
+    if (!trimmed) {
+      alert('You must provide a valid link to mark this task as posted.');
+      return;
+    }
+
+    let formattedLink = trimmed;
+    if (!/^https?:\/\//i.test(trimmed)) {
+      formattedLink = `https://${trimmed}`;
+    }
+
+    try {
+      await updateTask(t.id, {
+        status: 'Posted',
+        previewLink: formattedLink
+      });
+      showToast?.('Content successfully marked as Posted!', 'success');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to mark as posted.');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900">
@@ -136,9 +165,20 @@ export default function SchedulingPage() {
                   <td className="px-4 py-3.5 font-mono text-neutral-900 font-semibold">{t.postingDate || t.deadline}</td>
                   <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{t.format}</td>
                   <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{t.score} pts</td>
-                  <td className="px-4 py-3.5 text-right">
+                  <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
+                    {t.previewLink && (
+                      <a
+                        href={t.previewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-neutral-500 hover:text-neutral-950 p-1.5 rounded-lg border border-neutral-200 bg-white"
+                        title="View Live Post"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                     <button
-                      onClick={() => updateTaskStatus(t.id, 'Posted')}
+                      onClick={() => handleMarkAsPosted(t)}
                       className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition"
                     >
                       Mark as Posted
@@ -193,9 +233,11 @@ export default function SchedulingPage() {
             {/* Days list */}
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((dayNum) => {
               const dateStr = formatDayString(dayNum);
-              // Show only tasks in Scheduling status
+              // Show tasks in Ready to Post, Scheduling, or Posted status
               const dayTasks = filteredTasks.filter(
-                (t) => (t.postingDate === dateStr || t.deadline === dateStr) && t.status === 'Scheduling'
+                (t) =>
+                  (t.postingDate === dateStr || t.deadline === dateStr) &&
+                  (t.status === 'Scheduling' || t.status === 'Ready to Post' || t.status === 'Posted')
               );
 
               return (
@@ -205,18 +247,32 @@ export default function SchedulingPage() {
                     {dayTasks.map((t) => {
                       const isPostDate = t.postingDate === dateStr;
                       const isDeadline = t.deadline === dateStr;
+                      const isPosted = t.status === 'Posted';
                       return (
                         <div
                           key={t.id}
-                          className="p-1 rounded text-[9px] font-bold truncate bg-indigo-50 border border-indigo-100 text-indigo-700 cursor-pointer hover:bg-indigo-100 transition flex items-center justify-between gap-1"
+                          className={`p-1 rounded text-[9px] font-bold truncate transition flex items-center justify-between gap-1 cursor-pointer ${
+                            isPosted
+                              ? 'bg-emerald-50 border border-emerald-250 text-emerald-700 hover:bg-emerald-100'
+                              : 'bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100'
+                          }`}
                           onClick={() => {
-                            if (confirm(`Mark "${t.title}" as posted?`)) {
-                              updateTaskStatus(t.id, 'Posted');
+                            if (isPosted) {
+                              if (t.previewLink) {
+                                window.open(t.previewLink, '_blank');
+                              } else {
+                                alert('No post URL saved for this task.');
+                              }
+                            } else {
+                              handleMarkAsPosted(t);
                             }
                           }}
-                          title="Click to mark as posted"
+                          title={isPosted ? (t.previewLink ? `Posted: Click to view live post` : `Posted`) : `Click to mark as posted`}
                         >
-                          <span className="truncate flex-1">{t.title}</span>
+                          <span className="truncate flex-1">
+                            {isPosted && '✓ '}
+                            {t.title}
+                          </span>
                           <span className="flex items-center gap-0.5 shrink-0">
                             {isPostDate && (
                               <span className="text-[8px] bg-purple-200 text-purple-900 px-1 rounded-sm font-mono font-bold" title="Posting Date">P</span>

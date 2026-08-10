@@ -11,7 +11,7 @@ import { useToast } from '@/context/ToastContext';
 
 export default function ApprovalPage() {
   const { currentUser, allUsers } = useUser();
-  const { tasks, clients, approveTask, updateTaskStatus } = useData();
+  const { tasks, clients, approveTask, updateTaskStatus, updateTask } = useData();
   const { workspaces, currentWorkspace } = useWorkspace();
   const { showToast } = useToast();
 
@@ -112,15 +112,38 @@ export default function ApprovalPage() {
     showToast('Task approved! Moved to Ready to Post stage.', 'success');
   };
 
-  const handleRequestRevision = (taskId: string) => {
+  const handleRequestRevision = async (taskId: string) => {
     if (!revisionNotes.trim()) {
       showToast('Please provide revision notes before requesting revision.', 'warning');
       return;
     }
-    updateTaskStatus(taskId, 'Revision');
-    setSelectedTaskId(null);
-    setRevisionNotes('');
-    showToast('Revision requested! Moved back to Revision stage.', 'info');
+
+    const taskObj = tasks.find((t) => t.id === taskId);
+    const existingComments = taskObj?.comments
+      ? (typeof taskObj.comments === 'string' ? JSON.parse(taskObj.comments) : taskObj.comments)
+      : [];
+
+    const newComment = {
+      id: `comment-${Date.now()}`,
+      userName: currentUser?.name || 'Approver',
+      userId: currentUser?.id || 'u-system',
+      text: `REVISION NOTE: ${revisionNotes.trim()}`,
+      timestamp: new Date().toISOString()
+    };
+    const updatedComments = [...existingComments, newComment];
+
+    try {
+      await updateTask(taskId, {
+        status: 'Revision',
+        comments: updatedComments
+      });
+      setSelectedTaskId(null);
+      setRevisionNotes('');
+      showToast('Revision requested! Moved back to Revision stage.', 'info');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to request revision.', 'error');
+    }
   };
 
   return (
