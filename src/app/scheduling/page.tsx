@@ -216,9 +216,9 @@ export default function SchedulingPage() {
                         <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{t.format}</td>
                         <td className="px-4 py-3.5 text-center font-mono font-bold text-neutral-900">{t.score} pts</td>
                         <td className="px-4 py-3.5 text-right flex items-center justify-end gap-2">
-                          {t.previewLink ? (
+                          {t.driveLink ? (
                             <a
-                              href={t.previewLink}
+                              href={t.driveLink}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-50 text-neutral-700 hover:text-neutral-950 border border-neutral-250 font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition"
@@ -231,7 +231,7 @@ export default function SchedulingPage() {
                             <button
                               disabled
                               className="inline-flex items-center gap-1.5 bg-neutral-50 text-neutral-350 border border-neutral-100 font-bold text-xs px-3.5 py-1.5 rounded-lg cursor-not-allowed"
-                              title="No preview link added"
+                              title="No drive assets link added"
                             >
                               <FolderOpen className="w-3.5 h-3.5 text-neutral-200" />
                               Preview
