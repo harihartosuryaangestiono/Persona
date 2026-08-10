@@ -63,6 +63,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Editing Queue', href: '/editing', icon: Video, badgeKey: 'editing', allowedRoles: ['Admin', 'Owner', 'Editor'] },
   { name: 'Scheduling', href: '/scheduling', icon: Clock, badgeKey: 'scheduling', allowedRoles: ['Admin', 'Owner', 'Scheduler'] },
   { name: 'Attendance', href: '/attendance', icon: UserCheck, allowedRoles: ['Admin', 'Owner', 'Production Assistant', 'Editor', 'Scheduler'] },
+  { name: 'Leave Request', href: '/leave-request', icon: CalendarOff },
   { name: 'Score Summary', href: '/score-summary', icon: Award, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Client Budget', href: '/client-budget', icon: DollarSign, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Advanced Analytics', href: '/analytics', icon: PieChart, allowedRoles: ['Admin', 'Owner'] },
