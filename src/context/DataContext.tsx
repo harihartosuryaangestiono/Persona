@@ -532,9 +532,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ? [updatedItem.userId]
       : undefined;
 
+    const cleanTaskId = updatedItem.id.startsWith('worklog-task-')
+      ? updatedItem.id.replace(/^worklog-task-/, '')
+      : updatedItem.id;
+
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === updatedItem.id || (updatedItem.contentId && t.contentId === updatedItem.contentId)
+        t.id === cleanTaskId || t.id === `task-${cleanTaskId}` || (updatedItem.contentId && t.contentId === updatedItem.contentId)
           ? normalizeTask({
               ...t,
               title: updatedItem.contentTitle,
