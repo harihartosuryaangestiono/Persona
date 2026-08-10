@@ -30,12 +30,16 @@ import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePrio
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 
 // Updated column configurations (Requirement 12)
-const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'];
-const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
+const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed'];
+const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
 const MAIN_COLUMNS: TaskItem['status'][] = [
-  'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed',
-  'Production', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
+  'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production', 'Shooting', 'Completed',
+  'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
 ];
+// Columns PA is allowed to see in the Strategic Pipeline
+const PA_STRATEGIC_COLUMNS: string[] = ['Production / Shooting', 'Completed'];
+// Helper: statuses grouped under the merged Production/Shooting column
+const PRODUCTION_SHOOTING_STATUSES = ['Production', 'Shooting'];
 
 interface TaskStage {
   id: string;
@@ -163,6 +167,7 @@ export default function KanbanPage() {
         } else if (roles.includes('Strategist')) {
           setActiveBoard('strategic');
         } else {
+          // PA, Editor, Scheduler all default to production board
           setActiveBoard('production');
         }
         setHasInitializedBoard(true);
@@ -230,11 +235,18 @@ export default function KanbanPage() {
       return columns;
     }
 
+    // PA on strategic board: ONLY show Production/Shooting merged column + Completed
+    const isPA = roles.includes('Production Assistant') && !isManager;
+    if (isPA && activeBoard === 'strategic') {
+      return columns.filter((col) => PA_STRATEGIC_COLUMNS.includes(col as any));
+    }
+    // PA on production board: sees all production columns (full visibility)
+    if (isPA && activeBoard === 'production') {
+      return columns; // all PRODUCTION_COLUMNS visible
+    }
+
     const allowed = new Set<string>();
 
-    if (roles.includes('Strategist')) {
-      STRATEGIC_COLUMNS.forEach((col) => allowed.add(col));
-    }
     if (roles.includes('Production Assistant')) {
       allowed.add('Production');
       allowed.add('Shooting');
@@ -244,6 +256,8 @@ export default function KanbanPage() {
       allowed.add('Revision');
     }
     if (roles.includes('Scheduler')) {
+      allowed.add('Waiting for Approval');
+      allowed.add('Approval');
       allowed.add('Ready to Post');
       allowed.add('Scheduling');
       allowed.add('Posted');
@@ -262,8 +276,13 @@ export default function KanbanPage() {
     if (t.isArchived) return false;
 
     // Filter by Active Board type (Requirement 5: Correct Workflow Detection based on Task Category)
-    if (activeBoard === 'strategic' && t.category !== 'Strategic') return false;
-    if (activeBoard === 'production' && t.category === 'Strategic') return false;
+    // Strategic board shows: Strategic category tasks + Production/Shooting-status tasks (PA workflow)
+    if (activeBoard === 'strategic') {
+      const isStrategicTask = t.category === 'Strategic';
+      const isProductionStatusTask = t.status === 'Production' || t.status === 'Shooting';
+      if (!isStrategicTask && !isProductionStatusTask) return false;
+    }
+    if (activeBoard === 'production' && (t.category === 'Strategic' || t.status === 'Production' || t.status === 'Shooting')) return false;
 
     // Client Filter
     if (selectedClientFilter !== 'ALL' && t.clientId !== selectedClientFilter) return false;
@@ -815,27 +834,78 @@ export default function KanbanPage() {
         {/* View Switcher */}
         <div className="flex items-center gap-3">
           {/* Board selector tabs */}
-          {currentUser && (currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist')) ? (
-            <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
-              {(['main', 'strategic', 'production'] as const).map((b) => (
-                <button
-                  key={b}
-                  onClick={() => setActiveBoard(b)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
-                    activeBoard === b
-                      ? 'bg-neutral-900 text-white shadow-xs'
-                      : 'text-neutral-500 hover:text-neutral-900'
-                  }`}
-                >
-                  {b === 'main' ? 'All Pipelines' : `${b} Pipeline`}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center bg-white border border-neutral-200 px-3 py-1.5 rounded-xl shadow-2xs text-xs font-bold text-neutral-800">
-              Production Pipeline
-            </div>
-          )}
+          {currentUser && (() => {
+            const roles = currentUser.roles;
+            const isAdmin = roles.includes('Admin') || roles.includes('Owner');
+            const isStrategist = roles.includes('Strategist');
+            const isPA = roles.includes('Production Assistant') && !isAdmin && !isStrategist;
+
+            // Admin & Owner: all 3 boards
+            if (isAdmin) {
+              return (
+                <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+                  {(['main', 'strategic', 'production'] as const).map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setActiveBoard(b)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                        activeBoard === b ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+                      }`}
+                    >
+                      {b === 'main' ? 'All Pipelines' : `${b} Pipeline`}
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+
+            // Strategist: strategic + production boards
+            if (isStrategist) {
+              return (
+                <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+                  {(['strategic', 'production'] as const).map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setActiveBoard(b)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                        activeBoard === b ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+                      }`}
+                    >
+                      {b === 'strategic' ? 'Strategic Pipeline' : 'Production Pipeline'}
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+
+            // PA: TWO tabs — Production Pipeline (default) + Strategic Pipeline (restricted)
+            if (isPA) {
+              return (
+                <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+                  {(['production', 'strategic'] as const).map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setActiveBoard(b)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                        activeBoard === b ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+                      }`}
+                    >
+                      {b === 'production' ? 'Production Pipeline' : 'Strategic Pipeline'}
+                    </button>
+                  ))}
+                </div>
+              );
+            }
+
+            // Other roles: show role-appropriate pipeline label
+            // Any user with Scheduler role gets Scheduling Pipeline label
+            const isScheduler = roles.includes('Scheduler');
+            return (
+              <div className="flex items-center bg-white border border-neutral-200 px-3 py-1.5 rounded-xl shadow-2xs text-xs font-bold text-neutral-800">
+                {isScheduler ? 'Scheduling Pipeline' : 'Production Pipeline'}
+              </div>
+            );
+          })()}
 
           <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
             <button
@@ -1014,7 +1084,11 @@ export default function KanbanPage() {
         /* KANBAN BOARD VIEW */
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin select-none">
           {visibleColumns.map((col) => {
-            const colTasks = filteredTasks.filter((t) => t.status === col);
+            // Merged column: show tasks from both Production and Shooting statuses
+            const isMergedCol = (col as string) === 'Production / Shooting';
+            const colTasks = isMergedCol
+              ? filteredTasks.filter((t) => PRODUCTION_SHOOTING_STATUSES.includes(t.status))
+              : filteredTasks.filter((t) => t.status === col);
             const isDragOver = dragOverColumn === col;
 
             return (
@@ -1027,7 +1101,7 @@ export default function KanbanPage() {
                 onDragLeave={() => {
                   if (dragOverColumn === col) setDragOverColumn(null);
                 }}
-                onDrop={() => handleDrop(col)}
+                onDrop={() => handleDrop(isMergedCol ? 'Production' as any : col)}
                 className={`flex-shrink-0 w-80 rounded-2xl p-4 transition-all flex flex-col justify-between min-h-[400px] border ${
                   isDragOver ? 'bg-neutral-100 border-neutral-450 shadow-inner' : 'bg-neutral-50/50 border-neutral-200'
                 }`}
