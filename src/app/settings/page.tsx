@@ -264,6 +264,26 @@ export default function SettingsPage() {
             <p className="text-[10px] text-neutral-400 mt-1">Defines the permanent database rules for automatic archiving of finished/posted contents.</p>
           </div>
           <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1">
+            <span className="text-neutral-500 font-semibold block mb-1 text-[10px]">Work Start (Expected):</span>
+            <input
+              type="time"
+              value={companySettings?.workStart || '09:00'}
+              disabled={!isAdmin}
+              onChange={(e) => updateCompanySettings({ workStart: e.target.value })}
+              className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1 text-neutral-800 font-bold focus:outline-hidden text-xs w-full disabled:bg-neutral-100 disabled:text-neutral-500"
+            />
+          </div>
+          <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1">
+            <span className="text-neutral-500 font-semibold block mb-1 text-[10px]">Grace Period (Mins):</span>
+            <input
+              type="number"
+              value={companySettings?.gracePeriod !== undefined ? companySettings.gracePeriod : 15}
+              disabled={!isAdmin}
+              onChange={(e) => updateCompanySettings({ gracePeriod: Number(e.target.value) })}
+              className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1 text-neutral-800 font-bold focus:outline-hidden text-xs w-full disabled:bg-neutral-100 disabled:text-neutral-500"
+            />
+          </div>
+          <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1">
             <span className="text-neutral-500">Effective Hours / Day:</span>
             <p className="font-bold text-neutral-900 text-sm">6 Hours</p>
           </div>

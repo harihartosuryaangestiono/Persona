@@ -29,6 +29,125 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+function parseInlineMarkdown(text: string): React.ReactNode {
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = boldRegex.exec(text)) !== null) {
+    const prevText = text.substring(lastIndex, match.index);
+    if (prevText) {
+      parts.push(prevText);
+    }
+    parts.push(<strong key={match.index} className="font-extrabold text-neutral-900">{match[1]}</strong>);
+    lastIndex = boldRegex.lastIndex;
+  }
+
+  const remainingText = text.substring(lastIndex);
+  if (remainingText) {
+    parts.push(remainingText);
+  }
+
+  return parts.length > 0 ? <>{parts}</> : text;
+}
+
+function renderBasicMarkdown(text: string): React.ReactNode {
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    // List item parsing
+    const bulletMatch = line.match(/^(\s*)[-•*]\s+(.*)$/);
+    if (bulletMatch) {
+      const indent = bulletMatch[1].length * 10;
+      const content = parseInlineMarkdown(bulletMatch[2]);
+      return (
+        <div key={lineIdx} className="flex items-start gap-2 py-0.5 text-xs md:text-sm text-neutral-800" style={{ paddingLeft: `${indent}px` }}>
+          <span className="text-emerald-500 font-bold">•</span>
+          <span>{content}</span>
+        </div>
+      );
+    }
+
+    // Markdown Table parsing
+    if (line.trim().startsWith('|')) {
+      if (line.includes('---')) return null;
+      const cells = line.split('|').map(c => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      const isHeader = lineIdx === 0 || line.includes('Rank') || line.includes('Client') || line.includes('Employee') || (lines[lineIdx - 1] && lines[lineIdx - 1].includes('Rank') && lines[lineIdx - 1].includes('|'));
+      return (
+        <div key={lineIdx} className={`flex divide-x divide-neutral-200 border-x border-b border-neutral-200 text-xs md:text-sm font-medium ${isHeader ? 'bg-neutral-100 font-bold border-t' : 'bg-white'}`}>
+          {cells.map((cell, cellIdx) => (
+            <div key={cellIdx} className="flex-1 px-3 py-1.5 truncate">
+              {parseInlineMarkdown(cell)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Headers parsing
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const content = parseInlineMarkdown(headingMatch[2]);
+      const sizeClass = level === 1 ? 'text-lg font-black text-neutral-900 mt-4 mb-2 border-b border-neutral-100 pb-1' :
+                        level === 2 ? 'text-base font-extrabold text-neutral-900 mt-3 mb-1.5' :
+                        'text-sm font-bold text-neutral-900 mt-2 mb-1';
+      return <div key={lineIdx} className={sizeClass}>{content}</div>;
+    }
+
+    if (!line.trim()) {
+      return <div key={lineIdx} className="h-2" />;
+    }
+
+    return (
+      <div key={lineIdx} className="text-xs md:text-sm text-neutral-800 leading-relaxed py-0.5">
+        {parseInlineMarkdown(line)}
+      </div>
+    );
+  });
+}
+
+function parseMarkdownToReact(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // Match details/summary blocks
+  const detailsRegex = /<details>\s*<summary>(.*?)<\/summary>([\s\S]*?)<\/details>/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = detailsRegex.exec(text)) !== null) {
+    const prevText = text.substring(lastIndex, match.index);
+    if (prevText) {
+      parts.push(renderBasicMarkdown(prevText));
+    }
+
+    const summary = match[1];
+    const content = match[2];
+
+    parts.push(
+      <details key={`details-${match.index}`} className="mt-3 border border-neutral-200 rounded-xl bg-white overflow-hidden shadow-2xs">
+        <summary className="px-4 py-2 bg-neutral-50 hover:bg-neutral-100 text-xs font-bold text-neutral-700 cursor-pointer list-none flex justify-between items-center select-none font-mono">
+          <span>📊 {summary}</span>
+          <span className="text-[10px] text-neutral-400">Click to expand</span>
+        </summary>
+        <div className="p-4 text-xs font-mono text-neutral-600 leading-relaxed whitespace-pre-wrap border-t border-neutral-150 bg-neutral-50/30">
+          {renderBasicMarkdown(content)}
+        </div>
+      </details>
+    );
+
+    lastIndex = detailsRegex.lastIndex;
+  }
+
+  const remainingText = text.substring(lastIndex);
+  if (remainingText) {
+    parts.push(renderBasicMarkdown(remainingText));
+  }
+
+  return <>{parts}</>;
+}
+
 export default function PersonaAIPage() {
   const { worklogs, tasks, clients, budgets, attendances, leaveRequests } = useData();
   const { currentUser, allUsers } = useUser();
@@ -113,7 +232,7 @@ export default function PersonaAIPage() {
       const res = await fetch('/api/persona-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: queryText }),
+        body: JSON.stringify({ prompt: queryText, history: messages.map((m) => ({ sender: m.sender, text: m.text })) }),
       });
 
       if (!res.ok) throw new Error('API Query Error');
@@ -440,8 +559,8 @@ export default function PersonaAIPage() {
                       )}
 
                       {/* ANSWER TEXT */}
-                      <div className="bg-neutral-50/70 rounded-2xl p-4 border border-neutral-200/80 text-xs md:text-sm leading-relaxed text-neutral-800 whitespace-pre-line">
-                        {msg.response.answerText}
+                      <div className="bg-neutral-50/70 rounded-2xl p-4 border border-neutral-200/80 text-xs md:text-sm leading-relaxed text-neutral-800">
+                        {parseMarkdownToReact(msg.response.answerText)}
                       </div>
 
                       {/* AUTO INSIGHTS */}
@@ -472,8 +591,8 @@ export default function PersonaAIPage() {
                       </div>
                     </>
                   ) : (
-                    <div className="text-neutral-800 text-sm whitespace-pre-line leading-relaxed">
-                      {msg.text}
+                    <div className="text-neutral-800 text-sm leading-relaxed">
+                      {parseMarkdownToReact(msg.text)}
                     </div>
                   )}
                 </div>

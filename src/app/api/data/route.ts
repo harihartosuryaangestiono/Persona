@@ -22,6 +22,7 @@ export async function GET(req: Request) {
     
     let tasksQuery: any = { orderBy: { createdAt: 'desc' } };
     let worklogsQuery: any = { orderBy: { date: 'desc' } };
+    let attendancesQuery: any = { orderBy: { date: 'desc' } };
 
     if (userRecord) {
       const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
@@ -54,6 +55,8 @@ export async function GET(req: Request) {
             { stages: { contains: userRecord.name } }
           ]
         };
+
+        attendancesQuery.where = { userId: userRecord.id };
       }
     }
 
@@ -77,7 +80,7 @@ export async function GET(req: Request) {
       prisma.client.findMany(),
       prisma.task.findMany(tasksQuery),
       prisma.worklog.findMany(worklogsQuery),
-      prisma.attendance.findMany({ orderBy: { date: 'desc' } }),
+      prisma.attendance.findMany(attendancesQuery),
       prisma.leaveRequest.findMany({ orderBy: { createdAt: 'desc' } }),
       prisma.clientMonthlyBudget.findMany(),
       prisma.masterScore.findMany(),

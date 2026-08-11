@@ -33,6 +33,8 @@ export async function PATCH(req: Request) {
         costPerPoint: body.costPerPoint !== undefined ? Number(body.costPerPoint) : undefined,
         defaultDeadlineOffsetDays: body.defaultDeadlineOffsetDays !== undefined ? Number(body.defaultDeadlineOffsetDays) : undefined,
         archiveRule: body.archiveRule !== undefined ? body.archiveRule : undefined,
+        workStart: body.workStart !== undefined ? body.workStart : undefined,
+        gracePeriod: body.gracePeriod !== undefined ? Number(body.gracePeriod) : undefined,
       },
     });
 

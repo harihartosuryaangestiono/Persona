@@ -11,62 +11,112 @@ export async function POST(req: Request) {
     }
 
     const now = new Date();
-    // Check if clocked in today already
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-    const existingAtt = await prisma.attendance.findFirst({
-      where: {
-        userId,
-        date: {
-          gte: startOfToday,
-          lte: endOfToday,
+    // 1. Get Jakarta Date String for the current server timestamp
+    const jakartaDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+
+    const targetDate = new Date(`${jakartaDateStr}T00:00:00.000Z`);
+
+    // 2. Perform Atomic Operations using Prisma Transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Check for any active attendance session (clockOut is null)
+      const activeAtt = await tx.attendance.findFirst({
+        where: {
+          userId,
+          clockOut: null,
         },
-      },
-      include: {
-        user: true,
-      },
-    });
-
-    if (existingAtt) {
-      return NextResponse.json({
-        ...existingAtt,
-        userName: existingAtt.user.name,
-        date: existingAtt.date.toISOString(),
-        clockIn: existingAtt.clockIn.toISOString(),
-        clockOut: existingAtt.clockOut ? existingAtt.clockOut.toISOString() : null,
       });
-    }
 
-    // Determine status (Late if clocked in after 09:00 AM)
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const isLate = hours > 9 || (hours === 9 && minutes > 0);
-    const status = isLate ? 'LATE' : 'ON_TIME';
+      if (activeAtt) {
+        throw new Error('Anda masih memiliki sesi attendance yang aktif.');
+      }
 
-    const attendance = await prisma.attendance.create({
-      data: {
-        userId,
-        date: now,
-        clockIn: now,
-        locationMode: locationMode || 'OFFICE',
-        status,
-        workingHours: 0.0,
-      },
-      include: {
-        user: true,
-      },
+      // Check if user already has any attendance record today (completed or active)
+      const todayAtt = await tx.attendance.findFirst({
+        where: {
+          userId,
+          date: targetDate,
+        },
+      });
+
+      if (todayAtt) {
+        throw new Error('Anda sudah melakukan absensi hari ini.');
+      }
+
+      // 3. Fetch Company Settings dynamically
+      const settings = await tx.companySetting.findFirst();
+      const workStart = settings?.workStart || '09:00';
+      const gracePeriod = settings?.gracePeriod !== undefined ? settings.gracePeriod : 15;
+
+      const [startHour, startMinute] = workStart.split(':').map(Number);
+      const workStartMinutes = startHour * 60 + startMinute;
+
+      // 4. Calculate if late based on Asia/Jakarta timezone
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      });
+
+      const formattedTime = timeFormatter.format(now);
+      const [hour, minute] = formattedTime.split(':').map(Number);
+      const clockInMinutes = hour * 60 + minute;
+
+      const diff = clockInMinutes - workStartMinutes;
+      const isLate = diff > gracePeriod;
+      const lateMinutes = isLate ? diff : 0;
+
+      // 5. Create new attendance session
+      const attendance = await tx.attendance.create({
+        data: {
+          userId,
+          date: targetDate,
+          clockIn: now,
+          clockOut: null,
+          locationMode: locationMode || 'OFFICE',
+          status: 'ACTIVE',
+          workingHours: 0.0,
+          workingMinutes: 0,
+          isLate,
+          lateMinutes,
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // 6. Log the event
+      await tx.activityLog.create({
+        data: {
+          userId,
+          entityType: 'ATTENDANCE',
+          entityId: attendance.id,
+          action: 'CLOCK_IN',
+          details: `Clocked in via ${locationMode || 'OFFICE'}${isLate ? ` (Late ${lateMinutes}m)` : ''}`,
+        },
+      });
+
+      return attendance;
     });
 
     return NextResponse.json({
-      ...attendance,
-      userName: attendance.user.name,
-      date: attendance.date.toISOString(),
-      clockIn: attendance.clockIn.toISOString(),
-      clockOut: null,
+      success: true,
+      attendance: {
+        ...result,
+        userName: result.user.name,
+        date: result.date.toISOString(),
+        clockIn: result.clockIn.toISOString(),
+        clockOut: null,
+      },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Failed to Clock In' }, { status: 400 });
   }
 }
 
@@ -80,50 +130,70 @@ export async function PATCH(req: Request) {
     }
 
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-    const activeAtt = await prisma.attendance.findFirst({
-      where: {
-        userId,
-        clockOut: null,
-        date: {
-          gte: startOfToday,
-          lte: endOfToday,
+    // Perform Atomic Operations using Prisma Transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Find the first active attendance record for this user (where clockOut is null)
+      const activeAtt = await tx.attendance.findFirst({
+        where: {
+          userId,
+          clockOut: null,
         },
-      },
-      include: {
-        user: true,
-      },
-    });
+      });
 
-    if (!activeAtt) {
-      return NextResponse.json({ error: 'No active clock-in found for today' }, { status: 404 });
-    }
+      if (!activeAtt) {
+        throw new Error('Tidak ada sesi attendance aktif.');
+      }
 
-    const clockInTime = new Date(activeAtt.clockIn).getTime();
-    const clockOutTime = now.getTime();
-    const workingHours = Math.max(0.1, Math.round(((clockOutTime - clockInTime) / (1000 * 60 * 60)) * 10) / 10);
+      const clockInTime = new Date(activeAtt.clockIn).getTime();
+      const clockOutTime = now.getTime();
 
-    const updated = await prisma.attendance.update({
-      where: { id: activeAtt.id },
-      data: {
-        clockOut: now,
-        workingHours,
-      },
-      include: {
-        user: true,
-      },
+      if (clockOutTime < clockInTime) {
+        throw new Error('Waktu clock out mendahului waktu clock in.');
+      }
+
+      const workingMinutes = Math.max(0, Math.floor((clockOutTime - clockInTime) / 60000));
+      const workingHours = Math.round((workingMinutes / 60.0) * 100) / 100;
+
+      // Update session to COMPLETED
+      const updated = await tx.attendance.update({
+        where: { id: activeAtt.id },
+        data: {
+          clockOut: now,
+          workingMinutes,
+          workingHours,
+          status: 'COMPLETED',
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // Log the event
+      await tx.activityLog.create({
+        data: {
+          userId,
+          entityType: 'ATTENDANCE',
+          entityId: updated.id,
+          action: 'CLOCK_OUT',
+          details: `Clocked out. Duration: ${workingMinutes} mins (${workingHours} hrs)`,
+        },
+      });
+
+      return updated;
     });
 
     return NextResponse.json({
-      ...updated,
-      userName: updated.user.name,
-      date: updated.date.toISOString(),
-      clockIn: updated.clockIn.toISOString(),
-      clockOut: updated.clockOut ? updated.clockOut.toISOString() : null,
+      success: true,
+      attendance: {
+        ...result,
+        userName: result.user.name,
+        date: result.date.toISOString(),
+        clockIn: result.clockIn.toISOString(),
+        clockOut: result.clockOut ? result.clockOut.toISOString() : null,
+      },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Failed to Clock Out' }, { status: 400 });
   }
 }

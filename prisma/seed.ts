@@ -16,6 +16,8 @@ async function main() {
       monthlyCapacity: 16000,
       costPerPoint: 250,
       defaultDeadlineOffsetDays: -3,
+      workStart: '09:00',
+      gracePeriod: 15,
     },
   });
 

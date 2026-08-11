@@ -129,6 +129,8 @@ model CompanySetting {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
   archiveRule               String   @default("END_OF_MONTH")
+  workStart                 String   @default("09:00")
+  gracePeriod               Int      @default(15)
 }
 
 model ClientMonthlyBudget {
@@ -357,17 +359,20 @@ model Worklog {
 }
 
 model Attendance {
-  id           String    @id @default(uuid())
-  userId       String
-  date         DateTime  @default(now())
-  clockIn      DateTime
-  clockOut     DateTime?
-  locationMode String    @default("OFFICE")
-  status       String    @default("ON_TIME")
-  workingHours Float     @default(0.0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid())
+  userId         String
+  date           DateTime  @default(now())
+  clockIn        DateTime
+  clockOut       DateTime?
+  locationMode   String    @default("OFFICE")
+  status         String    @default("ACTIVE")
+  workingHours   Float     @default(0.0)
+  workingMinutes Int       @default(0)
+  isLate         Boolean   @default(false)
+  lateMinutes    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model LeaveRequest {

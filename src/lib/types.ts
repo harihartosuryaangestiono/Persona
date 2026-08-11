@@ -132,10 +132,15 @@ export interface AttendanceItem {
   userAvatar?: string;
   date: string;
   clockIn: string;
-  clockOut?: string;
+  clockOut?: string | null;
   locationMode: 'OFFICE' | 'REMOTE' | 'GPS';
-  status: 'ON_TIME' | 'LATE';
+  status: string;
   workingHours: number;
+  workingMinutes?: number;
+  isLate?: boolean;
+  lateMinutes?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LeaveRequestItem {

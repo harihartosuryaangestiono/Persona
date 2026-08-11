@@ -851,17 +851,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, locationMode }),
       });
-      if (res.ok) {
-        const saved = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.attendance) {
+        const saved = data.attendance;
         setAttendances((prev) => [
           saved,
-          ...prev.filter((a) => a.userId !== userId || new Date(a.date).toDateString() !== new Date(saved.date).toDateString())
+          ...prev.filter((a) => a.id !== saved.id)
         ]);
+        showToast('Clock In successful!', 'success');
       } else {
-        console.error('Failed to Clock In on server');
+        showToast(data.error || 'Failed to Clock In', 'error');
       }
     } catch (e) {
       console.error('Error clocking in:', e);
+      showToast('Connection error. Failed to Clock In.', 'error');
     }
   };
 
@@ -872,16 +875,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-      if (res.ok) {
-        const saved = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.attendance) {
+        const saved = data.attendance;
         setAttendances((prev) =>
-          prev.map((a) => (a.userId === userId && new Date(a.date).toDateString() === new Date(saved.date).toDateString() ? saved : a))
+          prev.map((a) => (a.id === saved.id ? saved : a))
         );
+        showToast('Clock Out successful!', 'success');
       } else {
-        console.error('Failed to Clock Out on server');
+        showToast(data.error || 'Failed to Clock Out', 'error');
       }
     } catch (e) {
       console.error('Error clocking out:', e);
+      showToast('Connection error. Failed to Clock Out.', 'error');
     }
   };
 
