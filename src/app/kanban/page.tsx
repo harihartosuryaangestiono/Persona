@@ -33,7 +33,7 @@ import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed'];
 const PRODUCTION_COLUMNS: TaskItem['status'][] = ['Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'];
 const MAIN_COLUMNS: TaskItem['status'][] = [
-  'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production', 'Shooting', 'Completed',
+  'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed',
   'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted'
 ];
 // Columns PA is allowed to see in the Strategic Pipeline
