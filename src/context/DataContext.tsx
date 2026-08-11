@@ -1,8 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useUser } from './UserContext';
 import { useToast } from './ToastContext';
+import { useWorkspace } from './WorkspaceContext';
 import {
   TaskItem,
   ClientItem,
@@ -52,12 +53,12 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [clients, setClients] = useState<ClientItem[]>([]);
-  const [worklogs, setWorklogs] = useState<WorklogItem[]>([]);
+  const [rawTasks, setTasks] = useState<TaskItem[]>([]);
+  const [rawClients, setClients] = useState<ClientItem[]>([]);
+  const [rawWorklogs, setWorklogs] = useState<WorklogItem[]>([]);
   const [attendances, setAttendances] = useState<AttendanceItem[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
-  const [budgets, setBudgets] = useState<ClientMonthlyBudgetItem[]>([]);
+  const [rawBudgets, setBudgets] = useState<ClientMonthlyBudgetItem[]>([]);
   const [masterScores, setMasterScores] = useState<MasterScoreItem[]>([]);
   const [activities, setActivities] = useState<ActivityLogItem[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -65,9 +66,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { syncUsers, currentUser } = useUser();
   const { showToast } = useToast();
+  const { currentWorkspace } = useWorkspace();
+
+  const clients = useMemo(() => {
+    return rawClients.filter((c) => c.workspaceId === currentWorkspace.id);
+  }, [rawClients, currentWorkspace.id]);
+
+  const tasks = useMemo(() => {
+    return rawTasks.filter((t) => t.workspaceId === currentWorkspace.id);
+  }, [rawTasks, currentWorkspace.id]);
+
+  const worklogs = useMemo(() => {
+    return rawWorklogs.filter((w) => {
+      if ((w as any).workspaceId) {
+        return (w as any).workspaceId === currentWorkspace.id;
+      }
+      const matchedClient = rawClients.find((c) => c.id === w.clientId);
+      return matchedClient?.workspaceId === currentWorkspace.id;
+    });
+  }, [rawWorklogs, rawClients, currentWorkspace.id]);
+
+  const budgets = useMemo(() => {
+    const clientIdsOfWorkspace = new Set(clients.map((c) => c.id));
+    return rawBudgets.filter((b) => clientIdsOfWorkspace.has(b.clientId));
+  }, [rawBudgets, clients]);
 
   const normalizeTask = (t: TaskItem): TaskItem => {
-    const matchedClient = clients.find((c) => c.id === t.clientId);
+    const matchedClient = rawClients.find((c) => c.id === t.clientId);
     return {
       ...t,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
@@ -143,7 +168,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       clientId: newTaskData.clientId || clientObj?.id || 'client-1',
       clientName: newTaskData.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
       clientColor: newTaskData.clientColor || clientObj?.clientColor || '#3B82F6',
-      workspaceId: newTaskData.workspaceId || clientObj?.workspaceId || 'ws-team-anggi',
+      workspaceId: newTaskData.workspaceId || clientObj?.workspaceId || currentWorkspace.id,
       title: newTaskData.title || 'Untitled Task',
       description: newTaskData.description || '',
       category: newTaskData.category || 'Editor',
@@ -430,9 +455,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const assignedStageIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
     const assignedUserIds = Array.from(new Set([...(assignedStageIds || []), item.userId].filter(Boolean)));
 
-    const matchedClient = clients.find((c) => c.id === item.clientId);
-    const targetWorkspaceId = matchedClient?.workspaceId || 'ws-team-anggi';
-    const existingTask = tasks.find((t) => t.contentId === item.contentId && item.contentId);
+    const matchedClient = rawClients.find((c) => c.id === item.clientId);
+    const targetWorkspaceId = matchedClient?.workspaceId || currentWorkspace.id;
+    const existingTask = rawTasks.find((t) => t.contentId === item.contentId && item.contentId);
 
     const mergedAssignedUserIds = existingTask
       ? Array.from(new Set([...(typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds || []), ...assignedUserIds]))
@@ -710,7 +735,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'August';
       const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
 
-      const matchedClient = clients.find((c) => c.id === log.clientId || c.name.toLowerCase() === log.clientName?.toLowerCase());
+      const matchedClient = rawClients.find((c) => c.id === log.clientId || c.name.toLowerCase() === log.clientName?.toLowerCase());
+      const defaultClientOfWorkspace = rawClients.find((c) => c.workspaceId === currentWorkspace.id);
 
       const defaultStageRole = log.taskType === 'Content Plan' ? 'Strategist' : log.taskType === 'Scheduling' ? 'Scheduler' : 'Editor';
       const fallbackStage = [
@@ -733,8 +759,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         date: dateVal,
         userId: log.userId || currentUser?.id || 'u-devi',
         userName: log.userName || currentUser?.name || 'Devi',
-        clientId: log.clientId || matchedClient?.id || clients[0]?.id || '',
-        clientName: log.clientName || matchedClient?.name || 'Baking Empire Gading Serpong',
+        clientId: log.clientId || matchedClient?.id || defaultClientOfWorkspace?.id || rawClients[0]?.id || '',
+        clientName: log.clientName || matchedClient?.name || defaultClientOfWorkspace?.name || 'Baking Empire Gading Serpong',
         contentTitle: log.contentTitle || 'Imported Task',
         taskType: log.taskType || 'Editing',
         format: log.format || 'Single Foto',
@@ -755,8 +781,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const formattedTasks: TaskItem[] = formatted.map((item) => {
       const parsedStages = item.stages ? (typeof item.stages === 'string' ? JSON.parse(item.stages) : item.stages) : [];
       const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
-      const matchedClientForTask = clients.find((c) => c.id === item.clientId);
-      const targetWorkspaceId = matchedClientForTask?.workspaceId || 'ws-team-anggi';
+      const matchedClientForTask = rawClients.find((c) => c.id === item.clientId);
+      const targetWorkspaceId = matchedClientForTask?.workspaceId || currentWorkspace.id;
 
       return {
         id: `task-${item.id}`,

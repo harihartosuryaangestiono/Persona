@@ -31,6 +31,7 @@ import {
   Command,
   Archive,
   Sparkles,
+  UserCircle,
 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
@@ -70,6 +71,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { name: 'Reports', href: '/reports', icon: BarChart3, allowedRoles: ['Admin', 'Owner'] },
   { name: 'Archive', href: '/archive', icon: Archive, allowedRoles: ['Admin', 'Owner', 'Strategist'] },
   { name: 'Settings', href: '/settings', icon: Settings, allowedRoles: ['Admin', 'Owner'] },
+  { name: 'Profil Saya', href: '/profile', icon: UserCircle },
 ];
  
 export function Sidebar() {
@@ -97,7 +99,7 @@ export function Sidebar() {
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
  
-  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigie'];
+  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigi'];
 
   const navItems = ALL_NAV_ITEMS.filter((item) => {
     if (item.href === '/persona-ai') {
@@ -125,8 +127,8 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* User Context Banner */}
-        <div className="mx-2 mb-4 p-2.5 rounded-xl bg-neutral-50 border border-neutral-200/80 flex items-center gap-2.5">
+        {/* User Context Banner → links to /profile */}
+        <Link href="/profile" className="mx-2 mb-4 p-2.5 rounded-xl bg-neutral-50 border border-neutral-200/80 flex items-center gap-2.5 hover:bg-neutral-100 transition-colors group cursor-pointer">
           {currentUser.avatar ? (
             <img src={currentUser.avatar} alt={currentUser.name} className="w-7 h-7 rounded-full object-cover border border-neutral-200" />
           ) : (
@@ -134,11 +136,12 @@ export function Sidebar() {
               {currentUser.name.charAt(0)}
             </div>
           )}
-          <div className="truncate text-left">
+          <div className="truncate text-left flex-1">
             <p className="text-xs font-bold text-neutral-900 truncate">{currentUser.name}</p>
             <p className="text-[10px] text-neutral-500 font-mono truncate">{currentUser.roles.join(' • ')}</p>
           </div>
-        </div>
+          <UserCircle className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-600 shrink-0 transition-colors" />
+        </Link>
 
         {/* Role-Based Navigation List */}
         <nav className="space-y-0.5 max-h-[calc(100vh-230px)] overflow-y-auto pr-1">

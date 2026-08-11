@@ -216,11 +216,15 @@ export default function KanbanPage() {
     }
   }, [editPostingDate]);
 
-  // Workspace filtering (fallback to client workspace if missing or client match)
+  // Workspace filtering — strict: task must match currentWorkspace, or fall back via client
   const workspaceTasks = tasks.filter((t) => {
-    if (!t.workspaceId || t.workspaceId === currentWorkspace.id) return true;
-    const taskClient = clients.find((c) => c.id === t.clientId);
-    return taskClient ? (taskClient.workspaceId === currentWorkspace.id || t.workspaceId === taskClient.workspaceId) : true;
+    if (t.workspaceId === currentWorkspace.id) return true;
+    if (!t.workspaceId) {
+      // Task has no workspaceId — fall back to matching by client's workspace
+      const taskClient = clients.find((c) => c.id === t.clientId);
+      return taskClient ? taskClient.workspaceId === currentWorkspace.id : false;
+    }
+    return false;
   });
 
   // Board columns based on active board state
