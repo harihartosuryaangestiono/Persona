@@ -2,16 +2,29 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserPersona } from '@/lib/types';
-import { PERMANENT_USERS } from '@/lib/rbac';
+import { PERMANENT_USERS, normalizeRoles } from '@/lib/rbac';
+
+function getTodayJakartaStr(): string {
+  if (typeof Intl === 'undefined') {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
 interface UserContextType {
   currentUser: UserPersona;
   setCurrentUser: (user: UserPersona) => void;
   switchUserByName: (name: string) => void;
   allUsers: UserPersona[];
-  updateUser: (id: string, updatedData: Partial<UserPersona>) => void;
+  updateUser: (id: string, updatedData: Partial<UserPersona>) => Promise<{ success: boolean; error?: string }>;
   updateUserPassword: (userId: string, newPassword: string) => void;
-  addUser: (newUser: UserPersona) => void;
+  addUser: (newUser: UserPersona) => Promise<{ success: boolean; error?: string }>;
   isLoggedIn: boolean;
   login: (userId: string, password?: string) => boolean;
   logout: () => void;
@@ -28,8 +41,44 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<UserPersona[]>(PERMANENT_USERS);
   const [currentUser, setCurrentUser] = useState<UserPersona>(PERMANENT_USERS[0]);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [hasCheckedInToday, setHasCheckedInToday] = useState<boolean>(false);
-  const [hasSeenWelcomeToday, setHasSeenWelcomeToday] = useState<boolean>(false);
+
+  const todayJakartaKey = typeof window !== 'undefined' ? getTodayJakartaStr() : '';
+  const [hasCheckedInTodayInternal, setHasCheckedInTodayInternal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const uid = localStorage.getItem('persona_logged_in_user_id');
+    if (!uid) return false;
+    return localStorage.getItem(`persona_checkedin_${uid}_${todayJakartaKey}`) === '1';
+  });
+  const [hasSeenWelcomeTodayInternal, setHasSeenWelcomeTodayInternal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const uid = localStorage.getItem('persona_logged_in_user_id');
+    if (!uid) return false;
+    return localStorage.getItem(`persona_seen_welcome_${uid}_${todayJakartaKey}`) === '1';
+  });
+
+  const setHasCheckedInToday = (val: boolean) => {
+    setHasCheckedInTodayInternal(val);
+    if (typeof window !== 'undefined') {
+      const uid = localStorage.getItem('persona_logged_in_user_id') || currentUser.id;
+      if (val) {
+        localStorage.setItem(`persona_checkedin_${uid}_${todayJakartaKey}`, '1');
+      } else {
+        localStorage.removeItem(`persona_checkedin_${uid}_${todayJakartaKey}`);
+      }
+    }
+  };
+
+  const setHasSeenWelcomeToday = (val: boolean) => {
+    setHasSeenWelcomeTodayInternal(val);
+    if (typeof window !== 'undefined') {
+      const uid = localStorage.getItem('persona_logged_in_user_id') || currentUser.id;
+      if (val) {
+        localStorage.setItem(`persona_seen_welcome_${uid}_${todayJakartaKey}`, '1');
+      } else {
+        localStorage.removeItem(`persona_seen_welcome_${uid}_${todayJakartaKey}`);
+      }
+    }
+  };
 
   // Sync users from database & apply localStorage overrides
   const syncUsers = (dbUsers: any[]) => {
@@ -44,6 +93,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           ...u,
           avatar: avatarsMap[u.id] !== undefined ? avatarsMap[u.id] : u.avatar,
           password: passwordsMap[u.id] || u.password || u.name.toLowerCase(),
+          roles: normalizeRoles(u.roles),
         }))
       );
       return;
@@ -53,6 +103,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const template = PERMANENT_USERS.find((p) => p.name.toLowerCase() === dbU.name.toLowerCase());
       const customAvatar = avatarsMap[dbU.id];
       const customPassword = passwordsMap[dbU.id];
+      const rawRoles: string[] = Array.isArray(dbU.roles) ? dbU.roles : (template?.roles || []);
+      const canonicalRoles = normalizeRoles(rawRoles);
+      if (template && canonicalRoles.length === 0) {
+        canonicalRoles.push(...template.roles);
+      }
 
       return {
         id: dbU.id,
@@ -60,7 +115,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         email: dbU.email,
         avatar: customAvatar !== undefined ? customAvatar : (dbU.avatar || template?.avatar || ''),
         password: customPassword || dbU.password || template?.name.toLowerCase() || dbU.name.toLowerCase(),
-        roles: Array.isArray(dbU.roles) ? dbU.roles : (template?.roles || []),
+        roles: canonicalRoles,
         monthlyCapacity: (dbU.monthlyCapacity && dbU.monthlyCapacity !== 12000) ? dbU.monthlyCapacity : 16000,
         hourlyPoint: dbU.hourlyPoint || 100,
         costPerPoint: dbU.costPerPoint || 250,
@@ -72,7 +127,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     setCurrentUser((current) => {
       const match = mapped.find((m) => m.id === current.id || m.name.toLowerCase() === current.name.toLowerCase());
-      return match || current;
+      if (match) return match;
+      return {
+        ...current,
+        roles: normalizeRoles(current.roles),
+      };
     });
   };
 
@@ -126,7 +185,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(found);
       setIsLoggedIn(true);
       localStorage.setItem('persona_logged_in_user_id', found.id);
-      setHasSeenWelcomeToday(false);
+      localStorage.removeItem(`persona_seen_welcome_${found.id}_${todayJakartaKey}`);
+      localStorage.removeItem(`persona_checkedin_${found.id}_${todayJakartaKey}`);
+      setHasSeenWelcomeTodayInternal(false);
+      setHasCheckedInTodayInternal(false);
       return true;
     }
     return false;
@@ -137,8 +199,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('persona_logged_in_user_id');
   };
 
-  const updateUser = (id: string, updatedData: Partial<UserPersona>) => {
-    // Persist custom avatar if updated
+  const updateUser = async (id: string, updatedData: Partial<UserPersona>): Promise<{ success: boolean; error?: string }> => {
     if (updatedData.avatar !== undefined) {
       const savedAvatars = localStorage.getItem('persona_custom_avatars');
       const map = savedAvatars ? JSON.parse(savedAvatars) : {};
@@ -146,7 +207,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('persona_custom_avatars', JSON.stringify(map));
     }
 
-    // Persist custom password if updated
     if (updatedData.password !== undefined) {
       const savedPasswords = localStorage.getItem('persona_custom_passwords');
       const map = savedPasswords ? JSON.parse(savedPasswords) : {};
@@ -154,26 +214,69 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('persona_custom_passwords', JSON.stringify(map));
     }
 
+    const serverPayload: Record<string, any> = {};
+    if (updatedData.name !== undefined) serverPayload.name = updatedData.name;
+    if (updatedData.email !== undefined) serverPayload.email = updatedData.email;
+    if (updatedData.avatar !== undefined) serverPayload.avatar = updatedData.avatar;
+    if (updatedData.roles !== undefined) serverPayload.roles = normalizeRoles(updatedData.roles);
+    if (updatedData.monthlyCapacity !== undefined) serverPayload.monthlyCapacity = updatedData.monthlyCapacity;
+    if (updatedData.hourlyPoint !== undefined) serverPayload.hourlyPoint = updatedData.hourlyPoint;
+    if (updatedData.costPerPoint !== undefined) serverPayload.costPerPoint = updatedData.costPerPoint;
+    if (updatedData.active !== undefined) serverPayload.active = updatedData.active;
+
+    let serverOk = true;
+    let serverErr: string | undefined;
+    if (Object.keys(serverPayload).length > 0 && typeof window !== 'undefined') {
+      try {
+        const res = await fetch(`/api/users/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': currentUser.id || '',
+          },
+          body: JSON.stringify(serverPayload),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          serverOk = false;
+          serverErr = j?.error || `Failed to sync (${res.status})`;
+        }
+      } catch (e: any) {
+        serverOk = false;
+        serverErr = e?.message || 'Network error syncing to server';
+      }
+    }
+
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === id) {
-          const updated = { ...u, ...updatedData };
-          if (currentUser.id === id) {
-            setCurrentUser(updated);
+          const merged: any = { ...u, ...updatedData };
+          if (updatedData.roles) {
+            merged.roles = normalizeRoles(updatedData.roles);
           }
-          return updated;
+          if (currentUser.id === id) {
+            setCurrentUser({ ...merged });
+          }
+          return merged;
         }
         return u;
       })
     );
+
+    if (!serverOk) {
+      return { success: false, error: serverErr };
+    }
+    return { success: true };
   };
 
   const updateUserPassword = (userId: string, newPassword: string) => {
     updateUser(userId, { password: newPassword });
   };
 
-  const addUser = (newUser: UserPersona) => {
+  const addUser = async (newUser: UserPersona): Promise<{ success: boolean; error?: string }> => {
+    newUser.roles = normalizeRoles(newUser.roles);
     setUsers((prev) => [...prev, newUser]);
+    return { success: true };
   };
 
   return (
@@ -189,9 +292,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isLoggedIn,
         login,
         logout,
-        hasCheckedInToday,
+        hasCheckedInToday: hasCheckedInTodayInternal,
         setHasCheckedInToday,
-        hasSeenWelcomeToday,
+        hasSeenWelcomeToday: hasSeenWelcomeTodayInternal,
         setHasSeenWelcomeToday,
         syncUsers,
       }}

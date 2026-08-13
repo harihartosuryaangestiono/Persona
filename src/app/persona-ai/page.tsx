@@ -153,8 +153,19 @@ export default function PersonaAIPage() {
   const { currentUser, allUsers } = useUser();
   const { showToast } = useToast();
 
-  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigie'];
-  const isAllowed = currentUser && AI_ALLOWED_USERS.some((n) => (currentUser.name || '').toLowerCase().includes(n));
+  const AI_ALLOWED_IDS = ['u-devi', 'u-anggi', 'u-gigie'];
+  const AI_ALLOWED_NAMES = ['devi', 'anggi', 'angie', 'gigi', 'gigie', 'gigiee'];
+  const userLower = (currentUser?.name || '').toLowerCase().trim();
+  const userIdLower = (currentUser?.id || '').toLowerCase().trim();
+  const isAllowed = !!currentUser && (
+    AI_ALLOWED_IDS.some((id) => id === userIdLower) ||
+    AI_ALLOWED_NAMES.some((n) => userLower === n || userLower.includes(n) || n.includes(userLower)) ||
+    (currentUser.roles && (
+      currentUser.roles.includes('Owner') ||
+      currentUser.roles.includes('Admin') ||
+      currentUser.roles.includes('Strategist')
+    ))
+  );
 
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);

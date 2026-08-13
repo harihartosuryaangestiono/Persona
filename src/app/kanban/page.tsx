@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
+import { normalizeRoles, hasRole, hasAnyRole } from '@/lib/rbac';
 
 // Updated column configurations (Requirement 12)
 const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed'];
@@ -72,14 +73,13 @@ export default function KanbanPage() {
 
   const canAccessTaskDetails = (task: TaskItem) => {
     if (!currentUser) return false;
-    const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
+    const isExecutive = hasAnyRole(currentUser, ['Admin', 'Owner', 'Strategist']);
     if (isExecutive) return true;
 
-    // Scheduler should be able to access scheduling-stage tasks even if not explicitly assigned
-    const isSchedulerRole = currentUser.roles.includes('Scheduler');
+    const isSchedulerRole = hasRole(currentUser, 'Scheduler');
     const stages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
     const isSchedulingStatus = ['Scheduling', 'Ready to Post', 'Posted'].includes(task.status);
-    const hasSchedulingStage = Array.isArray(stages) && stages.some((s: any) => s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
+    const hasSchedulingStage = Array.isArray(stages) && stages.some((s: any) => s.role === 'Scheduler' || s.role === 'Scheduling' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')));
     if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
 
     const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
@@ -430,11 +430,7 @@ export default function KanbanPage() {
           newStage.taskType = 'Scheduling';
           newStage.format = 'Per Post';
         }
-        // Match user with this role
-        const matchingUser = allUsers.find((u) => {
-          const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
-          return roles.includes(value);
-        });
+        const matchingUser = allUsers.find((u) => hasRole(u, value as any));
         if (matchingUser) {
           newStage.userId = matchingUser.id;
           newStage.userName = matchingUser.name;
@@ -1457,10 +1453,7 @@ export default function KanbanPage() {
 
                 <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                   {newStages.map((stage) => {
-                    const matchingUsers = allUsers.filter((u) => {
-                      const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
-                      return roles.includes(stage.role);
-                    });
+                    const matchingUsers = allUsers.filter((u) => hasRole(u, stage.role));
 
                     // Types based on role
                     let typeOptions = ['Editing', 'Revisi'];
@@ -1744,10 +1737,7 @@ export default function KanbanPage() {
 
                   <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1">
                     {editStages.map((stage) => {
-                      const matchingUsers = allUsers.filter((u) => {
-                        const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
-                        return roles.includes(stage.role);
-                      });
+                      const matchingUsers = allUsers.filter((u) => hasRole(u, stage.role));
 
                       let typeOptions = ['Editing', 'Revisi'];
                       if (stage.role === 'Strategist') typeOptions = ['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief', 'Content Proposal'];

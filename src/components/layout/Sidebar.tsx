@@ -38,6 +38,7 @@ import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { UserRole } from '@/lib/types';
 import { calculateUserPointsForPeriod } from '@/lib/score-calculator';
+import { normalizeRoles, hasAnyRole } from '@/lib/rbac';
  
 interface NavItem {
   name: string;
@@ -99,16 +100,22 @@ export function Sidebar() {
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;
  
-  const AI_ALLOWED_USERS = ['devi', 'anggi', 'gigi'];
+  const AI_ALLOWED_IDS = ['u-devi', 'u-anggi', 'u-gigie'];
+  const AI_ALLOWED_NAMES = ['devi', 'anggi', 'angie', 'gigi', 'gigie', 'gigiee'];
 
   const navItems = ALL_NAV_ITEMS.filter((item) => {
     if (item.href === '/persona-ai') {
-      const uName = (currentUser?.name || '').toLowerCase();
-      return AI_ALLOWED_USERS.some((name) => uName.includes(name));
+      const uName = (currentUser?.name || '').toLowerCase().trim();
+      const uId = (currentUser?.id || '').toLowerCase().trim();
+      const matchById = AI_ALLOWED_IDS.some((id) => id === uId);
+      const matchByName = AI_ALLOWED_NAMES.some((n) => uName === n || uName.includes(n) || n.includes(uName));
+      const matchByRole = hasAnyRole(currentUser, ['Owner', 'Admin', 'Strategist']);
+      return matchById || matchByName || matchByRole;
     }
     if (!item.allowedRoles) return true;
-    if (currentUser.roles.includes('Owner') || currentUser.roles.includes('Admin')) return true;
-    return item.allowedRoles.some((role) => currentUser.roles.includes(role));
+    if (hasAnyRole(currentUser, ['Owner', 'Admin'])) return true;
+    const userRoles = normalizeRoles(currentUser.roles);
+    return item.allowedRoles.some((role) => userRoles.includes(role));
   });
 
   return (

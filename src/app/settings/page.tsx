@@ -11,7 +11,7 @@ import { UserPersona, UserRole } from '@/lib/types';
 
 export default function SettingsPage() {
   const { currentUser, allUsers, updateUser, updateUserPassword, addUser } = useUser();
-  const { companySettings, updateCompanySettings } = useData();
+  const { companySettings, updateCompanySettings, refreshData } = useData();
   const { showToast } = useToast();
   const isAdmin = hasPermission(currentUser, 'EDIT_MASTER_SCORE');
 
@@ -57,11 +57,11 @@ export default function SettingsPage() {
     setShowPasswordText(false);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
 
-    updateUser(editingUser.id, {
+    const res = await updateUser(editingUser.id, {
       name: editName.trim(),
       email: editEmail.trim(),
       avatar: editAvatar.trim(),
@@ -69,11 +69,16 @@ export default function SettingsPage() {
       monthlyCapacity: Number(editCapacity) || 16000,
     });
 
-    showToast(`Profil & Foto Profil ${editName} berhasil diperbarui!`, 'success');
-    setEditingUser(null);
+    if (res.success) {
+      try { await refreshData(); } catch (_) {}
+      showToast(`Profil & Roles ${editName} berhasil diperbarui & disinkronkan!`, 'success');
+      setEditingUser(null);
+    } else {
+      showToast(res.error || 'Gagal menyimpan. Coba refresh halaman.', 'error');
+    }
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passwordUser) return;
 
@@ -92,7 +97,7 @@ export default function SettingsPage() {
     setPasswordUser(null);
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
 
@@ -109,10 +114,11 @@ export default function SettingsPage() {
       active: true,
     };
 
-    addUser(newU);
+    await addUser(newU);
     if (newPassword.trim()) {
       updateUserPassword(newU.id, newPassword.trim());
     }
+    try { await refreshData(); } catch (_) {}
 
     showToast(`Anggota tim ${newName} berhasil ditambahkan!`, 'success');
     setNewName('');

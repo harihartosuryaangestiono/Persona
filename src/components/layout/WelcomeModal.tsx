@@ -30,8 +30,8 @@ const MOTIVATIONAL_MESSAGES = [
 ];
 
 export function WelcomeModal() {
-  const { currentUser, hasSeenWelcomeToday, setHasSeenWelcomeToday } = useUser();
-  const { tasks, worklogs, attendances, clockIn } = useData();
+  const { currentUser, hasSeenWelcomeToday, setHasSeenWelcomeToday, setHasCheckedInToday, hasCheckedInToday: hasCheckedInTodayCtx } = useUser();
+  const { tasks, worklogs, attendances, clockIn, loading } = useData();
 
   const [currentTime, setCurrentTime] = useState('');
   const [greeting, setGreeting] = useState({ text: 'Welcome', icon: '👋' });
@@ -40,13 +40,10 @@ export function WelcomeModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
 
-  // Time and message initialization
   useEffect(() => {
-    // 1. Time & Greeting
     const now = new Date();
     const hours = now.getHours();
-    
-    // Greeting text
+
     if (hours >= 5 && hours < 11) {
       setGreeting({ text: 'Good Morning', icon: '🌅' });
     } else if (hours >= 11 && hours < 15) {
@@ -57,7 +54,6 @@ export function WelcomeModal() {
       setGreeting({ text: 'Good Night', icon: '🌙' });
     }
 
-    // Live clock formatting
     const formatTime = () => {
       const d = new Date();
       return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -65,7 +61,6 @@ export function WelcomeModal() {
     setCurrentTime(formatTime());
     const interval = setInterval(() => setCurrentTime(formatTime()), 1000);
 
-    // 2. Motivational Message (Random selection)
     const randomIdx = Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length);
     setMotivationalMessage(MOTIVATIONAL_MESSAGES[randomIdx]);
 
@@ -79,19 +74,19 @@ export function WelcomeModal() {
     day: '2-digit',
   }).format(new Date());
 
-  const hasCheckedInToday = currentUser
-    ? attendances.some(
-        (a) => {
-          const aJakarta = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Jakarta',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-          }).format(new Date(a.date));
-          return a.userId === currentUser.id && aJakarta === todayJakartaStr;
-        }
-      )
+  const hasCheckedInTodayDb = currentUser && !loading
+    ? attendances.some((a) => {
+        const aJakarta = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Jakarta',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date(a.date));
+        return a.userId === currentUser.id && aJakarta === todayJakartaStr;
+      })
     : false;
+
+  const hasCheckedInTodayFinal = hasCheckedInTodayCtx || hasCheckedInTodayDb;
 
   useEffect(() => {
     if (!currentUser) return;
@@ -101,12 +96,30 @@ export function WelcomeModal() {
       return;
     }
 
+    if (loading) {
+      setIsOpen(false);
+      return;
+    }
+
+    if (hasCheckedInTodayDb) {
+      localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
+      localStorage.setItem(`persona_seen_welcome_${currentUser.id}_${todayJakartaStr}`, '1');
+      localStorage.setItem(`persona_checkedin_${currentUser.id}_${todayJakartaStr}`, '1');
+      if (!hasSeenWelcomeToday) setHasSeenWelcomeToday(true);
+      if (!hasCheckedInTodayCtx) setHasCheckedInToday(true);
+      setIsOpen(false);
+      return;
+    }
+
     const lastSeenDate = localStorage.getItem(`persona_last_greeting_date_${currentUser.id}`);
     if (lastSeenDate !== todayJakartaStr && !hasSeenWelcomeToday) {
       setIsOpen(true);
+    } else {
+      setIsOpen(false);
     }
-  }, [currentUser, todayJakartaStr, hasSeenWelcomeToday]);
+  }, [currentUser, todayJakartaStr, hasSeenWelcomeToday, loading, hasCheckedInTodayDb, hasCheckedInTodayCtx, setHasSeenWelcomeToday, setHasCheckedInToday]);
 
+  if (loading) return null;
   if (!isOpen || !currentUser) return null;
 
   // Role Checks
@@ -140,6 +153,7 @@ export function WelcomeModal() {
       const result = await clockIn(currentUser.id, 'OFFICE');
       if (result.success) {
         setIsSuccessCheckedIn(true);
+        setHasCheckedInToday(true);
         try {
           confetti({
             particleCount: 120,
@@ -148,6 +162,8 @@ export function WelcomeModal() {
           });
         } catch (e) {}
         localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
+        localStorage.setItem(`persona_checkedin_${currentUser.id}_${todayJakartaStr}`, '1');
+        localStorage.setItem(`persona_seen_welcome_${currentUser.id}_${todayJakartaStr}`, '1');
         setTimeout(() => {
           setHasSeenWelcomeToday(true);
           setIsOpen(false);
@@ -165,13 +181,15 @@ export function WelcomeModal() {
 
   const handleSkip = () => {
     localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
+    localStorage.setItem(`persona_seen_welcome_${currentUser.id}_${todayJakartaStr}`, '1');
     setHasSeenWelcomeToday(true);
     setIsOpen(false);
   };
 
   const handleClose = () => {
-    if (hasCheckedInToday) {
+    if (hasCheckedInTodayFinal) {
       localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
+      localStorage.setItem(`persona_seen_welcome_${currentUser.id}_${todayJakartaStr}`, '1');
       setHasSeenWelcomeToday(true);
       setIsOpen(false);
     }
@@ -264,7 +282,7 @@ export function WelcomeModal() {
               <span className="text-xl">🎉</span>
               <span>Have a productive day!</span>
             </div>
-          ) : hasCheckedInToday ? (
+          ) : hasCheckedInTodayFinal ? (
             <div className="space-y-3">
               <div className="p-3 bg-emerald-50/50 border border-emerald-200/60 text-emerald-800 text-center rounded-xl font-bold text-xs flex items-center justify-center gap-1.5">
                 <Check className="w-4 h-4" /> You're already checked in today
