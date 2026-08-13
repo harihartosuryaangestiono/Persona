@@ -38,6 +38,7 @@ export function WelcomeModal() {
   const [motivationalMessage, setMotivationalMessage] = useState('');
   const [isSuccessCheckedIn, setIsSuccessCheckedIn] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   // Time and message initialization
   useEffect(() => {
@@ -71,31 +72,40 @@ export function WelcomeModal() {
     return () => clearInterval(interval);
   }, []);
 
-  // Check if we should display the modal
-  const todayStr = new Date().toDateString();
+  const todayJakartaStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
   const hasCheckedInToday = currentUser
     ? attendances.some(
-        (a) =>
-          a.userId === currentUser.id &&
-          new Date(a.date).toDateString() === todayStr
+        (a) => {
+          const aJakarta = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Jakarta',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date(a.date));
+          return a.userId === currentUser.id && aJakarta === todayJakartaStr;
+        }
       )
     : false;
 
   useEffect(() => {
     if (!currentUser) return;
-    // Admin / Owner is never blocked by the clock-in modal
     const isAdminOrOwner = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     if (isAdminOrOwner) {
       setIsOpen(false);
       return;
     }
 
-    // Only show if not seen today
     const lastSeenDate = localStorage.getItem(`persona_last_greeting_date_${currentUser.id}`);
-    if (lastSeenDate !== todayStr && !hasSeenWelcomeToday) {
+    if (lastSeenDate !== todayJakartaStr && !hasSeenWelcomeToday) {
       setIsOpen(true);
     }
-  }, [currentUser, todayStr, hasSeenWelcomeToday]);
+  }, [currentUser, todayJakartaStr, hasSeenWelcomeToday]);
 
   if (!isOpen || !currentUser) return null;
 
@@ -123,42 +133,45 @@ export function WelcomeModal() {
   const userTotalPoints = userWorklogs.reduce((sum, w) => sum + w.score, 0);
   const remainingCapacity = Math.max(0, currentUser.monthlyCapacity - userTotalPoints);
 
-  const handleCheckIn = () => {
-    // Call DataContext clockIn
-    clockIn(currentUser.id, 'OFFICE');
-
-    // Trigger local success state
-    setIsSuccessCheckedIn(true);
-
-    // Fire Confetti!
+  const handleCheckIn = async () => {
+    if (isCheckingIn) return;
+    setIsCheckingIn(true);
     try {
-      confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-    } catch (e) {}
-
-    // Store check-in & greeting seen today
-    localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayStr);
-
-    // Wait a brief moment then close
-    setTimeout(() => {
-      setHasSeenWelcomeToday(true);
-      setIsOpen(false);
-    }, 2000);
+      const result = await clockIn(currentUser.id, 'OFFICE');
+      if (result.success) {
+        setIsSuccessCheckedIn(true);
+        try {
+          confetti({
+            particleCount: 120,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        } catch (e) {}
+        localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
+        setTimeout(() => {
+          setHasSeenWelcomeToday(true);
+          setIsOpen(false);
+        }, 1800);
+      } else {
+        alert(result.error || 'Gagal Clock In. Silakan coba lagi di halaman Attendance.');
+      }
+    } catch (e) {
+      console.error('WelcomeModal check-in error:', e);
+      alert('Koneksi error. Gagal Clock In. Silakan coba lagi di halaman Attendance.');
+    } finally {
+      setIsCheckingIn(false);
+    }
   };
 
   const handleSkip = () => {
-    // Skip greeting/check in for today (Admin/Owner only)
-    localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayStr);
+    localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
     setHasSeenWelcomeToday(true);
     setIsOpen(false);
   };
 
   const handleClose = () => {
     if (hasCheckedInToday) {
-      localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayStr);
+      localStorage.setItem(`persona_last_greeting_date_${currentUser.id}`, todayJakartaStr);
       setHasSeenWelcomeToday(true);
       setIsOpen(false);
     }
@@ -270,9 +283,10 @@ export function WelcomeModal() {
               </p>
               <button
                 onClick={handleCheckIn}
-                className="w-full bg-neutral-900 hover:bg-neutral-800 active:scale-[0.99] text-white font-bold py-3 px-4 rounded-2xl text-sm transition shadow-md flex items-center justify-center gap-2"
+                disabled={isCheckingIn}
+                className="w-full bg-neutral-900 hover:bg-neutral-800 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-2xl text-sm transition shadow-md flex items-center justify-center gap-2"
               >
-                ✅ Check In Now
+                {isCheckingIn ? '⏳ Checking In Progress...' : '✅ Check In Now'}
               </button>
 
               {/* Admin/Owner Skip Button */}

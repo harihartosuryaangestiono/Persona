@@ -40,8 +40,8 @@ interface DataContextType {
   updateWorklog: (log: WorklogItem) => Promise<void>;
   deleteWorklog: (worklogId: string) => Promise<void>;
   importWorklogs: (logs: Partial<WorklogItem>[]) => void;
-  clockIn: (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => void;
-  clockOut: (userId: string) => void;
+  clockIn: (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => Promise<{ success: boolean; reused?: boolean; error?: string }>;
+  clockOut: (userId: string) => Promise<{ success: boolean; error?: string }>;
   submitLeave: (leave: Partial<LeaveRequestItem>) => void;
   approveLeave: (leaveId: string, approvedByUserId: string) => void;
   approveTask: (taskId: string, nextStage: string, reviewerId: string, notes?: string) => void;
@@ -870,7 +870,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const clockIn = async (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS') => {
+  const clockIn = async (userId: string, locationMode: 'OFFICE' | 'REMOTE' | 'GPS'): Promise<{ success: boolean; reused?: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/attendance', {
         method: 'POST',
@@ -880,21 +880,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success && data.attendance) {
         const saved = data.attendance;
-        setAttendances((prev) => [
-          saved,
-          ...prev.filter((a) => a.id !== saved.id)
-        ]);
-        showToast('Clock In successful!', 'success');
+        setAttendances((prev) => {
+          const withoutDup = prev.filter((a) => a.id !== saved.id);
+          return [saved, ...withoutDup];
+        });
+        if (data.reused) {
+          showToast('Sudah Clock In hari ini. Sesi dilanjutkan.', 'success');
+        } else {
+          showToast('Clock In successful!', 'success');
+        }
+        return { success: true, reused: !!data.reused };
       } else {
         showToast(data.error || 'Failed to Clock In', 'error');
+        return { success: false, error: data.error || 'Failed to Clock In' };
       }
     } catch (e) {
       console.error('Error clocking in:', e);
       showToast('Connection error. Failed to Clock In.', 'error');
+      return { success: false, error: 'Connection error' };
     }
   };
 
-  const clockOut = async (userId: string) => {
+  const clockOut = async (userId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/attendance', {
         method: 'PATCH',
@@ -908,12 +915,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           prev.map((a) => (a.id === saved.id ? saved : a))
         );
         showToast('Clock Out successful!', 'success');
+        return { success: true };
       } else {
         showToast(data.error || 'Failed to Clock Out', 'error');
+        return { success: false, error: data.error || 'Failed to Clock Out' };
       }
     } catch (e) {
       console.error('Error clocking out:', e);
       showToast('Connection error. Failed to Clock Out.', 'error');
+      return { success: false, error: 'Connection error' };
     }
   };
 

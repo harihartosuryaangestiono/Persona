@@ -12,7 +12,6 @@ export async function POST(req: Request) {
 
     const now = new Date();
 
-    // 1. Get Jakarta Date String for the current server timestamp
     const jakartaDateStr = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Jakarta',
       year: 'numeric',
@@ -22,9 +21,46 @@ export async function POST(req: Request) {
 
     const targetDate = new Date(`${jakartaDateStr}T00:00:00.000Z`);
 
-    // 2. Perform Atomic Operations using Prisma Transaction
+    const nextDate = new Date(targetDate);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+
     const result = await prisma.$transaction(async (tx) => {
-      // Check for any active attendance session (clockOut is null)
+      const staleActive = await tx.attendance.findMany({
+        where: {
+          userId,
+          clockOut: null,
+          date: { lt: targetDate },
+        },
+        orderBy: { clockIn: 'desc' },
+      });
+
+      for (const stale of staleActive) {
+        const staleIn = new Date(stale.clockIn).getTime();
+        const autoClose = new Date(staleIn + 10 * 60 * 60 * 1000);
+        const wMin = Math.max(0, Math.floor((autoClose.getTime() - staleIn) / 60000));
+        const wHr = Math.round((wMin / 60.0) * 100) / 100;
+
+        await tx.attendance.update({
+          where: { id: stale.id },
+          data: {
+            clockOut: autoClose,
+            workingMinutes: wMin,
+            workingHours: wHr,
+            status: 'AUTO_CLOSED',
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            userId,
+            entityType: 'ATTENDANCE',
+            entityId: stale.id,
+            action: 'AUTO_CLOCK_OUT',
+            details: `Auto-closed stale session from previous day. Duration: ${wMin} mins (${wHr} hrs)`,
+          },
+        });
+      }
+
       const activeAtt = await tx.attendance.findFirst({
         where: {
           userId,
@@ -33,22 +69,35 @@ export async function POST(req: Request) {
       });
 
       if (activeAtt) {
-        throw new Error('Anda masih memiliki sesi attendance yang aktif.');
+        const activeDateStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Jakarta',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(activeAtt.clockIn);
+
+        if (activeDateStr === jakartaDateStr) {
+          return { ...activeAtt, _reused: true } as any;
+        }
+
+        throw new Error('Anda masih memiliki sesi attendance yang aktif. Silakan clock out terlebih dahulu.');
       }
 
-      // Check if user already has any attendance record today (completed or active)
       const todayAtt = await tx.attendance.findFirst({
         where: {
           userId,
-          date: targetDate,
+          date: { gte: targetDate, lt: nextDate },
         },
       });
 
-      if (todayAtt) {
+      if (todayAtt && todayAtt.clockOut) {
         throw new Error('Anda sudah melakukan absensi hari ini.');
       }
 
-      // 3. Fetch Company Settings dynamically
+      if (todayAtt && !todayAtt.clockOut) {
+        return { ...todayAtt, _reused: true } as any;
+      }
+
       const settings = await tx.companySetting.findFirst();
       const workStart = settings?.workStart || '09:00';
       const gracePeriod = settings?.gracePeriod !== undefined ? settings.gracePeriod : 15;
@@ -56,7 +105,6 @@ export async function POST(req: Request) {
       const [startHour, startMinute] = workStart.split(':').map(Number);
       const workStartMinutes = startHour * 60 + startMinute;
 
-      // 4. Calculate if late based on Asia/Jakarta timezone
       const timeFormatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Asia/Jakarta',
         hour: 'numeric',
@@ -72,7 +120,6 @@ export async function POST(req: Request) {
       const isLate = diff > gracePeriod;
       const lateMinutes = isLate ? diff : 0;
 
-      // 5. Create new attendance session
       const attendance = await tx.attendance.create({
         data: {
           userId,
@@ -91,7 +138,6 @@ export async function POST(req: Request) {
         },
       });
 
-      // 6. Log the event
       await tx.activityLog.create({
         data: {
           userId,
@@ -105,14 +151,22 @@ export async function POST(req: Request) {
       return attendance;
     });
 
+    const wasReused = !!(result as any)._reused;
+    delete (result as any)._reused;
+
+    const user = (result as any).user
+      ? (result as any).user
+      : await prisma.user.findUnique({ where: { id: (result as any).userId } });
+
     return NextResponse.json({
       success: true,
+      reused: wasReused,
       attendance: {
         ...result,
-        userName: result.user.name,
-        date: result.date.toISOString(),
-        clockIn: result.clockIn.toISOString(),
-        clockOut: null,
+        userName: user?.name || 'Unknown User',
+        date: (result as any).date.toISOString(),
+        clockIn: (result as any).clockIn.toISOString(),
+        clockOut: (result as any).clockOut ? (result as any).clockOut.toISOString() : null,
       },
     });
   } catch (err: any) {
@@ -131,18 +185,49 @@ export async function PATCH(req: Request) {
 
     const now = new Date();
 
-    // Perform Atomic Operations using Prisma Transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Find the first active attendance record for this user (where clockOut is null)
-      const activeAtt = await tx.attendance.findFirst({
+      const activeAttList = await tx.attendance.findMany({
         where: {
           userId,
           clockOut: null,
         },
+        orderBy: { clockIn: 'desc' },
       });
 
-      if (!activeAtt) {
+      if (!activeAttList || activeAttList.length === 0) {
         throw new Error('Tidak ada sesi attendance aktif.');
+      }
+
+      const activeAtt = activeAttList[0];
+
+      if (activeAttList.length > 1) {
+        for (let i = 1; i < activeAttList.length; i++) {
+          const dup = activeAttList[i];
+          const dupIn = new Date(dup.clockIn).getTime();
+          const autoOut = new Date(dupIn + 10 * 60 * 60 * 1000);
+          const dupMin = Math.max(0, Math.floor((autoOut.getTime() - dupIn) / 60000));
+          const dupHr = Math.round((dupMin / 60.0) * 100) / 100;
+
+          await tx.attendance.update({
+            where: { id: dup.id },
+            data: {
+              clockOut: autoOut,
+              workingMinutes: dupMin,
+              workingHours: dupHr,
+              status: 'AUTO_CLOSED',
+            },
+          });
+
+          await tx.activityLog.create({
+            data: {
+              userId,
+              entityType: 'ATTENDANCE',
+              entityId: dup.id,
+              action: 'AUTO_CLOCK_OUT',
+              details: `Auto-closed duplicate active session during clock out. Duration: ${dupMin} mins (${dupHr} hrs)`,
+            },
+          });
+        }
       }
 
       const clockInTime = new Date(activeAtt.clockIn).getTime();
@@ -155,7 +240,6 @@ export async function PATCH(req: Request) {
       const workingMinutes = Math.max(0, Math.floor((clockOutTime - clockInTime) / 60000));
       const workingHours = Math.round((workingMinutes / 60.0) * 100) / 100;
 
-      // Update session to COMPLETED
       const updated = await tx.attendance.update({
         where: { id: activeAtt.id },
         data: {
@@ -169,7 +253,6 @@ export async function PATCH(req: Request) {
         },
       });
 
-      // Log the event
       await tx.activityLog.create({
         data: {
           userId,
@@ -187,7 +270,7 @@ export async function PATCH(req: Request) {
       success: true,
       attendance: {
         ...result,
-        userName: result.user.name,
+        userName: result.user?.name || 'Unknown User',
         date: result.date.toISOString(),
         clockIn: result.clockIn.toISOString(),
         clockOut: result.clockOut ? result.clockOut.toISOString() : null,
