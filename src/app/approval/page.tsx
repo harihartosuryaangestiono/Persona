@@ -38,14 +38,15 @@ export default function ApprovalPage() {
   };
 
   // Authenticated review checks
-  const isAnggi = currentUser?.name === 'Anggi' || currentUser?.id === 'u-anggi';
-  const isGigie = currentUser?.name === 'Gigie' || currentUser?.id === 'u-gigie';
+  const isAnggi = currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.id === 'u-anggi';
+  const isGigie = currentUser?.name?.toLowerCase() === 'gigie' || currentUser?.name?.toLowerCase() === 'gigi' || currentUser?.id === 'u-gigie' || currentUser?.id === 'u-gigi';
   const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+  const isStrategist = currentUser?.roles.includes('Strategist');
   
-  // Wewenang Approval per Workspace (Gigie hanya inhouse, Anggi hanya team anggi, Admin/Owner bebas)
-  const isAnggiInWorkspace = isAnggi && currentWorkspace?.id === 'ws-team-anggi';
-  const isGigieInWorkspace = isGigie && currentWorkspace?.id === 'ws-inhouse';
-  const canApprove = isAdmin || isAnggiInWorkspace || isGigieInWorkspace;
+  // Wewenang Approval per Workspace (Gigie di inhouse, Anggi di team anggi & MotoDW, Admin/Owner bebas, Strategist bebas)
+  const isAnggiInWorkspace = isAnggi && (currentWorkspace?.id === 'ws-team-anggi' || currentWorkspace?.slug?.includes('team-anggi'));
+  const isGigieInWorkspace = isGigie && (currentWorkspace?.id === 'ws-inhouse' || currentWorkspace?.slug?.includes('inhouse'));
+  const canApprove = isAdmin || isAnggiInWorkspace || isGigieInWorkspace || isStrategist;
 
   // Filter tasks in Approval stage
   const rawQueue = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval');
@@ -57,10 +58,21 @@ export default function ApprovalPage() {
   const filteredQueue = rawQueue.filter((t) => {
     if (t.workspaceId !== currentWorkspace?.id) return false;
     
+    const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+
     let allowed = false;
-    if (isAdmin) allowed = true;
-    else if (isAnggi && currentWorkspace?.id === 'ws-team-anggi') allowed = true;
-    else if (isGigie && currentWorkspace?.id === 'ws-inhouse') allowed = true;
+    if (isAdmin) {
+      allowed = true;
+    } else if (isMotoDW) {
+      // Specific rule: MotoDW approval is handled by Anggi
+      allowed = isAnggi;
+    } else if (isAnggiInWorkspace || isAnggi) {
+      allowed = true;
+    } else if (isGigieInWorkspace || isGigie) {
+      allowed = true;
+    } else if (isStrategist) {
+      allowed = true;
+    }
 
     if (!allowed) return false;
 

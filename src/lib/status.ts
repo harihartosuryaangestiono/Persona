@@ -3,6 +3,24 @@
  * Single source of truth mapping database statuses to UI labels and vice versa.
  */
 
+export const ALL_STATUS_OPTIONS = [
+  { value: 'Brief', label: 'Brief' },
+  { value: 'Editing', label: 'In Progress / Editing' },
+  { value: 'Revision', label: 'Revision' },
+  { value: 'Waiting for Approval', label: 'Waiting for Approval' },
+  { value: 'Approval', label: 'Approval' },
+  { value: 'Ready to Post', label: 'Ready to Post' },
+  { value: 'Scheduling', label: 'Scheduling' },
+  { value: 'Posted', label: 'Posted' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Production', label: 'Production' },
+  { value: 'Draft', label: 'Draft' },
+  { value: 'Script & Shotlist', label: 'Script & Shotlist' },
+  { value: 'Editorial Calendar', label: 'Editorial Calendar' },
+  { value: 'Ready for Production', label: 'Ready for Production' },
+  { value: 'Shooting', label: 'Shooting' },
+] as const;
+
 export const DATABASE_TO_UI_STATUS: Record<string, string> = {
   'Editing': 'In Progress',
   'InProgress': 'In Progress',
@@ -73,3 +91,4 @@ export function getDbStatus(uiStatus: string | null | undefined): string {
   );
   return matchKey ? UI_TO_DATABASE_STATUS[matchKey] : clean;
 }
+

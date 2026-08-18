@@ -153,11 +153,19 @@ export default function WorklogPage() {
       date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
       status: getDbStatus(editStatus) as any,
       previewLink: editPreviewLink ? formatUrl(editPreviewLink) : '',
-      stages: hasMultipleStages
-        ? parsedStages
+      stages: parsedStages.length > 0
+        ? parsedStages.map((stg: any, i: number) => i === 0 ? {
+            ...stg,
+            userId: targetUser?.id || editUserId,
+            userName: targetUser?.name || editUserName,
+            taskType: editTaskType,
+            format: normalizeFormat(editFormat),
+            qty: Number(editQty),
+            score: editScore,
+          } : stg)
         : [
             {
-              id: parsedStages[0]?.id || `stage-edit-${Date.now()}`,
+              id: `stage-edit-${Date.now()}`,
               role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
               userId: targetUser?.id || editUserId,
               userName: targetUser?.name || editUserName,
@@ -181,9 +189,18 @@ export default function WorklogPage() {
   };
 
   const loggedContentIds = new Set(worklogs.map((w) => w.contentId).filter(Boolean));
+  const loggedTitleKeys = new Set(
+    worklogs.map((w) => `${w.contentTitle.toLowerCase().trim()}_${w.clientId}_${new Date(w.date).toISOString().substring(0, 10)}`)
+  );
 
   const activeTaskLogs: WorklogItem[] = (tasks || [])
-    .filter((t) => !t.isArchived && (!t.contentId || !loggedContentIds.has(t.contentId)))
+    .filter((t) => {
+      if (t.isArchived) return false;
+      if (t.contentId && loggedContentIds.has(t.contentId)) return false;
+      const titleKey = `${t.title.toLowerCase().trim()}_${t.clientId}_${new Date(t.postingDate || t.createdAt).toISOString().substring(0, 10)}`;
+      if (loggedTitleKeys.has(titleKey)) return false;
+      return true;
+    })
     .map((t) => {
       const parsedStages = t.stages
         ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages)
@@ -1644,12 +1661,19 @@ export default function WorklogPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-neutral-700 font-bold mb-1">Total Score</label>
+                  <label className="block text-neutral-700 font-bold mb-1">
+                    Total Score {currentUser?.roles.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r)) && <span className="text-[10px] text-neutral-400 font-normal">(Editable)</span>}
+                  </label>
                   <input
                     type="number"
                     value={editScore}
-                    readOnly
-                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-500 font-bold font-mono cursor-not-allowed select-none focus:outline-hidden"
+                    onChange={(e) => setEditScore(Number(e.target.value))}
+                    readOnly={!currentUser?.roles.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r))}
+                    className={`w-full px-3 py-2 rounded-xl border border-neutral-200 font-bold font-mono focus:outline-hidden ${
+                      currentUser?.roles.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r))
+                        ? 'bg-white text-neutral-900 focus:ring-2 focus:ring-neutral-900'
+                        : 'bg-neutral-50 text-neutral-500 cursor-not-allowed select-none'
+                    }`}
                   />
                 </div>
                 <div>

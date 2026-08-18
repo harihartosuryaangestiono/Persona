@@ -376,15 +376,16 @@ export default function KanbanPage() {
 
   // Add work stage to task form helper
   const handleAddStage = (isEdit: boolean) => {
+    const initialFormat = (isEdit && selectedTaskDetail?.format) ? selectedTaskDetail.format : 'Reels';
     const defaultStage: TaskStage = {
       id: `stg-${Date.now()}-${Math.random()}`,
       role: 'Editor',
       userId: allUsers[0]?.id || '',
       userName: allUsers[0]?.name || '',
       taskType: 'Editing',
-      format: 'Reels',
+      format: initialFormat,
       qty: 1,
-      score: 150,
+      score: calculateTaskScore('Editor', 'Editing', initialFormat, 1),
     };
     if (isEdit) {
       setEditStages([...editStages, defaultStage]);
@@ -594,6 +595,8 @@ export default function KanbanPage() {
 
     const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
     const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
+    const primaryFormat = editStages.length > 0 ? editStages[0].format : selectedTaskDetail.format;
+    const primaryTaskType = editStages.length > 0 ? editStages[0].taskType : selectedTaskDetail.taskType;
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
@@ -608,6 +611,8 @@ export default function KanbanPage() {
       driveLink: formattedDrive,
       previewLink: formattedPreview,
       stages: editStages,
+      format: primaryFormat,
+      taskType: primaryTaskType,
       month: editMonth,
       year: editYear,
     };
@@ -1464,7 +1469,8 @@ export default function KanbanPage() {
                     // Formats based on type
                     const formatOptions = getStrategicFormats(stage.taskType).length > 0 ? getStrategicFormats(stage.taskType) :
                       (stage.taskType === 'Scheduling' ? ['Per Post'] :
-                      (stage.taskType === 'Editing' ? ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'] : ['Minor', 'Medium', 'Major']));
+                      (stage.taskType === 'Production Assistant' ? ['1 Jam', '4 Jam', '8 Jam'] :
+                      (stage.taskType === 'Editing' ? ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'] : ['Minor', 'Medium', 'Major'])));
 
                     return (
                       <div key={stage.id} className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex flex-wrap items-center gap-3">
@@ -1746,7 +1752,8 @@ export default function KanbanPage() {
 
                       const formatOptions = getStrategicFormats(stage.taskType).length > 0 ? getStrategicFormats(stage.taskType) :
                         (stage.taskType === 'Scheduling' ? ['Per Post'] :
-                        (stage.taskType === 'Editing' ? ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'] : ['Minor', 'Medium', 'Major']));
+                        (stage.taskType === 'Production Assistant' ? ['1 Jam', '4 Jam', '8 Jam'] :
+                        (stage.taskType === 'Editing' ? ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'] : ['Minor', 'Medium', 'Major'])));
 
                       return (
                         <div key={stage.id} className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 flex flex-wrap items-center gap-3">

@@ -222,22 +222,27 @@ export default function ToDoPage() {
                         value={t.status}
                         onChange={(e) => updateTask(t.id, { status: e.target.value as any })}
                         className={`bg-white border border-neutral-200 rounded px-2.5 py-1 text-[11px] font-semibold focus:outline-none ${
-                          t.status === 'Posted'
+                          t.status === 'Posted' || t.status === 'Completed'
                             ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                             : t.status === 'Waiting for Approval' || t.status === 'Approval'
                             ? 'text-amber-700 bg-amber-50 border-amber-200'
+                            : (t.status as any) === 'Ready to Post' || (t.status as any) === 'Ready To Post'
+                            ? 'text-blue-700 bg-blue-50 border-blue-200'
                             : t.status === 'Brief'
                             ? 'text-neutral-500 bg-neutral-50'
                             : 'text-neutral-800'
                         }`}
                       >
-                        <option value="Brief">Brief / Dibatalkan</option>
+                        <option value="Brief">Brief</option>
                         <option value="Editing">In Progress / Editing</option>
                         <option value="Revision">Revision</option>
                         <option value="Waiting for Approval">Waiting for Approval</option>
                         <option value="Approval">Approval</option>
-                        <option value="Scheduling">Ready for Scheduling</option>
+                        <option value="Ready to Post">Ready to Post</option>
+                        <option value="Scheduling">Scheduling / Ready for Scheduling</option>
                         <option value="Posted">Posted</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Production">Production</option>
                       </select>
                     </td>
 
@@ -403,10 +408,13 @@ export default function ToDoPage() {
                   >
                     <option value="Brief">Brief</option>
                     <option value="Editing">In Progress / Editing</option>
+                    <option value="Revision">Revision</option>
                     <option value="Waiting for Approval">Waiting for Approval</option>
                     <option value="Approval">Approval</option>
-                    <option value="Scheduling">Ready for Scheduling</option>
+                    <option value="Ready to Post">Ready to Post</option>
+                    <option value="Scheduling">Scheduling / Ready for Scheduling</option>
                     <option value="Posted">Posted</option>
+                    <option value="Completed">Completed</option>
                   </select>
                 </div>
 

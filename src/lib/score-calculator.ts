@@ -11,6 +11,7 @@ export const MASTER_SCORES_STATIC: Omit<MasterScoreItem, 'id'>[] = [
   { category: 'Editor', taskType: 'Revisi', format: 'Minor', score: 10 },
   { category: 'Editor', taskType: 'Revisi', format: 'Medium', score: 25 },
   { category: 'Editor', taskType: 'Revisi', format: 'Major', score: 50 },
+  { category: 'Assistant', taskType: 'Production Assistant', format: '1 Jam', score: 100 },
   { category: 'Assistant', taskType: 'Production Assistant', format: '4 Jam', score: 400 },
   { category: 'Assistant', taskType: 'Production Assistant', format: '8 Jam', score: 800 },
   { category: 'Strategic', taskType: 'Content Plan', format: '4 Jam', score: 400 },
@@ -34,6 +35,7 @@ export function normalizeFormat(fmt?: string): string {
   if (clean.includes('grafis') || clean.includes('graphic')) return 'Grafis';
   if (clean.includes('paket')) return 'Paket Static';
   if (clean.includes('foto') || clean.includes('photo') || clean.includes('single') || clean.includes('static')) return 'Single Foto';
+  if (clean.includes('1') && clean.includes('jam')) return '1 Jam';
   if (clean.includes('4') && clean.includes('jam')) return '4 Jam';
   if (clean.includes('8') && clean.includes('jam')) return '8 Jam';
   if (clean.includes('post')) return 'Per Post';
