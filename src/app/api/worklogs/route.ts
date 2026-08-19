@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isPicAllowedForTaskType, checkWorklogAccess } from '@/lib/rbac';
-import { getDbStatus } from '@/lib/status';
+import { getDbStatus, normalizeStatusForPipeline, isStrategicPipeline } from '@/lib/status';
 
 async function validateTaskAssignments(stages: any[]): Promise<string | null> {
   if (!stages || !Array.isArray(stages)) return null;
@@ -109,7 +109,8 @@ export async function POST(req: Request) {
       if (anyUser) resolvedUserId = anyUser.id;
     }
 
-    const dbStatus = getDbStatus(status || 'Completed');
+    const isStrategicLog = isStrategicPipeline(body.category, taskType);
+    const dbStatus = normalizeStatusForPipeline(status || (isStrategicLog ? 'Completed' : 'Posted'), body.category, taskType);
 
     // Execute atomic transaction for create & update tasks matching
     const log = await prisma.$transaction(async (tx) => {
@@ -282,15 +283,9 @@ export async function POST(req: Request) {
         }
 
         if (body.status !== undefined) {
-          const dbStatusVal = getDbStatus(body.status);
           const resolvedTaskType = taskType || matchingTask.taskType || '';
-          const isStrategicTask = resolvedTaskType === 'Content Plan' || resolvedTaskType === 'Meeting Brief' || resolvedTaskType === 'Presentasi';
-          
-          let coercedStatus = dbStatusVal;
-          if (isStrategicTask && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(dbStatusVal)) {
-            coercedStatus = 'Brief';
-          }
-          
+          const resolvedCategory = body.category || matchingTask.category || '';
+          const coercedStatus = normalizeStatusForPipeline(body.status, resolvedCategory, resolvedTaskType);
           taskUpdateData.status = coercedStatus;
 
           if (coercedStatus !== matchingTask.status) {
@@ -307,13 +302,13 @@ export async function POST(req: Request) {
 
             taskUpdateData.workflowTimeline = JSON.stringify(timeline);
 
-            if (dbStatusVal === 'Production' && matchingTask.category === 'Strategic') {
+            if (coercedStatus === 'Production' && matchingTask.category === 'Strategic') {
               taskUpdateData.category = 'Production';
               taskUpdateData.handoverUserId = currentUserId;
               taskUpdateData.handoverTime = new Date();
             }
 
-            if (dbStatusVal === 'Posted' || dbStatusVal === 'Completed') {
+            if (coercedStatus === 'Posted' || coercedStatus === 'Completed') {
               const settings = await tx.companySetting.findFirst();
               if (settings && settings.archiveRule === 'IMMEDIATE') {
                 taskUpdateData.isArchived = true;
@@ -475,15 +470,9 @@ export async function PATCH(req: Request) {
           taskUpdateData.stages = JSON.stringify(body.stages);
         }
         if (body.status !== undefined) {
-          const dbStatus = getDbStatus(body.status);
           const resolvedTaskType = body.taskType || matchingTask.taskType || '';
-          const isStrategicTask = resolvedTaskType === 'Content Plan' || resolvedTaskType === 'Meeting Brief' || resolvedTaskType === 'Presentasi';
-          
-          let coercedStatus = dbStatus;
-          if (isStrategicTask && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(dbStatus)) {
-            coercedStatus = 'Brief';
-          }
-          
+          const resolvedCategory = body.category || matchingTask.category || '';
+          const coercedStatus = normalizeStatusForPipeline(body.status, resolvedCategory, resolvedTaskType);
           taskUpdateData.status = coercedStatus;
 
           if (coercedStatus !== matchingTask.status) {
@@ -495,13 +484,13 @@ export async function PATCH(req: Request) {
             });
             taskUpdateData.workflowTimeline = JSON.stringify(timeline);
 
-            if (dbStatus === 'Production' && matchingTask.category === 'Strategic') {
+            if (coercedStatus === 'Production' && matchingTask.category === 'Strategic') {
               taskUpdateData.category = 'Production';
               taskUpdateData.handoverUserId = currentUserId;
               taskUpdateData.handoverTime = new Date();
             }
 
-            if (dbStatus === 'Posted' || dbStatus === 'Completed') {
+            if (coercedStatus === 'Posted' || coercedStatus === 'Completed') {
               const settings = await tx.companySetting.findFirst();
               if (settings && settings.archiveRule === 'IMMEDIATE') {
                 taskUpdateData.isArchived = true;

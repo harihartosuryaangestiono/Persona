@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculatePriority } from '@/lib/score-calculator';
 import { isPicAllowedForTaskType, checkTaskAccess } from '@/lib/rbac';
-import { getDbStatus } from '@/lib/status';
+import { getDbStatus, normalizeStatusForPipeline } from '@/lib/status';
 
 function checkAuth(req: Request, allowedRoles: string[]): boolean {
   const userRoleHeader = req.headers.get('X-User-Role') || '';
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     }
 
     // Respect requested status if passed; otherwise resolve default from category
-    let defaultStatus = body.status ? getDbStatus(body.status) : 'Brief';
+    let defaultStatus = body.status ? normalizeStatusForPipeline(body.status, category, body.taskType) : 'Brief';
     if (!body.status) {
       if (category === 'Strategic') defaultStatus = 'Brief';
       else if (category === 'Production') defaultStatus = 'Production';
@@ -329,7 +329,9 @@ export async function PATCH(req: Request) {
 
     // Set stage status and track transition log (Requirement 7)
     if (body.status !== undefined) {
-      const dbStatus = getDbStatus(body.status);
+      const categoryVal = updateData.category || existingTask.category;
+      const taskTypeVal = updateData.taskType || existingTask.taskType;
+      const dbStatus = normalizeStatusForPipeline(body.status, categoryVal, taskTypeVal);
       updateData.status = dbStatus;
       if (dbStatus !== existingTask.status) {
         const rawTimeline = existingTask.workflowTimeline || '[]';

@@ -92,3 +92,66 @@ export function getDbStatus(uiStatus: string | null | undefined): string {
   return matchKey ? UI_TO_DATABASE_STATUS[matchKey] : clean;
 }
 
+export const STRATEGIC_STATUS_OPTIONS = [
+  'Brief',
+  'Content Proposal',
+  'Editorial Calendar',
+  'Script & Shotlist',
+  'Ready for Production',
+  'Completed',
+] as const;
+
+export const PRODUCTION_STATUS_OPTIONS = [
+  'Production',
+  'Shooting',
+  'Editing',
+  'Revision',
+  'Waiting for Approval',
+  'Approval',
+  'Ready to Post',
+  'Scheduling',
+  'Posted',
+] as const;
+
+export function isStrategicPipeline(category?: string | null, taskType?: string | null): boolean {
+  if (category === 'Strategic') return true;
+  const strTypes = [
+    'content plan',
+    'meeting brief',
+    'presentasi',
+    'brief',
+    'content proposal',
+    'editorial calendar',
+    'script & shotlist',
+    'script',
+    'ready for production',
+  ];
+  if (taskType && strTypes.includes(taskType.trim().toLowerCase())) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Normalizes status based on pipeline requirement:
+ * - Strategic pipeline terminal status is 'Completed' ('Posted' -> 'Completed')
+ * - Production pipeline terminal status is 'Posted' ('Completed' -> 'Posted')
+ */
+export function normalizeStatusForPipeline(
+  status: string | null | undefined,
+  category?: string | null,
+  taskType?: string | null
+): string {
+  const resolved = getDbStatus(status);
+  const clean = resolved.trim();
+  const strategic = isStrategicPipeline(category, taskType);
+
+  if (strategic) {
+    if (clean.toLowerCase() === 'posted') return 'Completed';
+  } else {
+    if (clean.toLowerCase() === 'completed') return 'Posted';
+  }
+  return clean;
+}
+
+

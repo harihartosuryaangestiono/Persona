@@ -15,7 +15,7 @@ import {
   ActivityLogItem,
 } from '@/lib/types';
 import { MASTER_SCORES_STATIC, calculateCOGS, calculatePriority } from '@/lib/score-calculator';
-import { getStatusLabel, getDbStatus } from '@/lib/status';
+import { getStatusLabel, getDbStatus, normalizeStatusForPipeline, isStrategicPipeline } from '@/lib/status';
 
 interface DataContextType {
   tasks: TaskItem[];
@@ -97,13 +97,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ...t,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
       clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
-      status: getDbStatus(getStatusLabel(t.status)) as any
+      status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
     };
   };
 
   const normalizeWorklog = (w: WorklogItem): WorklogItem => ({
     ...w,
-    status: getStatusLabel(w.status)
+    status: normalizeStatusForPipeline(w.status, (w as any).category, w.taskType),
   });
 
   const fetchInitialData = async () => {
@@ -439,7 +439,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       qty: log.qty || 1,
       score,
       cogs: calculateCOGS(score),
-      status: log.status || 'Completed',
+      status: normalizeStatusForPipeline(
+        log.status || (isStrategicPipeline((log as any).category, log.taskType) ? 'Completed' : 'Posted'),
+        (log as any).category,
+        log.taskType
+      ),
       source: log.source || 'Manual',
       previewLink: log.previewLink || '',
       stages: log.stages || null,
@@ -473,12 +477,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const isStrategic = item.taskType === 'Content Plan' || item.taskType === 'Meeting Brief' || item.taskType === 'Presentasi';
+    const isStrategic = isStrategicPipeline(undefined, item.taskType);
     const targetCategory = isStrategic ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor');
-    let taskStatus = item.status as any || 'Completed';
-    if (isStrategic && !['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Completed'].includes(taskStatus)) {
-      taskStatus = 'Brief';
-    }
+    let taskStatus = normalizeStatusForPipeline(item.status || (isStrategic ? 'Completed' : 'Posted'), targetCategory, item.taskType);
 
     const newTask: TaskItem = {
       id: existingTask ? existingTask.id : `task-${item.id}`,
@@ -489,7 +490,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       format: item.format,
       qty: item.qty,
       priority: 'Low',
-      status: taskStatus,
+      status: taskStatus as any,
       clientId: item.clientId,
       workspaceId: targetWorkspaceId,
       postingDate: item.date,
@@ -767,7 +768,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         qty: log.qty || 1,
         score,
         cogs: log.cogs || calculateCOGS(score),
-        status: log.status || 'Posted',
+        status: normalizeStatusForPipeline(
+          log.status || (isStrategicPipeline((log as any).category, log.taskType) ? 'Completed' : 'Posted'),
+          (log as any).category,
+          log.taskType
+        ),
         source: log.source || 'Imported',
         previewLink: log.previewLink || '',
         stages: log.stages || fallbackStage,
@@ -783,17 +788,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const assignedUserIds = parsedStages.map((s: any) => s.userId).filter(Boolean);
       const matchedClientForTask = rawClients.find((c) => c.id === item.clientId);
       const targetWorkspaceId = matchedClientForTask?.workspaceId || currentWorkspace.id;
+      const categoryVal = isStrategicPipeline(undefined, item.taskType) ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor');
 
       return {
         id: `task-${item.id}`,
         title: item.contentTitle,
         description: 'Automatically synchronized task from imported worklog.',
-        category: item.taskType === 'Content Plan' ? 'Strategic' : (item.taskType === 'Scheduling' ? 'Scheduler' : 'Editor'),
+        category: categoryVal,
         taskType: item.taskType,
         format: item.format,
         qty: item.qty,
         priority: 'Low',
-        status: item.status as any || 'Completed',
+        status: normalizeStatusForPipeline(item.status, categoryVal, item.taskType) as any,
         clientId: item.clientId,
         workspaceId: targetWorkspaceId,
         postingDate: item.date,

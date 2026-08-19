@@ -8,7 +8,7 @@ import { Upload, Download, Plus, Search, ExternalLink, X, ChevronDown, ChevronUp
 import * as XLSX from 'xlsx';
 import { calculateTaskScore, normalizeFormat, calculateCOGS, parseExcelDate } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
-import { getDbStatus, getStatusLabel } from '@/lib/status';
+import { getDbStatus, getStatusLabel, normalizeStatusForPipeline, isStrategicPipeline, STRATEGIC_STATUS_OPTIONS, PRODUCTION_STATUS_OPTIONS } from '@/lib/status';
 
 interface WorklogStage {
   id: string;
@@ -243,7 +243,7 @@ export default function WorklogPage() {
         userName: assignedNames.length > 0 ? assignedNames.join(', ') : primaryUser?.name || 'Unknown',
         userId: primaryUser?.id || allAssignedIds[0] || '',
         date: t.postingDate || t.createdAt,
-        status: t.status as any,
+        status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
         source: 'Automated',
         deadline: t.deadline || '',
         previewLink: t.previewLink || '',
@@ -504,7 +504,11 @@ export default function WorklogPage() {
             userId: matchedUser?.id || currentUser.id,
             userName: matchedUser?.name || rawUser,
             date: dateVal,
-            status: row['Status'] || 'Posted',
+            status: normalizeStatusForPipeline(
+              row['Status'] || (isStrategicPipeline(undefined, taskType) ? 'Completed' : 'Posted'),
+              undefined,
+              taskType
+            ),
             source: row['Sumber (content plan)'] || 'Imported',
             deadline: row['Deadline'] || '',
             previewLink: row['Preview Link'] || '',
@@ -1695,22 +1699,14 @@ export default function WorklogPage() {
                     onChange={(e) => setEditStatus(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
                   >
-                    <option value="Posted">Posted</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Brief">Brief</option>
-                    <option value="Production">Production</option>
-                    <option value="Scheduling">Scheduling</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Revision">Revision</option>
-                    <option value="Ready for Production">Ready for Production</option>
-                    <option value="Ready to Post">Ready to Post</option>
-                    <option value="Waiting for Approval">Waiting for Approval</option>
-                    <option value="Approval">Approval</option>
-                    <option value="Draft">Draft</option>
-                    <option value="Editorial Calendar">Editorial Calendar</option>
-                    <option value="Script">Script</option>
-                    <option value="Script & Shotlist">Script & Shotlist</option>
-                    <option value="Shooting">Shooting</option>
+                    {(isStrategicPipeline(undefined, editTaskType)
+                      ? STRATEGIC_STATUS_OPTIONS
+                      : PRODUCTION_STATUS_OPTIONS
+                    ).map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>

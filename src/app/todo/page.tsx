@@ -6,6 +6,7 @@ import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { Search, ExternalLink, Plus, Filter, X } from 'lucide-react';
 import { calculateAutoDeadline } from '@/lib/score-calculator';
+import { isStrategicPipeline, STRATEGIC_STATUS_OPTIONS, PRODUCTION_STATUS_OPTIONS } from '@/lib/status';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -233,16 +234,14 @@ export default function ToDoPage() {
                             : 'text-neutral-800'
                         }`}
                       >
-                        <option value="Brief">Brief</option>
-                        <option value="Editing">In Progress / Editing</option>
-                        <option value="Revision">Revision</option>
-                        <option value="Waiting for Approval">Waiting for Approval</option>
-                        <option value="Approval">Approval</option>
-                        <option value="Ready to Post">Ready to Post</option>
-                        <option value="Scheduling">Scheduling / Ready for Scheduling</option>
-                        <option value="Posted">Posted</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Production">Production</option>
+                        {(isStrategicPipeline(t.category, t.taskType)
+                          ? STRATEGIC_STATUS_OPTIONS
+                          : PRODUCTION_STATUS_OPTIONS
+                        ).map((st) => (
+                          <option key={st} value={st}>
+                            {st === 'Editing' ? 'In Progress / Editing' : st}
+                          </option>
+                        ))}
                       </select>
                     </td>
 
@@ -406,15 +405,14 @@ export default function ToDoPage() {
                     onChange={(e) => setNewStatus(e.target.value as any)}
                     className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
                   >
-                    <option value="Brief">Brief</option>
-                    <option value="Editing">In Progress / Editing</option>
-                    <option value="Revision">Revision</option>
-                    <option value="Waiting for Approval">Waiting for Approval</option>
-                    <option value="Approval">Approval</option>
-                    <option value="Ready to Post">Ready to Post</option>
-                    <option value="Scheduling">Scheduling / Ready for Scheduling</option>
-                    <option value="Posted">Posted</option>
-                    <option value="Completed">Completed</option>
+                    {(isStrategicPipeline(newCategory, newTaskType)
+                      ? STRATEGIC_STATUS_OPTIONS
+                      : PRODUCTION_STATUS_OPTIONS
+                    ).map((st) => (
+                      <option key={st} value={st}>
+                        {st === 'Editing' ? 'In Progress / Editing' : st}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
