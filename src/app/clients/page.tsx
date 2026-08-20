@@ -21,7 +21,7 @@ function getBudgetMonthFormat(month: string, year: number) {
 }
 
 export default function ClientsPage() {
-  const { clients, tasks, budgets, refreshData } = useData();
+  const { clients, tasks, budgets, refreshData, updateClient } = useData();
   const { currentWorkspace, workspaces } = useWorkspace();
   const { currentUser } = useUser();
   const { showToast } = useToast();
@@ -125,13 +125,8 @@ export default function ClientsPage() {
 
   const handleUpdateStatus = async (client: any, newStatus: string) => {
     try {
-      const res = await fetch(`/api/clients?id=${client.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error('Failed to update status');
-      await refreshData();
+      await updateClient(client.id, { status: newStatus });
+      showToast(`Client status updated to ${newStatus}`, 'success');
     } catch (e) {
       console.error(e);
       showToast('Error updating client status', 'error');

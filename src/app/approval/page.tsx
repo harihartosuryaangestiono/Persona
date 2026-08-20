@@ -56,7 +56,16 @@ export default function ApprovalPage() {
 
   // Filter Approval Queue based on assignment & workspace permissions and user selected filters
   const filteredQueue = rawQueue.filter((t) => {
-    if (t.workspaceId !== currentWorkspace?.id) return false;
+    const taskClient = clients.find((c) => c.id === t.clientId || c.name === t.clientName);
+    const matchesWorkspace = t.workspaceId === currentWorkspace?.id ||
+      (taskClient && taskClient.workspaceId === currentWorkspace?.id) ||
+      (currentWorkspace?.id === 'ws-inhouse' && (
+        taskClient?.code?.toLowerCase().includes('inhouse') ||
+        taskClient?.name?.toLowerCase().includes('in-house') ||
+        taskClient?.name?.toLowerCase().includes('inhouse')
+      ));
+
+    if (!matchesWorkspace) return false;
     
     const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
 

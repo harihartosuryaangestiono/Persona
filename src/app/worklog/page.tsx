@@ -114,7 +114,13 @@ export default function WorklogPage() {
   const handleFormatOrQtyChange = (fmt: string, qtyVal: number, taskTypeVal: string, uId: string) => {
     const selectedUser = allUsers.find((u) => u.id === uId) || currentUser;
     const userRoles = selectedUser?.roles || [];
-    const category = userRoles.includes('Strategist') ? 'Strategic' : userRoles.includes('Scheduler') ? 'Scheduler' : 'Editor';
+    let category = 'Editor';
+    if (taskTypeVal === 'Production Assistant') category = 'Assistant';
+    else if (['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief', 'Content Proposal'].includes(taskTypeVal)) category = 'Strategic';
+    else if (taskTypeVal === 'Scheduling') category = 'Scheduler';
+    else if (userRoles.includes('Strategist')) category = 'Strategic';
+    else if (userRoles.includes('Scheduler')) category = 'Scheduler';
+
     const newScore = calculateTaskScore(category, taskTypeVal, normalizeFormat(fmt), qtyVal);
     setEditScore(newScore);
   };
@@ -136,7 +142,44 @@ export default function WorklogPage() {
         console.error('Failed to parse stages:', e);
       }
     }
-    const hasMultipleStages = Array.isArray(parsedStages) && parsedStages.length > 1;
+
+    let updatedStages: any[] = [];
+    if (Array.isArray(parsedStages) && parsedStages.length > 0) {
+      const targetUserId = targetUser?.id || editUserId;
+      let targetIndex = parsedStages.findIndex((s: any) => s.userId === targetUserId || s.userId === editingWorklog.userId);
+      if (targetIndex < 0) targetIndex = 0;
+
+      updatedStages = parsedStages.map((stg: any, i: number) => {
+        if (i === targetIndex) {
+          return {
+            ...stg,
+            userId: targetUserId,
+            userName: targetUser?.name || editUserName,
+            taskType: editTaskType,
+            format: normalizeFormat(editFormat),
+            qty: Number(editQty),
+            score: editScore,
+          };
+        }
+        return stg;
+      });
+    } else {
+      updatedStages = [
+        {
+          id: `stage-edit-${Date.now()}`,
+          role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
+          userId: targetUser?.id || editUserId,
+          userName: targetUser?.name || editUserName,
+          taskType: editTaskType,
+          format: normalizeFormat(editFormat),
+          qty: Number(editQty),
+          score: editScore,
+        },
+      ];
+    }
+
+    const totalScoreFromStages = updatedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0);
+    const finalScore = totalScoreFromStages > 0 ? totalScoreFromStages : editScore;
 
     const updatedLog: WorklogItem = {
       ...editingWorklog,
@@ -148,33 +191,12 @@ export default function WorklogPage() {
       taskType: editTaskType,
       format: normalizeFormat(editFormat),
       qty: Number(editQty),
-      score: editScore,
-      cogs: calculateCOGS(editScore),
+      score: finalScore,
+      cogs: calculateCOGS(finalScore),
       date: editDate ? new Date(editDate).toISOString() : editingWorklog.date,
       status: getDbStatus(editStatus) as any,
       previewLink: editPreviewLink ? formatUrl(editPreviewLink) : '',
-      stages: parsedStages.length > 0
-        ? parsedStages.map((stg: any, i: number) => i === 0 ? {
-            ...stg,
-            userId: targetUser?.id || editUserId,
-            userName: targetUser?.name || editUserName,
-            taskType: editTaskType,
-            format: normalizeFormat(editFormat),
-            qty: Number(editQty),
-            score: editScore,
-          } : stg)
-        : [
-            {
-              id: `stage-edit-${Date.now()}`,
-              role: (targetUser?.roles.includes('Strategist') ? 'Strategist' : targetUser?.roles.includes('Scheduler') ? 'Scheduler' : 'Editor') as any,
-              userId: targetUser?.id || editUserId,
-              userName: targetUser?.name || editUserName,
-              taskType: editTaskType,
-              format: normalizeFormat(editFormat),
-              qty: Number(editQty),
-              score: editScore,
-            },
-          ],
+      stages: updatedStages,
     };
 
     await updateWorklog(updatedLog);
@@ -567,7 +589,7 @@ export default function WorklogPage() {
     if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
-    if (type === 'Presentasi' || type === 'Meeting Brief') return ['Per Session'];
+    if (type === 'Presentasi' || type === 'Meeting Brief' || type === 'Content Proposal') return ['Per Session'];
     return [];
   };
 
@@ -652,7 +674,7 @@ export default function WorklogPage() {
         else if (value === 'Content Plan' || value === 'Production Lead' || value === 'Production Assistant') newStage.format = '4 Jam';
         else if (value === 'Editing Plan') newStage.format = 'Per Item';
         else if (value === 'Supervisi') newStage.format = 'Per Check';
-        else if (value === 'Presentasi' || value === 'Meeting Brief') newStage.format = 'Per Session';
+        else if (value === 'Presentasi' || value === 'Meeting Brief' || value === 'Content Proposal') newStage.format = 'Per Session';
         else if (value === 'Scheduling') newStage.format = 'Per Post';
       }
 

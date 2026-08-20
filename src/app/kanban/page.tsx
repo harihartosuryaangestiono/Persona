@@ -118,6 +118,15 @@ export default function KanbanPage() {
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskItem | null>(null);
   const [isEditingDetail, setIsEditingDetail] = useState(false);
 
+  // Handover Modal State
+  const [isHandoverModalOpen, setIsHandoverModalOpen] = useState(false);
+  const [handoverTask, setHandoverTask] = useState<TaskItem | null>(null);
+  const [handoverPaUserId, setHandoverPaUserId] = useState('');
+  const [handoverPaFormat, setHandoverPaFormat] = useState('4 Jam');
+  const [handoverEditorUserId, setHandoverEditorUserId] = useState('');
+  const [handoverEditorFormat, setHandoverEditorFormat] = useState('Reels');
+  const [handoverEditorQty, setHandoverEditorQty] = useState(1);
+
   // Drag and Drop
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskItem['status'] | null>(null);
@@ -445,7 +454,7 @@ export default function KanbanPage() {
         else if (value === 'Content Plan' || value === 'Production Lead' || value === 'Production Assistant') newStage.format = '4 Jam';
         else if (value === 'Editing Plan') newStage.format = 'Per Item';
         else if (value === 'Supervisi') newStage.format = 'Per Check';
-        else if (value === 'Presentasi') newStage.format = 'Per Session';
+        else if (value === 'Presentasi' || value === 'Meeting Brief' || value === 'Content Proposal') newStage.format = 'Per Session';
         else if (value === 'Scheduling') newStage.format = 'Per Post';
       }
 
@@ -597,6 +606,7 @@ export default function KanbanPage() {
     const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
     const primaryFormat = editStages.length > 0 ? editStages[0].format : selectedTaskDetail.format;
     const primaryTaskType = editStages.length > 0 ? editStages[0].taskType : selectedTaskDetail.taskType;
+    const primaryQty = editStages.length > 0 ? (editStages[0].qty || 1) : (selectedTaskDetail.qty || 1);
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
@@ -613,6 +623,7 @@ export default function KanbanPage() {
       stages: editStages,
       format: primaryFormat,
       taskType: primaryTaskType,
+      qty: primaryQty,
       month: editMonth,
       year: editYear,
     };
@@ -628,54 +639,79 @@ export default function KanbanPage() {
     setSelectedTaskDetail(null);
   };
 
-  // Unified Single Lifecycle Handover (Requirement 1, 6, 7)
-  const handleSendToProduction = async (task: TaskItem) => {
+  // Open Handover to Production Modal helper
+  const openHandoverModal = (task: TaskItem) => {
+    setHandoverTask(task);
+    const paUser = allUsers.find((u) => hasRole(u, 'Production Assistant') || u.name.toLowerCase().includes('jabin')) || allUsers[0];
+    const editorUser = allUsers.find((u) => hasRole(u, 'Editor') || u.name.toLowerCase().includes('dinda')) || allUsers[0];
+    setHandoverPaUserId(paUser?.id || '');
+    setHandoverPaFormat('4 Jam');
+    setHandoverEditorUserId(editorUser?.id || '');
+    const initialFormat = task.format && ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(task.format) ? task.format : 'Reels';
+    setHandoverEditorFormat(initialFormat);
+    setHandoverEditorQty(task.qty || 1);
+    setIsHandoverModalOpen(true);
+  };
+
+  // Unified Single Lifecycle Handover Form Submit
+  const handleConfirmSendToProduction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handoverTask) return;
+
+    const paUser = allUsers.find((u) => u.id === handoverPaUserId) || allUsers[0];
+    const editorUser = allUsers.find((u) => u.id === handoverEditorUserId) || allUsers[0];
+
+    const paScore = calculateTaskScore('Assistant', 'Production Assistant', handoverPaFormat, 1);
+    const editorScore = calculateTaskScore('Editor', 'Editing', handoverEditorFormat, handoverEditorQty);
+    const totalHandoverScore = paScore + editorScore;
+
     const prodStages = [
       {
         id: `stg-${Date.now()}`,
         role: 'Production Assistant' as const,
-        userId: 'u-jabin', // Default PA
-        userName: 'Jabin',
+        userId: paUser?.id || '',
+        userName: paUser?.name || 'Unknown PA',
         taskType: 'Production Assistant',
-        format: '4 Jam',
+        format: handoverPaFormat,
         qty: 1,
-        score: 400,
+        score: paScore,
       },
       {
         id: `stg-${Date.now()}-2`,
         role: 'Editor' as const,
-        userId: 'u-dindong', // Default Editor
-        userName: 'Dinda',
+        userId: editorUser?.id || '',
+        userName: editorUser?.name || 'Unknown Editor',
         taskType: 'Editing',
-        format: 'Reels',
-        qty: 1,
-        score: 150,
+        format: handoverEditorFormat,
+        qty: Number(handoverEditorQty) || 1,
+        score: editorScore,
       }
     ];
 
-    // Build timeline log event (Requirement 7)
-    const timeline = task.workflowTimeline ? JSON.parse(task.workflowTimeline) : [];
+    const timeline = handoverTask.workflowTimeline ? JSON.parse(handoverTask.workflowTimeline) : [];
     timeline.push({
       status: 'Production',
       timestamp: new Date().toISOString(),
       userId: currentUser?.id || 'u-system',
     });
 
-    // Update current task to transition categories instead of duplicating (Requirement 1 & 16)
-    await updateTask(task.id, {
+    const assignedIds = Array.from(new Set([paUser?.id, editorUser?.id].filter(Boolean)));
+
+    await updateTask(handoverTask.id, {
       category: 'Production',
       status: 'Production',
-      assignedUserIds: ['u-jabin', 'u-dindong'],
-      score: 550,
-      cogs: 550 * 250,
+      taskType: 'Editing',
+      format: handoverEditorFormat,
+      qty: Number(handoverEditorQty) || 1,
+      assignedUserIds: assignedIds,
+      score: totalHandoverScore,
+      cogs: calculateCOGS(totalHandoverScore),
       stages: prodStages,
       workflowTimeline: JSON.stringify(timeline),
     } as any);
 
-    // Create Activity Log (Requirement 6 & 13)
-    addActivity(currentUser?.id || 'u-system', 'TASK', task.id, 'MOVED', `Strategic task handed over to Production (Single Lifecycle)`);
+    addActivity(currentUser?.id || 'u-system', 'TASK', handoverTask.id, 'MOVED', `Handed over content "${handoverTask.title}" to Production (${editorUser?.name}, ${handoverEditorFormat} x ${handoverEditorQty})`);
 
-    // Notify Production Team members (PA, Editor, Scheduler)
     const productionTeam = allUsers.filter(u => {
       const roles = typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles;
       return roles.some((r: any) => ['Production Assistant', 'Editor', 'Scheduler'].includes(r));
@@ -686,12 +722,14 @@ export default function KanbanPage() {
         userId: member.id,
         type: 'ASSIGNMENT',
         title: 'New Production Handover',
-        message: `Content "${task.title}" has been handed over to Production.`,
+        message: `Content "${handoverTask.title}" has been handed over to Production.`,
         link: '/kanban',
       });
     }
 
-    showToast('Handed over content task to Production successfully!', 'success');
+    showToast(`Content "${handoverTask.title}" handed over to Production successfully!`, 'success');
+    setIsHandoverModalOpen(false);
+    setHandoverTask(null);
     setSelectedTaskDetail(null);
   };
 
@@ -2059,7 +2097,7 @@ export default function KanbanPage() {
                   {/* Send to Production Handover Action Button (Requirement 1, 6, 16) */}
                   {selectedTaskDetail.category === 'Strategic' && selectedTaskDetail.status === 'Ready for Production' && (currentUser?.roles.includes('Strategist') || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
                     <button
-                      onClick={() => handleSendToProduction(selectedTaskDetail)}
+                      onClick={() => openHandoverModal(selectedTaskDetail)}
                       className="bg-emerald-600 hover:bg-emerald-750 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1"
                     >
                       <Play className="w-3.5 h-3.5" /> Send to Production
@@ -2090,6 +2128,152 @@ export default function KanbanPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Handover to Production Modal */}
+      {isHandoverModalOpen && handoverTask && (
+        <div className="fixed inset-0 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-neutral-100 space-y-5">
+            <div className="flex justify-between items-center pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md">
+                  <Play className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">Send to Production Handover</h3>
+                  <p className="text-xs text-neutral-400">Atur penugasan tim & spesifikasi format konten</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsHandoverModalOpen(false);
+                  setHandoverTask(null);
+                }}
+                className="text-neutral-400 hover:text-neutral-600 p-1.5 rounded-xl hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmSendToProduction} className="space-y-4 text-xs">
+              <div className="bg-neutral-50 p-3 rounded-2xl border border-neutral-200/80">
+                <div className="text-xs font-bold text-neutral-900 mb-0.5">{handoverTask.title}</div>
+                <div className="text-[11px] text-neutral-500 font-medium">Client: {handoverTask.clientName}</div>
+              </div>
+
+              {/* PA Assignee & Format */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Production Assistant (PA)</label>
+                  <select
+                    value={handoverPaUserId}
+                    onChange={(e) => setHandoverPaUserId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    {allUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.roles.join(', ')})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">PA Work Hours</label>
+                  <select
+                    value={handoverPaFormat}
+                    onChange={(e) => setHandoverPaFormat(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    <option value="1 Jam">1 Jam (100 pts)</option>
+                    <option value="4 Jam">4 Jam (400 pts)</option>
+                    <option value="8 Jam">8 Jam (800 pts)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Editor Assignee */}
+              <div>
+                <label className="block text-neutral-700 font-bold mb-1">Editor Assignee</label>
+                <select
+                  value={handoverEditorUserId}
+                  onChange={(e) => setHandoverEditorUserId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                >
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.roles.join(', ')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Editor Format & Qty */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Editing Content Format</label>
+                  <select
+                    value={handoverEditorFormat}
+                    onChange={(e) => setHandoverEditorFormat(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium bg-white"
+                  >
+                    <option value="Single Foto">Single Foto (10 pts)</option>
+                    <option value="Grafis">Grafis (25 pts)</option>
+                    <option value="Story Video">Story Video (33 pts)</option>
+                    <option value="Paket Static">Paket Static (75 pts)</option>
+                    <option value="Carousel">Carousel (150 pts)</option>
+                    <option value="Reels">Reels (150 pts)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-neutral-700 font-bold mb-1">Editing Qty</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={handoverEditorQty}
+                    onChange={(e) => setHandoverEditorQty(Math.max(1, Number(e.target.value)))}
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Total Live Score Summary */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-emerald-900">Total Handover Score</div>
+                  <div className="text-[11px] text-emerald-700">
+                    PA ({calculateTaskScore('Assistant', 'Production Assistant', handoverPaFormat, 1)} pts) + Editor ({calculateTaskScore('Editor', 'Editing', handoverEditorFormat, handoverEditorQty)} pts)
+                  </div>
+                </div>
+                <div className="text-base font-extrabold font-mono text-emerald-700">
+                  {calculateTaskScore('Assistant', 'Production Assistant', handoverPaFormat, 1) + calculateTaskScore('Editor', 'Editing', handoverEditorFormat, handoverEditorQty)} pts
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHandoverModalOpen(false);
+                    setHandoverTask(null);
+                  }}
+                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-4 py-2.5 rounded-xl transition"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-md transition flex items-center gap-1.5"
+                >
+                  <Play className="w-4 h-4" /> Confirm & Send to Production
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

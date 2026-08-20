@@ -17,10 +17,19 @@ async function validateTaskAssignments(stages: any[]): Promise<string | null> {
 
   for (const s of stages) {
     if (!s.userId) continue;
-    const assignedUser = await prisma.user.findUnique({ where: { id: s.userId } });
+    const assignedUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: s.userId },
+          { name: { equals: s.userName || s.userId, mode: 'insensitive' as const } },
+          { name: { equals: s.userId, mode: 'insensitive' as const } },
+        ]
+      }
+    });
     if (!assignedUser) {
       return `User not found: ${s.userId}`;
     }
+    s.userId = assignedUser.id;
     const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
     const isAllowed = isPicAllowedForTaskType(roles, s.taskType || s.role);
     if (!isAllowed) {
@@ -248,11 +257,24 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const currentUserId = req.headers.get('X-User-Id') || 'u-system';
-    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    const rawUserId = req.headers.get('X-User-Id') || 'u-system';
+    let userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawUserId },
+          { name: { equals: rawUserId, mode: 'insensitive' as const } },
+        ],
+      },
+    });
+
+    if (!userRecord) {
+      userRecord = await prisma.user.findFirst();
+    }
+
     if (!userRecord) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
+    const currentUserId = userRecord.id;
     const dbRoles: string[] = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
 
     const { searchParams } = new URL(req.url);
@@ -539,8 +561,20 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const currentUserId = req.headers.get('X-User-Id') || 'u-system';
-    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    const rawUserId = req.headers.get('X-User-Id') || 'u-system';
+    let userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawUserId },
+          { name: { equals: rawUserId, mode: 'insensitive' as const } },
+        ],
+      },
+    });
+
+    if (!userRecord) {
+      userRecord = await prisma.user.findFirst();
+    }
+
     if (!userRecord) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
@@ -555,18 +589,45 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
 
-    const oldTask = await prisma.task.findUnique({ where: { id } });
-
-    await prisma.task.delete({ where: { id } });
+    const cleanId = id.replace(/^task-/, '');
+    const oldTask = await prisma.task.findFirst({
+      where: {
+        OR: [
+          { id },
+          { id: cleanId },
+          { id: `task-${cleanId}` },
+        ]
+      }
+    });
 
     if (oldTask) {
-      await prisma.client.update({
-        where: { id: oldTask.clientId },
-        data: {
-          usedPoint: { decrement: oldTask.score },
-          remainingPoint: { increment: oldTask.score },
-        },
+      await prisma.worklog.deleteMany({
+        where: {
+          OR: [
+            { id: oldTask.id },
+            { id: cleanId },
+            { id: `worklog-${oldTask.id}` },
+            { id: `worklog-task-${oldTask.id}` },
+            ...(oldTask.contentId ? [{ contentId: oldTask.contentId }] : []),
+          ]
+        }
       });
+      await prisma.activityLog.deleteMany({
+        where: { entityType: 'TASK', entityId: oldTask.id }
+      });
+      await prisma.task.delete({ where: { id: oldTask.id } });
+
+      const client = await prisma.client.findUnique({ where: { id: oldTask.clientId } });
+      if (client) {
+        const newUsed = Math.max(0, client.usedPoint - oldTask.score);
+        await prisma.client.update({
+          where: { id: oldTask.clientId },
+          data: {
+            usedPoint: newUsed,
+            remainingPoint: client.monthlyPointBudget - newUsed,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true });

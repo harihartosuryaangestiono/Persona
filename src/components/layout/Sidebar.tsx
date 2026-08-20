@@ -77,11 +77,36 @@ const ALL_NAV_ITEMS: NavItem[] = [
  
 export function Sidebar() {
   const pathname = usePathname();
-  const { tasks, worklogs, companySettings } = useData();
+  const { tasks, worklogs, clients, companySettings } = useData();
   const { currentUser } = useUser();
   const { currentWorkspace } = useWorkspace();
  
-  const pendingApprovalsCount = tasks.filter((t) => t.status === 'Waiting for Approval' || t.status === 'Approval').length;
+  const pendingApprovalsCount = tasks.filter((t) => {
+    if (t.status !== 'Waiting for Approval' && t.status !== 'Approval') return false;
+
+    const taskClient = clients.find((c) => c.id === t.clientId || c.name === t.clientName);
+    const matchesWorkspace = t.workspaceId === currentWorkspace?.id ||
+      (taskClient && taskClient.workspaceId === currentWorkspace?.id) ||
+      (currentWorkspace?.id === 'ws-inhouse' && (
+        taskClient?.code?.toLowerCase().includes('inhouse') ||
+        taskClient?.name?.toLowerCase().includes('in-house') ||
+        taskClient?.name?.toLowerCase().includes('inhouse')
+      ));
+
+    if (!matchesWorkspace) return false;
+
+    const isAnggi = currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.id === 'u-anggi';
+    const isGigie = currentUser?.name?.toLowerCase() === 'gigie' || currentUser?.name?.toLowerCase() === 'gigi' || currentUser?.id === 'u-gigie' || currentUser?.id === 'u-gigi';
+    const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
+    const isStrategist = currentUser?.roles.includes('Strategist');
+    const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+
+    if (isAdmin) return true;
+    if (isMotoDW) return isAnggi;
+    if (isAnggi || isGigie || isStrategist) return true;
+
+    return false;
+  }).length;
   const editingCount = tasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
   const schedulingCount = tasks.filter((t) => (t.status === 'Scheduling' || t.status === 'Ready to Post') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
 

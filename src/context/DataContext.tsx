@@ -33,6 +33,7 @@ interface DataContextType {
   updateCompanySettings: (updates: any) => Promise<void>;
   loading: boolean;
   addTask: (task: Partial<TaskItem>) => Promise<TaskItem>;
+  updateClient: (clientId: string, updates: Partial<ClientItem>) => Promise<void>;
   updateTaskStatus: (taskId: string, newStatus: TaskItem['status']) => void;
   updateTask: (taskId: string, updates: Partial<TaskItem>) => void;
   deleteTask: (taskId: string) => void;
@@ -319,6 +320,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                   score: updatedTaskData.score,
                   taskType: updatedTaskData.taskType || w.taskType,
                   format: updatedTaskData.format || w.format,
+                  qty: updatedTaskData.qty !== undefined ? updatedTaskData.qty : w.qty,
                   stages: updatedTaskData.stages || w.stages,
                   date: updatedTaskData.postingDate || w.date,
                 })
@@ -345,6 +347,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 score: updatedTaskData.score,
                 taskType: updatedTaskData.taskType || mw.taskType,
                 format: updatedTaskData.format || mw.format,
+                qty: updatedTaskData.qty !== undefined ? updatedTaskData.qty : mw.qty,
                 stages: updatedTaskData.stages || mw.stages,
                 date: updatedTaskData.postingDate || mw.date,
               }),
@@ -383,8 +386,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateClient = async (clientId: string, updates: Partial<ClientItem>) => {
+    setClients((prev) =>
+      prev.map((c) => (c.id === clientId ? { ...c, ...updates, active: updates.status ? updates.status === 'Active' : c.active } : c))
+    );
+
+    try {
+      const res = await fetch(`/api/clients?id=${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to update client');
+      }
+      const updated = await res.json();
+      setClients((prev) =>
+        prev.map((c) => (c.id === clientId ? { ...c, ...updated } : c))
+      );
+    } catch (err) {
+      console.error('Failed to update client on server:', err);
+      showToast('Gagal meng-update client di server', 'error');
+      await fetchInitialData();
+    }
+  };
+
   const deleteTask = (taskId: string) => {
-    const oldTask = tasks.find((t) => t.id === taskId);
+    const cleanId = taskId.replace(/^task-/, '');
+    const oldTask = tasks.find((t) => t.id === taskId || t.id === cleanId || t.id === `task-${cleanId}`);
     if (oldTask) {
       const score = oldTask.score || 0;
       setClients((prev) =>
@@ -392,15 +421,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           c.id === oldTask.clientId
             ? {
                 ...c,
-                usedPoint: c.usedPoint - score,
-                remainingPoint: c.monthlyPointBudget - (c.usedPoint - score),
+                usedPoint: Math.max(0, c.usedPoint - score),
+                remainingPoint: c.monthlyPointBudget - Math.max(0, c.usedPoint - score),
               }
             : c
         )
       );
+
+      setWorklogs((prev) =>
+        prev.filter((w) => {
+          if (w.id === taskId || w.id === cleanId) return false;
+          if (oldTask.contentId && w.contentId === oldTask.contentId) return false;
+          return true;
+        })
+      );
     }
 
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setTasks((prev) =>
+      prev.filter((t) => t.id !== taskId && t.id !== cleanId && (oldTask?.contentId ? t.contentId !== oldTask.contentId : true))
+    );
 
     if (currentUser) {
       fetch(`/api/tasks?id=${taskId}`, {
@@ -586,6 +625,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               score: updatedItem.score,
               taskType: updatedItem.taskType,
               format: updatedItem.format,
+              qty: updatedItem.qty !== undefined ? updatedItem.qty : t.qty,
               stages: updatedItem.stages,
               assignedUserIds: updatedAssignedIds !== undefined ? updatedAssignedIds : t.assignedUserIds,
               status: updatedItem.status === 'In Progress' ? 'Editing' : (updatedItem.status as any),
@@ -1087,6 +1127,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateCompanySettings,
         loading,
         addTask,
+        updateClient,
         updateTaskStatus,
         updateTask,
         deleteTask,

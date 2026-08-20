@@ -134,7 +134,16 @@ export function calculateTaskScore(
       item.format.toLowerCase() === normFormat.toLowerCase()
   );
 
-  // 2. Match by normalized format & category
+  // 2. Match by taskType & normalized format
+  if (!match && normTaskType) {
+    match = MASTER_SCORES_STATIC.find(
+      (item) =>
+        item.taskType.toLowerCase() === normTaskType &&
+        item.format.toLowerCase() === normFormat.toLowerCase()
+    );
+  }
+
+  // 3. Match by normalized format & category
   if (!match) {
     match = MASTER_SCORES_STATIC.find(
       (item) =>
@@ -143,7 +152,7 @@ export function calculateTaskScore(
     );
   }
 
-  // 3. Fallback: Match by normalized format alone
+  // 4. Fallback: Match by normalized format alone
   if (!match) {
     match = MASTER_SCORES_STATIC.find(
       (item) => item.format.toLowerCase() === normFormat.toLowerCase()

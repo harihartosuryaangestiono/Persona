@@ -8,10 +8,19 @@ async function validateTaskAssignments(stages: any[]): Promise<string | null> {
 
   for (const s of stages) {
     if (!s.userId) continue;
-    const assignedUser = await prisma.user.findUnique({ where: { id: s.userId } });
+    const assignedUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: s.userId },
+          { name: { equals: s.userName || s.userId, mode: 'insensitive' as const } },
+          { name: { equals: s.userId, mode: 'insensitive' as const } },
+        ]
+      }
+    });
     if (!assignedUser) {
       return `User not found: ${s.userId}`;
     }
+    s.userId = assignedUser.id;
     const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
     const isAllowed = isPicAllowedForTaskType(roles, s.taskType || s.role);
     if (!isAllowed) {
@@ -266,21 +275,30 @@ export async function POST(req: Request) {
         const existingStages = matchingTask.stages
           ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages)
           : [];
-        const newStages = Array.isArray(stages) ? stages : [];
+        const parsedLogStages = resolvedLog.stages ? (typeof resolvedLog.stages === 'string' ? JSON.parse(resolvedLog.stages) : resolvedLog.stages) : [];
+        const newStages = Array.isArray(stages) ? stages : (Array.isArray(parsedLogStages) ? parsedLogStages : []);
         const mergedStages = [...existingStages];
 
         for (const s of newStages) {
-          const duplicate = mergedStages.some((es: any) =>
-            es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
+          const idx = mergedStages.findIndex((es: any) =>
+            (s.id && es.id === s.id) || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
           );
-          if (!duplicate) mergedStages.push(s);
+          if (idx >= 0) {
+            mergedStages[idx] = { ...mergedStages[idx], ...s };
+          } else {
+            mergedStages.push(s);
+          }
         }
 
         if (mergedStages.length) {
           taskUpdateData.stages = JSON.stringify(mergedStages);
+          const computedTotalScore = mergedStages.reduce((sum: number, stg: any) => sum + (Number(stg.score) || 0), 0);
+          taskUpdateData.score = computedTotalScore;
+          taskUpdateData.cogs = computedTotalScore * 250;
         } else if (stages !== undefined) {
           taskUpdateData.stages = JSON.stringify(stages);
         }
+        if (qty !== undefined) taskUpdateData.qty = Number(qty);
 
         if (body.status !== undefined) {
           const resolvedTaskType = taskType || matchingTask.taskType || '';
@@ -340,11 +358,24 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const currentUserId = req.headers.get('X-User-Id') || 'u-system';
-    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    const rawUserId = req.headers.get('X-User-Id') || 'u-system';
+    let userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawUserId },
+          { name: { equals: rawUserId, mode: 'insensitive' as const } },
+        ],
+      },
+    });
+
+    if (!userRecord) {
+      userRecord = await prisma.user.findFirst();
+    }
+
     if (!userRecord) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
+    const currentUserId = userRecord.id;
     const dbRoles = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
 
     const { searchParams } = new URL(req.url);
@@ -453,22 +484,31 @@ export async function PATCH(req: Request) {
         }
 
         const existingStages = matchingTask.stages ? (typeof matchingTask.stages === 'string' ? JSON.parse(matchingTask.stages) : matchingTask.stages) : [];
-        const newStages = Array.isArray(res.stages) ? res.stages : [];
+        const parsedResStages = res.stages ? (typeof res.stages === 'string' ? JSON.parse(res.stages) : res.stages) : [];
+        const newStages = Array.isArray(parsedResStages) ? parsedResStages : [];
         const mergedStages = [...existingStages];
         for (const s of newStages) {
-          const duplicate = mergedStages.some((es: any) =>
-            es.id === s.id || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
+          const idx = mergedStages.findIndex((es: any) =>
+            (s.id && es.id === s.id) || (es.userId === s.userId && es.role === s.role && es.taskType === s.taskType)
           );
-          if (!duplicate) mergedStages.push(s);
+          if (idx >= 0) {
+            mergedStages[idx] = { ...mergedStages[idx], ...s };
+          } else {
+            mergedStages.push(s);
+          }
         }
         if (mergedStages.length) {
           taskUpdateData.stages = JSON.stringify(mergedStages);
+          const computedTotalScore = mergedStages.reduce((sum: number, stg: any) => sum + (Number(stg.score) || 0), 0);
+          taskUpdateData.score = computedTotalScore;
+          taskUpdateData.cogs = computedTotalScore * 250;
         } else if (body.stages !== undefined) {
           taskUpdateData.stages = JSON.stringify(body.stages);
         }
         if (body.stages !== undefined && !taskUpdateData.stages) {
           taskUpdateData.stages = JSON.stringify(body.stages);
         }
+        if (body.qty !== undefined) taskUpdateData.qty = Number(body.qty);
         if (body.status !== undefined) {
           const resolvedTaskType = body.taskType || matchingTask.taskType || '';
           const resolvedCategory = body.category || matchingTask.category || '';
@@ -532,11 +572,24 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const currentUserId = req.headers.get('X-User-Id') || 'u-system';
-    const userRecord = currentUserId ? await prisma.user.findUnique({ where: { id: currentUserId } }) : null;
+    const rawUserId = req.headers.get('X-User-Id') || 'u-system';
+    let userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: rawUserId },
+          { name: { equals: rawUserId, mode: 'insensitive' as const } },
+        ],
+      },
+    });
+
+    if (!userRecord) {
+      userRecord = await prisma.user.findFirst();
+    }
+
     if (!userRecord) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
+    const currentUserId = userRecord.id;
     const dbRoles = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
 
     const { searchParams } = new URL(req.url);

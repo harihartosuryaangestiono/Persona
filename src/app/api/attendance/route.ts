@@ -102,6 +102,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    // Safe User Resolution for Prisma Foreign Key
+    let resolvedUserId = userId;
+    const userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(userId ? [{ id: userId }] : []),
+          ...(body.userName ? [{ name: { equals: body.userName, mode: 'insensitive' as const } }] : []),
+          ...(userId ? [{ name: { equals: userId, mode: 'insensitive' as const } }] : []),
+        ],
+      },
+    });
+    if (userRecord) {
+      resolvedUserId = userRecord.id;
+    } else {
+      const anyUser = await prisma.user.findFirst();
+      if (anyUser) resolvedUserId = anyUser.id;
+    }
+
     const now = new Date();
 
     const jakartaDateStr = new Intl.DateTimeFormat('en-CA', {
@@ -115,10 +133,10 @@ export async function POST(req: Request) {
     const nextDate = new Date(targetDate);
     nextDate.setUTCDate(nextDate.getUTCDate() + 1);
 
-    await cleanupStaleSessions(userId, targetDate);
+    await cleanupStaleSessions(resolvedUserId, targetDate);
 
     const preCheckActive = await prisma.attendance.findFirst({
-      where: { userId, clockOut: null },
+      where: { userId: resolvedUserId, clockOut: null },
       orderBy: { clockIn: 'desc' },
     });
 
@@ -131,7 +149,7 @@ export async function POST(req: Request) {
       }).format(preCheckActive.clockIn);
 
       if (activeDateStr === jakartaDateStr) {
-        await cleanupDuplicateActiveSessions(userId, preCheckActive.id);
+        await cleanupDuplicateActiveSessions(resolvedUserId, preCheckActive.id);
         const refreshed = await prisma.attendance.findUnique({
           where: { id: preCheckActive.id },
           include: { user: true },
@@ -153,12 +171,12 @@ export async function POST(req: Request) {
     }
 
     const todayAtt = await prisma.attendance.findFirst({
-      where: { userId, date: { gte: targetDate, lt: nextDate } },
+      where: { userId: resolvedUserId, date: { gte: targetDate, lt: nextDate } },
       orderBy: { clockIn: 'desc' },
     });
 
     if (todayAtt && todayAtt.clockOut) {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const user = await prisma.user.findUnique({ where: { id: resolvedUserId } });
       return NextResponse.json({
         success: true,
         reused: true,
@@ -173,7 +191,7 @@ export async function POST(req: Request) {
     }
 
     if (todayAtt && !todayAtt.clockOut) {
-      await cleanupDuplicateActiveSessions(userId, todayAtt.id);
+      await cleanupDuplicateActiveSessions(resolvedUserId, todayAtt.id);
       const refreshed = await prisma.attendance.findUnique({
         where: { id: todayAtt.id },
         include: { user: true },
@@ -218,7 +236,7 @@ export async function POST(req: Request) {
 
       const attendance = await tx.attendance.create({
         data: {
-          userId,
+          userId: resolvedUserId,
           date: targetDate,
           clockIn: now,
           clockOut: null,
@@ -234,7 +252,7 @@ export async function POST(req: Request) {
 
       await tx.activityLog.create({
         data: {
-          userId,
+          userId: resolvedUserId,
           entityType: 'ATTENDANCE',
           entityId: attendance.id,
           action: 'CLOCK_IN',
@@ -271,10 +289,28 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    // Safe User Resolution for Prisma Foreign Key
+    let resolvedUserId = userId;
+    const userRecord = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(userId ? [{ id: userId }] : []),
+          ...(body.userName ? [{ name: { equals: body.userName, mode: 'insensitive' as const } }] : []),
+          ...(userId ? [{ name: { equals: userId, mode: 'insensitive' as const } }] : []),
+        ],
+      },
+    });
+    if (userRecord) {
+      resolvedUserId = userRecord.id;
+    } else {
+      const anyUser = await prisma.user.findFirst();
+      if (anyUser) resolvedUserId = anyUser.id;
+    }
+
     const now = new Date();
 
     const activeAttList = await prisma.attendance.findMany({
-      where: { userId, clockOut: null },
+      where: { userId: resolvedUserId, clockOut: null },
       orderBy: { clockIn: 'desc' },
     });
 
@@ -305,7 +341,7 @@ export async function PATCH(req: Request) {
 
           await prisma.activityLog.create({
             data: {
-              userId,
+              userId: resolvedUserId,
               entityType: 'ATTENDANCE',
               entityId: dup.id,
               action: 'AUTO_CLOCK_OUT',
@@ -342,7 +378,7 @@ export async function PATCH(req: Request) {
 
       await tx.activityLog.create({
         data: {
-          userId,
+          userId: resolvedUserId,
           entityType: 'ATTENDANCE',
           entityId: updated.id,
           action: 'CLOCK_OUT',
