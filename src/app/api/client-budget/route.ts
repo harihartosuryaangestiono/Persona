@@ -12,6 +12,13 @@ export async function POST(req: Request) {
 
     const budgetVal = Number(budget) || 0;
 
+    const existing = await prisma.clientMonthlyBudget.findUnique({
+      where: { clientId_month: { clientId, month } }
+    });
+
+    const usedVal = existing ? existing.used : 0;
+    const remainingVal = budgetVal - usedVal;
+
     const upserted = await prisma.clientMonthlyBudget.upsert({
       where: {
         clientId_month: {
@@ -21,7 +28,7 @@ export async function POST(req: Request) {
       },
       update: {
         budget: budgetVal,
-        remaining: budgetVal
+        remaining: remainingVal
       },
       create: {
         clientId,
@@ -31,6 +38,17 @@ export async function POST(req: Request) {
         remaining: budgetVal
       }
     });
+
+    const targetClient = await prisma.client.findUnique({ where: { id: clientId } });
+    if (targetClient) {
+      await prisma.client.update({
+        where: { id: clientId },
+        data: {
+          monthlyPointBudget: budgetVal,
+          remainingPoint: budgetVal - targetClient.usedPoint,
+        }
+      });
+    }
 
     return NextResponse.json(upserted);
   } catch (e: any) {

@@ -114,8 +114,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         s.taskType === 'Editing' ||
         ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
       );
-      if (editorOrContentStage && editorOrContentStage.format) {
+      if (editorOrContentStage && editorOrContentStage.format && editorOrContentStage.format !== 'Per Post' && editorOrContentStage.format !== '4 Jam') {
         resolvedFormat = editorOrContentStage.format;
+      }
+    }
+
+    const titleLower = t.title ? t.title.toLowerCase() : '';
+    if (titleLower.includes('story')) {
+      resolvedFormat = 'Story Video';
+    } else if (!resolvedFormat || resolvedFormat === 'Reels' || resolvedFormat === 'Per Post') {
+      if (t.category === 'Scheduler' || t.taskType === 'Scheduling') {
+        if (titleLower.includes('carousel')) resolvedFormat = 'Carousel';
+        else if (titleLower.includes('grafis')) resolvedFormat = 'Grafis';
+        else if (titleLower.includes('foto') || titleLower.includes('photo')) resolvedFormat = 'Single Foto';
+        else resolvedFormat = 'Story Video';
       }
     }
 
@@ -123,7 +135,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ...t,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
       clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
-      format: resolvedFormat || 'Reels',
+      format: resolvedFormat || 'Story Video',
       status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
     };
   };
@@ -418,15 +430,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateClient = async (clientId: string, updates: Partial<ClientItem>) => {
+    const targetClient = rawClients.find((c) => c.id === clientId);
+    const newBudget = updates.monthlyPointBudget !== undefined ? Number(updates.monthlyPointBudget) : targetClient?.monthlyPointBudget;
+    const newUsed = updates.usedPoint !== undefined ? Number(updates.usedPoint) : (targetClient?.usedPoint || 0);
+    const newRemaining = (newBudget !== undefined ? newBudget : 0) - newUsed;
+
+    const mergedUpdates = {
+      ...updates,
+      ...(newBudget !== undefined ? { monthlyPointBudget: newBudget, remainingPoint: newRemaining } : {}),
+    };
+
     setClients((prev) =>
-      prev.map((c) => (c.id === clientId ? { ...c, ...updates, active: updates.status ? updates.status === 'Active' : c.active } : c))
+      prev.map((c) => (c.id === clientId ? { ...c, ...mergedUpdates, active: updates.status ? updates.status === 'Active' : c.active } : c))
     );
 
     try {
       const res = await fetch(`/api/clients?id=${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(mergedUpdates),
       });
       if (!res.ok) {
         throw new Error('Failed to update client');

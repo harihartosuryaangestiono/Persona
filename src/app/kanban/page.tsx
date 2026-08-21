@@ -414,11 +414,14 @@ export default function KanbanPage() {
   // Add work stage to task form helper
   const handleAddStage = (isEdit: boolean) => {
     const initialFormat = (isEdit && selectedTaskDetail?.format) ? selectedTaskDetail.format : 'Reels';
+    const editorUser = allUsers.find((u) => u.name.toLowerCase().includes('dinda')) ||
+                       allUsers.find((u) => hasRole(u, 'Editor') && !u.roles.includes('Admin') && !u.roles.includes('Owner')) ||
+                       allUsers[0];
     const defaultStage: TaskStage = {
       id: `stg-${Date.now()}-${Math.random()}`,
       role: 'Editor',
-      userId: allUsers[0]?.id || '',
-      userName: allUsers[0]?.name || '',
+      userId: editorUser?.id || '',
+      userName: editorUser?.name || '',
       taskType: 'Editing',
       format: initialFormat,
       qty: 1,
@@ -468,7 +471,7 @@ export default function KanbanPage() {
           newStage.taskType = 'Scheduling';
           newStage.format = 'Per Post';
         }
-        const matchingUser = allUsers.find((u) => hasRole(u, value as any));
+        const matchingUser = allUsers.find((u) => hasRole(u, value as any) && !u.roles.includes('Admin') && !u.roles.includes('Owner')) || allUsers.find((u) => hasRole(u, value as any));
         if (matchingUser) {
           newStage.userId = matchingUser.id;
           newStage.userName = matchingUser.name;
@@ -546,8 +549,11 @@ export default function KanbanPage() {
       const startingStatus = getFirstStatus(newCategory);
 
       const editorOrContentStage = newStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || newStages[0];
-      const taskFormat = editorOrContentStage ? editorOrContentStage.format : 'Reels';
-      const taskType = editorOrContentStage ? editorOrContentStage.taskType : 'Editing';
+      let taskFormat = editorOrContentStage && editorOrContentStage.format && editorOrContentStage.format !== 'Per Post' && editorOrContentStage.format !== '4 Jam' ? editorOrContentStage.format : 'Reels';
+      if (newTitle.toLowerCase().includes('story') || newCategory === 'Scheduling') {
+        taskFormat = 'Story Video';
+      }
+      const taskType = editorOrContentStage ? editorOrContentStage.taskType : (newCategory === 'Scheduling' ? 'Scheduling' : 'Editing');
 
       const formattedDriveLink = newDriveLink ? formatUrl(newDriveLink) : '';
       await addTask({
@@ -677,8 +683,8 @@ export default function KanbanPage() {
   // Open Handover to Production Modal helper
   const openHandoverModal = (task: TaskItem) => {
     setHandoverTask(task);
-    const paUser = allUsers.find((u) => hasRole(u, 'Production Assistant') || u.name.toLowerCase().includes('jabin')) || allUsers[0];
-    const editorUser = allUsers.find((u) => hasRole(u, 'Editor') || u.name.toLowerCase().includes('dinda')) || allUsers[0];
+    const paUser = allUsers.find((u) => (hasRole(u, 'Production Assistant') && !u.roles.includes('Admin')) || u.name.toLowerCase().includes('jabin')) || allUsers[0];
+    const editorUser = allUsers.find((u) => u.name.toLowerCase().includes('dinda') || (hasRole(u, 'Editor') && !u.roles.includes('Admin'))) || allUsers[0];
     setHandoverPaUserId(paUser?.id || '');
     setHandoverPaFormat('4 Jam');
     setHandoverEditorUserId(editorUser?.id || '');
@@ -693,8 +699,8 @@ export default function KanbanPage() {
     e.preventDefault();
     if (!handoverTask) return;
 
-    const paUser = allUsers.find((u) => u.id === handoverPaUserId) || allUsers[0];
-    const editorUser = allUsers.find((u) => u.id === handoverEditorUserId) || allUsers[0];
+    const paUser = allUsers.find((u) => u.id === handoverPaUserId || isUserMatch(handoverPaUserId, u)) || allUsers.find((u) => (hasRole(u, 'Production Assistant') && !u.roles.includes('Admin')) || u.name.toLowerCase().includes('jabin')) || allUsers[0];
+    const editorUser = allUsers.find((u) => u.id === handoverEditorUserId || isUserMatch(handoverEditorUserId, u)) || allUsers.find((u) => u.name.toLowerCase().includes('dinda') || (hasRole(u, 'Editor') && !u.roles.includes('Admin'))) || allUsers[0];
 
     const paScore = calculateTaskScore('Assistant', 'Production Assistant', handoverPaFormat, 1);
     const editorScore = calculateTaskScore('Editor', 'Editing', handoverEditorFormat, handoverEditorQty);

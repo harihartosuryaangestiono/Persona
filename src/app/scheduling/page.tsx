@@ -147,9 +147,9 @@ export default function SchedulingPage() {
           onChange={(e) => setSelectedClientId(e.target.value)}
           className="bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-800 focus:outline-hidden"
         >
-          <option value="ALL">All Clients ({clients.filter(c => c.workspaceId === currentWorkspace.id).length})</option>
+          <option value="ALL">All Clients ({clients.filter(c => c.workspaceId === currentWorkspace.id || (currentWorkspace.id === 'ws-team-anggi' && (c.id === 'c-motodw' || c.name.toLowerCase().includes('motodw')))).length})</option>
           {clients
-            .filter((c) => c.workspaceId === currentWorkspace.id)
+            .filter((c) => c.workspaceId === currentWorkspace.id || (currentWorkspace.id === 'ws-team-anggi' && (c.id === 'c-motodw' || c.name.toLowerCase().includes('motodw'))))
             .map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

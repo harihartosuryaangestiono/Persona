@@ -49,7 +49,9 @@ export default function ClientsPage() {
   // Filter clients based on current workspace (or all workspaces if toggled and user is Admin)
   const filteredClients = clients.filter((c) => {
     if (showAllWorkspaces && isAdmin) return true;
-    return c.workspaceId === currentWorkspace.id;
+    if (c.workspaceId === currentWorkspace.id) return true;
+    if (currentWorkspace.id === 'ws-team-anggi' && (c.id === 'c-motodw' || c.name.toLowerCase().includes('motodw') || c.code?.toLowerCase().includes('mdw'))) return true;
+    return false;
   });
 
   const openAddModal = () => {
@@ -93,7 +95,7 @@ export default function ClientsPage() {
         name,
         code,
         monthlyPointBudget: Number(monthlyPointBudget),
-        workspaceId: workspaceId || null,
+        workspaceId: workspaceId || undefined,
         status,
         notes,
         clientColor,
@@ -113,7 +115,11 @@ export default function ClientsPage() {
         throw new Error(errJson.error || 'Failed to save client');
       }
 
+      if (editingClient) {
+        await updateClient(editingClient.id, payload);
+      }
       await refreshData();
+      showToast(editingClient ? 'Client points & details updated successfully!' : 'New client added successfully!', 'success');
       setIsModalOpen(false);
     } catch (e: any) {
       console.error(e);
