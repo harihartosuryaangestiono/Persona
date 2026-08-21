@@ -17,6 +17,7 @@ export default function ApprovalPage() {
 
   const [viewType, setViewType] = useState<'card' | 'table'>('card');
   const [revisionNotes, setRevisionNotes] = useState('');
+  const [revisionSeverity, setRevisionSeverity] = useState<'Minor' | 'Medium' | 'Major'>('Minor');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Filters State
@@ -148,7 +149,7 @@ export default function ApprovalPage() {
       id: `comment-${Date.now()}`,
       userName: currentUser?.name || 'Approver',
       userId: currentUser?.id || 'u-system',
-      text: `REVISION NOTE: ${revisionNotes.trim()}`,
+      text: `REVISION NOTE [Severity: ${revisionSeverity}]: ${revisionNotes.trim()}`,
       timestamp: new Date().toISOString()
     };
     const updatedComments = [...existingComments, newComment];
@@ -156,11 +157,13 @@ export default function ApprovalPage() {
     try {
       await updateTask(taskId, {
         status: 'Revision',
+        revisionSeverity: revisionSeverity,
         comments: updatedComments
       });
       setSelectedTaskId(null);
       setRevisionNotes('');
-      showToast('Revision requested! Moved back to Revision stage.', 'info');
+      setRevisionSeverity('Minor');
+      showToast(`Revision (${revisionSeverity}) requested! Task moved to Revision stage.`, 'info');
     } catch (err) {
       console.error(err);
       showToast('Failed to request revision.', 'error');
@@ -503,28 +506,102 @@ export default function ApprovalPage() {
 
       {/* Revision Modal */}
       {selectedTaskId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl p-6 space-y-4 shadow-xl">
-            <h3 className="text-base font-bold text-neutral-900">Request Revision Notes</h3>
-            <textarea
-              rows={3}
-              placeholder="Specify required edits (e.g., change music track, adjust caption font)..."
-              value={revisionNotes}
-              onChange={(e) => setRevisionNotes(e.target.value)}
-              className="w-full bg-white border border-neutral-200 rounded-lg p-3 text-xs text-neutral-900 focus:outline-none"
-            />
-            <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-lg bg-white border border-neutral-200 rounded-3xl p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-rose-600" />
+                  Request Content Revision
+                </h3>
+                <p className="text-xs text-neutral-500 mt-0.5">Pilih tingkat revisi dan berikan catatan perbaikan untuk Editor</p>
+              </div>
               <button
+                type="button"
                 onClick={() => setSelectedTaskId(null)}
-                className="px-4 py-2 rounded-lg text-xs text-neutral-500 hover:bg-neutral-100 font-semibold"
+                className="text-neutral-400 hover:text-neutral-600 p-1 rounded-lg"
               >
-                Cancel
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Revision Severity Selection */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-neutral-700">Tingkat Revisi (Revision Severity)</label>
+              <div className="grid grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setRevisionSeverity('Minor')}
+                  className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                    revisionSeverity === 'Minor'
+                      ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-900'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Minor
+                  </span>
+                  <span className="text-[10px] text-neutral-500 mt-1">Perbaikan kecil (typo, audio, font) • 10 pts</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRevisionSeverity('Medium')}
+                  className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                    revisionSeverity === 'Medium'
+                      ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-900'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span> Medium
+                  </span>
+                  <span className="text-[10px] text-neutral-500 mt-1">Perbaikan sedang (potong klip, tempo) • 25 pts</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRevisionSeverity('Major')}
+                  className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                    revisionSeverity === 'Major'
+                      ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20 text-rose-900'
+                      : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span> Major
+                  </span>
+                  <span className="text-[10px] text-neutral-500 mt-1">Revisi besar (re-concept / total) • 50 pts</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Revision Note Textarea */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-neutral-700">Catatan Perbaikan (Revision Notes)</label>
+              <textarea
+                rows={3}
+                placeholder="Tuliskan poin perbaikan spesifik untuk Editor..."
+                value={revisionNotes}
+                onChange={(e) => setRevisionNotes(e.target.value)}
+                className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-xs text-neutral-900 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 font-medium"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setSelectedTaskId(null)}
+                className="px-4 py-2 rounded-xl text-xs text-neutral-600 hover:bg-neutral-100 font-semibold"
+              >
+                Batal
               </button>
               <button
+                type="button"
                 onClick={() => handleRequestRevision(selectedTaskId)}
-                className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg"
+                className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-5 py-2 rounded-xl shadow-xs transition"
               >
-                Send Revision
+                Kirim Revisi ({revisionSeverity})
               </button>
             </div>
           </div>

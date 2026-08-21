@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
-import { normalizeRoles, hasRole, hasAnyRole } from '@/lib/rbac';
+import { normalizeRoles, hasRole, hasAnyRole, isUserMatch, resolvePrimaryEmployee } from '@/lib/rbac';
 
 // Updated column configurations (Requirement 12)
 const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed'];
@@ -83,9 +83,9 @@ export default function KanbanPage() {
     if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
 
     const assignedIds: string[] = task.assignedUserIds ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds) : [];
-    const isAssigned = assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name);
+    const isAssigned = assignedIds.some((id: string) => isUserMatch(id, currentUser));
 
-    const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
+    const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
 
     return isAssigned || isStageAssignee;
   };
@@ -284,10 +284,10 @@ export default function KanbanPage() {
       const assignedIds = t.assignedUserIds
         ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
         : [];
-      const isAssigned = currentUser && (assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name));
+      const isAssigned = currentUser && assignedIds.some((id: string) => isUserMatch(id, currentUser));
       const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
       const isStageAssignee = currentUser && Array.isArray(logStages) && logStages.some(
-        (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
+        (s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser)
       );
       if (isAssigned || isStageAssignee) {
         allowed.add(t.status);
@@ -308,13 +308,10 @@ export default function KanbanPage() {
     const assignedIds = t.assignedUserIds
       ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
       : [];
-    const isAssignedToCurrentUser = currentUser && (
-      assignedIds.includes(currentUser.id) ||
-      assignedIds.includes(currentUser.name)
-    );
+    const isAssignedToCurrentUser = currentUser && assignedIds.some((id: string) => isUserMatch(id, currentUser));
     const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
     const isStageAssigneeToCurrentUser = currentUser && Array.isArray(logStages) && logStages.some(
-      (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
+      (s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser)
     );
     const isExplicitlyAssigned = isAssignedToCurrentUser || isStageAssigneeToCurrentUser;
 
@@ -404,7 +401,8 @@ export default function KanbanPage() {
 
   // Strategic Formats Mapping based on Selected Task Type
   const getStrategicFormats = (type: string) => {
-    if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
+    if (type === 'Production Assistant' || type === 'PA') return ['1 Jam', '4 Jam', '8 Jam'];
+    if (type === 'Content Plan' || type === 'Production Lead') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
     if (type === 'Presentasi' || type === 'Meeting Brief' || type === 'Content Proposal') return ['Per Session'];
@@ -545,6 +543,10 @@ export default function KanbanPage() {
       const assignedIds = Array.from(new Set(newStages.map((s) => s.userId)));
       const startingStatus = getFirstStatus(newCategory);
 
+      const editorOrContentStage = newStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || newStages[0];
+      const taskFormat = editorOrContentStage ? editorOrContentStage.format : 'Reels';
+      const taskType = editorOrContentStage ? editorOrContentStage.taskType : 'Editing';
+
       const formattedDriveLink = newDriveLink ? formatUrl(newDriveLink) : '';
       await addTask({
         title: newTitle,
@@ -561,6 +563,8 @@ export default function KanbanPage() {
         driveLink: formattedDriveLink,
         stages: newStages,
         category: newCategory,
+        format: taskFormat,
+        taskType: taskType,
         month: newMonth,
         year: newYear,
         isArchived: false,
@@ -632,9 +636,10 @@ export default function KanbanPage() {
 
     const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
     const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
-    const primaryFormat = editStages.length > 0 ? editStages[0].format : selectedTaskDetail.format;
-    const primaryTaskType = editStages.length > 0 ? editStages[0].taskType : selectedTaskDetail.taskType;
-    const primaryQty = editStages.length > 0 ? (editStages[0].qty || 1) : (selectedTaskDetail.qty || 1);
+    const editorOrContentStage = editStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || editStages[0];
+    const primaryFormat = editorOrContentStage ? editorOrContentStage.format : selectedTaskDetail.format;
+    const primaryTaskType = editorOrContentStage ? editorOrContentStage.taskType : selectedTaskDetail.taskType;
+    const primaryQty = editorOrContentStage ? (editorOrContentStage.qty || 1) : (selectedTaskDetail.qty || 1);
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
@@ -780,10 +785,13 @@ export default function KanbanPage() {
 
   // Worklog automation trigger helper (Upserts stage logs under a single Worklog)
   const triggerAutomatedWorklog = (task: TaskItem) => {
+    const primaryAssignedUser = resolvePrimaryEmployee(task.stages, task.assignedUserIds, allUsers, currentUser);
     addWorklog({
       clientId: task.clientId,
       clientName: task.clientName,
       contentTitle: task.title,
+      userId: primaryAssignedUser?.id,
+      userName: primaryAssignedUser?.name,
       taskType: task.taskType || 'Editing',
       format: task.format || 'Reels',
       qty: task.qty || 1,
@@ -1261,6 +1269,17 @@ export default function KanbanPage() {
                               {task.clientName}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
+                              {task.status === 'Revision' && (
+                                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                  task.revisionSeverity === 'Major' || (task.comments && JSON.stringify(task.comments).includes('Major'))
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : task.revisionSeverity === 'Medium' || (task.comments && JSON.stringify(task.comments).includes('Medium'))
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                }`}>
+                                  Revisi {task.revisionSeverity || (JSON.stringify(task.comments || '').includes('Major') ? 'Major' : JSON.stringify(task.comments || '').includes('Medium') ? 'Medium' : 'Minor')}
+                                </span>
+                              )}
                               <span className={`text-[9px] font-bold px-2 py-0.5 rounded border font-mono ${priorityColorClass}`}>
                                 {dynamicPriority}
                               </span>

@@ -16,6 +16,7 @@ import {
 } from '@/lib/types';
 import { MASTER_SCORES_STATIC, calculateCOGS, calculatePriority } from '@/lib/score-calculator';
 import { getStatusLabel, getDbStatus, normalizeStatusForPipeline, isStrategicPipeline } from '@/lib/status';
+import { resolvePrimaryEmployee } from '@/lib/rbac';
 
 interface DataContextType {
   tasks: TaskItem[];
@@ -65,7 +66,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const { syncUsers, currentUser } = useUser();
+  const { syncUsers, currentUser, allUsers } = useUser();
   const { showToast } = useToast();
   const { currentWorkspace } = useWorkspace();
 
@@ -94,10 +95,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const normalizeTask = (t: TaskItem): TaskItem => {
     const matchedClient = rawClients.find((c) => c.id === t.clientId);
+    const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : null;
+    let resolvedFormat = t.format;
+    if (Array.isArray(stages) && stages.length > 0) {
+      const editorOrContentStage = stages.find((s: any) =>
+        s.role === 'Editor' ||
+        s.taskType === 'Editing' ||
+        ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
+      );
+      if (editorOrContentStage && editorOrContentStage.format) {
+        resolvedFormat = editorOrContentStage.format;
+      }
+    }
+
     return {
       ...t,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
       clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
+      format: resolvedFormat || 'Reels',
       status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
     };
   };
@@ -141,8 +156,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser?.id]);
 
   const getTaskScore = (t: Partial<TaskItem>) => {
-    if (t.stages && Array.isArray(t.stages) && t.stages.length > 0) {
-      return t.stages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0);
+    if (t.stages) {
+      const parsed = typeof t.stages === 'string'
+        ? (() => { try { return JSON.parse(t.stages as string); } catch { return []; } })()
+        : t.stages;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0);
+      }
     }
     return Number(t.score) || 10;
   };
@@ -465,11 +485,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const detectedMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : 'July';
     const detectedYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : 2026;
 
+    const primaryAssignedUser = resolvePrimaryEmployee(log.stages, (log as any).assignedUserIds, allUsers, currentUser);
+
     const item: WorklogItem = {
       id: `wl-${Date.now()}-${Math.random()}`,
       date: dateVal,
-      userId: log.userId || currentUser?.id || 'u-anggi',
-      userName: log.userName || currentUser?.name || 'Anggi',
+      userId: log.userId || primaryAssignedUser?.id || currentUser?.id || 'u-anggi',
+      userName: log.userName || primaryAssignedUser?.name || currentUser?.name || 'Anggi',
       clientId: log.clientId || clientObj?.id || '',
       clientName: log.clientName || clientObj?.name || 'Baking Empire Gading Serpong',
       contentTitle: log.contentTitle || 'Untitled Content',

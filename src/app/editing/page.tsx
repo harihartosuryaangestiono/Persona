@@ -334,26 +334,47 @@ export default function EditingQueuePage() {
                     >
                       {t.clientName}
                     </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      t.status === 'Revision' 
-                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                        : 'bg-amber-50 text-amber-700 border-amber-250'
-                    }`}>
-                      {t.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        t.status === 'Revision' 
+                          ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                          : 'bg-amber-50 text-amber-700 border-amber-250'
+                      }`}>
+                        {t.status}
+                      </span>
+                      {t.status === 'Revision' && (
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                          t.revisionSeverity === 'Major' || (t.comments && JSON.stringify(t.comments).includes('Major'))
+                            ? 'bg-rose-100 text-rose-800 border-rose-300'
+                            : t.revisionSeverity === 'Medium' || (t.comments && JSON.stringify(t.comments).includes('Medium'))
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        }`}>
+                          {t.revisionSeverity ? `Revisi ${t.revisionSeverity}` : JSON.stringify(t.comments || '').includes('Major') ? 'Revisi Major' : JSON.stringify(t.comments || '').includes('Medium') ? 'Revisi Medium' : 'Revisi Minor'}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <h3 className="font-bold text-sm text-neutral-900 mt-3">{t.title}</h3>
                   <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
-                    {t.format} • PICs: {t.stages ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName))).join(', ') : 'Unassigned'}
+                    {(() => {
+                      const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+                      const edStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) : null;
+                      return edStage?.format || t.format || 'Reels';
+                    })()} • PICs: {t.stages ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName))).join(', ') : 'Unassigned'}
                   </p>
                   {t.status === 'Revision' && t.comments && (typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments).length > 0 && (
-                    <div className="mt-2 bg-rose-50 border border-rose-100 rounded-lg p-2.5 text-[11px] text-rose-800 leading-snug">
-                      <strong className="font-bold block text-[8px] uppercase tracking-wide text-rose-500 font-mono mb-0.5">Latest Revision Note:</strong>
-                      <p className="line-clamp-2">
+                    <div className="mt-2 bg-rose-50 border border-rose-200 rounded-xl p-3 text-[11px] text-rose-900 leading-snug space-y-1">
+                      <div className="flex items-center justify-between">
+                        <strong className="font-bold text-[9px] uppercase tracking-wider text-rose-600 font-mono">
+                          Revision Notes ({t.revisionSeverity || (JSON.stringify(t.comments || '').includes('Major') ? 'Major' : JSON.stringify(t.comments || '').includes('Medium') ? 'Medium' : 'Minor')})
+                        </strong>
+                      </div>
+                      <p className="line-clamp-3 text-xs font-medium text-neutral-800">
                         {((typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments) as any[])
                           .filter((c: any) => c.text.includes('REVISION NOTE'))
-                          .slice(-1)[0]?.text.replace('REVISION NOTE: ', '') ||
+                          .slice(-1)[0]?.text.replace(/REVISION NOTE (\[Severity: (Minor|Medium|Major)\])?:? /g, '') ||
                           ((typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments) as any[]).slice(-1)[0]?.text}
                       </p>
                     </div>
@@ -377,6 +398,7 @@ export default function EditingQueuePage() {
                   <tr>
                     <th className="px-4 py-3.5">Content</th>
                     <th className="px-4 py-3.5">Client</th>
+                    <th className="px-4 py-3.5">Format</th>
                     <th className="px-4 py-3.5">Status</th>
                     <th className="px-4 py-3.5">Deadline</th>
                     <th className="px-4 py-3.5">PIC / Assignee</th>
@@ -388,9 +410,12 @@ export default function EditingQueuePage() {
                 </thead>
                 <tbody className="divide-y divide-neutral-100 text-neutral-700">
                   {filteredTasks.map((t) => {
-                    const uniqueUserNames = t.stages
-                      ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName)))
+                    const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+                    const uniqueUserNames = Array.isArray(parsedStages)
+                      ? Array.from(new Set(parsedStages.map((s: any) => s.userName)))
                       : [];
+                    const edStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) : null;
+                    const displayFormat = edStage?.format || t.format || 'Reels';
 
                     return (
                       <tr key={t.id} onClick={() => handleOpenTask(t)} className="hover:bg-neutral-50 transition cursor-pointer">
@@ -403,14 +428,28 @@ export default function EditingQueuePage() {
                             {t.clientName}
                           </span>
                         </td>
+                        <td className="px-4 py-3.5 font-mono text-neutral-700 font-semibold">{displayFormat}</td>
                         <td className="px-4 py-3.5">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            t.status === 'Revision' 
-                              ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                              : 'bg-amber-50 text-amber-750 border-amber-250'
-                          }`}>
-                            {t.status}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              t.status === 'Revision' 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : 'bg-amber-50 text-amber-750 border-amber-250'
+                            }`}>
+                              {t.status}
+                            </span>
+                            {t.status === 'Revision' && (
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                                t.revisionSeverity === 'Major' || (t.comments && JSON.stringify(t.comments).includes('Major'))
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : t.revisionSeverity === 'Medium' || (t.comments && JSON.stringify(t.comments).includes('Medium'))
+                                  ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                  : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              }`}>
+                                {t.revisionSeverity ? `Revisi ${t.revisionSeverity}` : JSON.stringify(t.comments || '').includes('Major') ? 'Revisi Major' : JSON.stringify(t.comments || '').includes('Medium') ? 'Revisi Medium' : 'Revisi Minor'}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 font-mono text-neutral-500 font-bold">{t.deadline}</td>
                         <td className="px-4 py-3.5 font-semibold text-neutral-600">

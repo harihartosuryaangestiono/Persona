@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     if (userRecord) {
       const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
       if (!isExecutive) {
-        // Default: only fetch tasks that reference the user by assignedUserIds, stages, or handover
+        const nameLower = userRecord.name.toLowerCase();
         const orClauses: any[] = [
           { assignedUserIds: { contains: userRecord.id } },
           { assignedUserIds: { contains: userRecord.name } },
@@ -36,6 +36,41 @@ export async function GET(req: Request) {
           { handoverUserId: userRecord.id },
           { handoverUserId: userRecord.name },
         ];
+
+        // Add alias fallbacks for permanent team members
+        if (nameLower.includes('dinda')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-dindong' } });
+          orClauses.push({ assignedUserIds: { contains: 'dinda' } });
+          orClauses.push({ stages: { contains: 'u-dindong' } });
+          orClauses.push({ stages: { contains: 'dinda' } });
+        } else if (nameLower.includes('anggi')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-anggi' } });
+          orClauses.push({ assignedUserIds: { contains: 'anggi' } });
+          orClauses.push({ stages: { contains: 'u-anggi' } });
+          orClauses.push({ stages: { contains: 'anggi' } });
+        } else if (nameLower.includes('devi')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-devi' } });
+          orClauses.push({ assignedUserIds: { contains: 'devi' } });
+          orClauses.push({ stages: { contains: 'u-devi' } });
+          orClauses.push({ stages: { contains: 'devi' } });
+        } else if (nameLower.includes('gigi')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-gigie' } });
+          orClauses.push({ assignedUserIds: { contains: 'gigi' } });
+          orClauses.push({ stages: { contains: 'u-gigie' } });
+          orClauses.push({ stages: { contains: 'gigi' } });
+        } else if (nameLower.includes('jabin')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-jabin' } });
+          orClauses.push({ assignedUserIds: { contains: 'jabin' } });
+          orClauses.push({ stages: { contains: 'u-jabin' } });
+          orClauses.push({ stages: { contains: 'jabin' } });
+        } else if (nameLower.includes('prisca') || nameLower.includes('priska')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-priska' } });
+          orClauses.push({ assignedUserIds: { contains: 'prisca' } });
+          orClauses.push({ assignedUserIds: { contains: 'priska' } });
+          orClauses.push({ stages: { contains: 'u-priska' } });
+          orClauses.push({ stages: { contains: 'prisca' } });
+          orClauses.push({ stages: { contains: 'priska' } });
+        }
 
         // If user has Scheduler role, also include scheduling-stage tasks or tasks that mention Scheduler role
         const userIsScheduler = dbRoles.includes('Scheduler');

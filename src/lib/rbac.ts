@@ -68,6 +68,77 @@ export function hasAnyRole(user: { roles: string[] | string }, targetRoles: User
   return targetRoles.some((r) => roles.includes(r));
 }
 
+export function isUserMatch(target: string | null | undefined, user: { id: string; name: string } | null | undefined): boolean {
+  if (!target || !user) return false;
+  const t = String(target).trim().toLowerCase();
+  const uid = String(user.id).trim().toLowerCase();
+  const uname = String(user.name).trim().toLowerCase();
+
+  if (t === uid || t === uname) return true;
+
+  if (uname.includes('dinda') && (t.includes('dinda') || t.includes('dindong'))) return true;
+  if (uname.includes('anggi') && t.includes('anggi')) return true;
+  if (uname.includes('devi') && t.includes('devi')) return true;
+  if (uname.includes('gigi') && (t.includes('gigi') || t.includes('gigie'))) return true;
+  if (uname.includes('jabin') && t.includes('jabin')) return true;
+  if ((uname.includes('prisca') || uname.includes('priska')) && (t.includes('prisca') || t.includes('priska'))) return true;
+
+  return false;
+}
+
+export function resolvePrimaryEmployee(
+  stages: any[] | string | null | undefined,
+  assignedIds: string[] | string | null | undefined,
+  allUsers: UserPersona[],
+  currentUser?: UserPersona | null
+): UserPersona {
+  const parsedStages = Array.isArray(stages)
+    ? stages
+    : (stages && typeof stages === 'string' ? JSON.parse(stages) : []);
+
+  const parsedAssignedIds = Array.isArray(assignedIds)
+    ? assignedIds
+    : (assignedIds && typeof assignedIds === 'string' ? JSON.parse(assignedIds) : []);
+
+  if (Array.isArray(parsedStages) && parsedStages.length > 0) {
+    // 1. Prioritize Editor stage
+    const editorStage = parsedStages.find((s: any) =>
+      s && (
+        s.role === 'Editor' ||
+        (s.taskType && String(s.taskType).toLowerCase().includes('edit')) ||
+        ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
+      )
+    );
+    if (editorStage && (editorStage.userId || editorStage.userName)) {
+      const match = allUsers.find((u) => isUserMatch(editorStage.userId, u) || isUserMatch(editorStage.userName, u));
+      if (match) return match;
+    }
+
+    // 2. Prioritize any assigned stage user
+    for (const stg of parsedStages) {
+      if (stg && (stg.userId || stg.userName)) {
+        const match = allUsers.find((u) => isUserMatch(stg.userId, u) || isUserMatch(stg.userName, u));
+        if (match) return match;
+      }
+    }
+  }
+
+  // 3. From assignedIds, prioritize operational employees over Admin/Owner
+  if (Array.isArray(parsedAssignedIds) && parsedAssignedIds.length > 0) {
+    const nonExecUser = allUsers.find((u) =>
+      parsedAssignedIds.some((id) => isUserMatch(id, u)) &&
+      !u.roles.includes('Admin') &&
+      !u.roles.includes('Owner')
+    );
+    if (nonExecUser) return nonExecUser;
+
+    const anyAssignedUser = allUsers.find((u) => parsedAssignedIds.some((id) => isUserMatch(id, u)));
+    if (anyAssignedUser) return anyAssignedUser;
+  }
+
+  return currentUser || allUsers[0];
+}
+
 export const PERMANENT_USERS: UserPersona[] = [
   {
     id: 'u-devi',

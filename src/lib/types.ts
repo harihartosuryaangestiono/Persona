@@ -95,6 +95,7 @@ export interface TaskItem {
   handoverUserId?: string;
   handoverTime?: string;
   workflowTimeline?: string;
+  revisionSeverity?: 'Minor' | 'Medium' | 'Major';
 }
 
 export interface WorklogItem {

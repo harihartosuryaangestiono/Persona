@@ -18,6 +18,16 @@ function formatUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
+function formatDateForInput(d?: string | null): string {
+  if (!d) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const dateObj = new Date(d);
+  if (!isNaN(dateObj.getTime())) {
+    return dateObj.toISOString().split('T')[0];
+  }
+  return '';
+}
+
 export default function ToDoPage() {
   const { tasks, clients, updateTask, addTask } = useData();
   const { allUsers } = useUser();
@@ -166,6 +176,7 @@ export default function ToDoPage() {
                 <th className="px-4 py-3">Tipe Task</th>
                 <th className="px-4 py-3">Format</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 font-bold text-center">Score</th>
                 <th className="px-4 py-3 text-center">Preview Link</th>
                 <th className="px-4 py-3 text-center">Qty</th>
               </tr>
@@ -181,13 +192,27 @@ export default function ToDoPage() {
                     <td className="px-4 py-3 font-mono whitespace-nowrap">
                       <input
                         type="date"
-                        value={t.postingDate || ''}
+                        value={formatDateForInput(t.postingDate)}
                         onChange={(e) => {
                           const newPosting = e.target.value;
+                          if (!newPosting) return;
                           const newDL = calculateAutoDeadline(newPosting, -3);
-                          updateTask(t.id, { postingDate: newPosting, deadline: newDL });
+                          const dateObj = new Date(newPosting);
+                          const monthNames = [
+                            'January', 'February', 'March', 'April', 'May', 'June',
+                            'July', 'August', 'September', 'October', 'November', 'December'
+                          ];
+                          const newMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : t.month;
+                          const newYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : t.year;
+
+                          updateTask(t.id, {
+                            postingDate: newPosting,
+                            deadline: newDL,
+                            month: newMonth,
+                            year: newYear
+                          });
                         }}
-                        className="bg-white border border-neutral-200 rounded px-2 py-1 text-neutral-900 focus:outline-none font-mono text-xs"
+                        className="bg-white border border-neutral-200 rounded px-2 py-1 text-neutral-900 focus:outline-hidden font-mono text-xs cursor-pointer"
                       />
                     </td>
 
@@ -222,7 +247,7 @@ export default function ToDoPage() {
                       <select
                         value={t.status}
                         onChange={(e) => updateTask(t.id, { status: e.target.value as any })}
-                        className={`bg-white border border-neutral-200 rounded px-2.5 py-1 text-[11px] font-semibold focus:outline-none ${
+                        className={`bg-white border border-neutral-200 rounded px-2.5 py-1 text-[11px] font-semibold focus:outline-hidden ${
                           t.status === 'Posted' || t.status === 'Completed'
                             ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                             : t.status === 'Waiting for Approval' || t.status === 'Approval'
@@ -243,6 +268,11 @@ export default function ToDoPage() {
                           </option>
                         ))}
                       </select>
+                    </td>
+
+                    {/* Score (Pts) */}
+                    <td className="px-4 py-3 text-center font-mono font-bold text-neutral-900 whitespace-nowrap">
+                      {t.score} pts
                     </td>
 
                     {/* Preview Link */}

@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { calculateTaskScore, normalizeFormat, calculateCOGS, parseExcelDate } from '@/lib/score-calculator';
 import { WorklogItem } from '@/lib/types';
 import { getDbStatus, getStatusLabel, normalizeStatusForPipeline, isStrategicPipeline, STRATEGIC_STATUS_OPTIONS, PRODUCTION_STATUS_OPTIONS } from '@/lib/status';
+import { resolvePrimaryEmployee } from '@/lib/rbac';
 
 interface WorklogStage {
   id: string;
@@ -19,6 +20,14 @@ interface WorklogStage {
   format: string;
   qty: number;
   score: number;
+}
+
+function isUserMatch(stageUserVal: string | undefined, userObj: { id?: string; name?: string }): boolean {
+  if (!stageUserVal || !userObj) return false;
+  const val = String(stageUserVal).toLowerCase().trim();
+  const uId = (userObj.id || '').toLowerCase().trim();
+  const uName = (userObj.name || '').toLowerCase().trim();
+  return Boolean((uId && val === uId) || (uName && val === uName));
 }
 
 function formatUrl(url: string): string {
@@ -95,21 +104,45 @@ export default function WorklogPage() {
   // Local optimistic deletion state for 0ms instant removal
   const [deletedRowIds, setDeletedRowIds] = useState<string[]>([]);
 
-  const openEditModal = (w: WorklogItem) => {
+  const handleEdit = (w: WorklogItem) => {
     setEditingWorklog(w);
     setEditTitle(w.contentTitle);
     setEditClientId(w.clientId || clients[0]?.id || '');
     setEditClientName(w.clientName || clients[0]?.name || '');
     setEditUserId(w.userId || currentUser?.id || '');
     setEditUserName(w.userName || currentUser?.name || '');
-    setEditTaskType(w.taskType || 'Editing');
-    setEditFormat(w.format || 'Single Foto');
-    setEditQty(w.qty || 1);
-    setEditScore(w.score || 10);
+
+    const parsedStages = w.stages ? (typeof w.stages === 'string' ? JSON.parse(w.stages) : w.stages) : [];
+    const userStage = Array.isArray(parsedStages) && parsedStages.length > 0
+      ? (parsedStages.find((s: any) => isUserMatch(s.userId, { id: w.userId, name: w.userName || '' }) || isUserMatch(s.userName, { id: w.userId, name: w.userName || '' })) || parsedStages[0])
+      : null;
+
+    const taskTypeVal = userStage?.taskType || w.taskType || 'Editing';
+    const formatVal = userStage?.format || w.format || 'Single Foto';
+    const qtyVal = userStage?.qty || w.qty || 1;
+
+    setEditTaskType(taskTypeVal);
+    setEditFormat(formatVal);
+    setEditQty(qtyVal);
+
+    const selectedUser = allUsers.find((u) => u.id === (w.userId || currentUser?.id)) || currentUser;
+    const userRoles = selectedUser?.roles || [];
+    let category = 'Editor';
+    if (taskTypeVal === 'Production Assistant') category = 'Assistant';
+    else if (['Content Plan', 'Production Lead', 'Editing Plan', 'Supervisi', 'Presentasi', 'Meeting Brief', 'Content Proposal'].includes(taskTypeVal)) category = 'Strategic';
+    else if (taskTypeVal === 'Scheduling') category = 'Scheduler';
+    else if (userRoles.includes('Strategist')) category = 'Strategic';
+    else if (userRoles.includes('Scheduler')) category = 'Scheduler';
+
+    const calculatedScore = calculateTaskScore(category, taskTypeVal, normalizeFormat(formatVal), qtyVal);
+    setEditScore(userStage?.score || calculatedScore || w.score || 400);
+
     setEditDate(w.date ? new Date(w.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     setEditStatus(getStatusLabel(w.status || 'Brief'));
     setEditPreviewLink(w.previewLink || '');
   };
+
+  const openEditModal = handleEdit;
 
   const handleFormatOrQtyChange = (fmt: string, qtyVal: number, taskTypeVal: string, uId: string) => {
     const selectedUser = allUsers.find((u) => u.id === uId) || currentUser;
@@ -237,7 +270,7 @@ export default function WorklogPage() {
       const assignedNames = allAssignedIds
         .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
         .filter(Boolean) as string[];
-      const primaryUser = allUsers.find((u) => allAssignedIds.includes(u.id) || allAssignedIds.includes(u.name)) || currentUser;
+      const primaryUser = resolvePrimaryEmployee(parsedStages, allAssignedIds, allUsers, currentUser);
       const fallbackStages = allAssignedIds.map((id: string) => ({
         id: `assigned-${id}`,
         role: 'Assignee',
@@ -262,7 +295,7 @@ export default function WorklogPage() {
         qty: t.qty || 1,
         score: totalScore,
         cogs: t.cogs || totalScore * 250,
-        userName: assignedNames.length > 0 ? assignedNames.join(', ') : primaryUser?.name || 'Unknown',
+        userName: primaryUser?.name || (assignedNames.length > 0 ? assignedNames.join(', ') : 'Unknown'),
         userId: primaryUser?.id || allAssignedIds[0] || '',
         date: t.postingDate || t.createdAt,
         status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
@@ -303,7 +336,7 @@ export default function WorklogPage() {
     const assignedNames = allAssignedIds
       .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
       .filter(Boolean) as string[];
-    const primaryUser = allUsers.find((u) => allAssignedIds.includes(u.id) || allAssignedIds.includes(u.name)) || currentUser;
+    const primaryUser = resolvePrimaryEmployee(parsedStages, allAssignedIds, allUsers, currentUser);
     const fallbackStages = allAssignedIds.map((id: string) => ({
       id: `assigned-${id}`,
       role: 'Assignee',
@@ -314,10 +347,14 @@ export default function WorklogPage() {
       qty: task.qty || 1,
       score: 0,
     }));
+    const userMatchedStage = Array.isArray(parsedStages) && parsedStages.length > 0
+      ? parsedStages.find((s: any) => isUserMatch(s.userId, { id: w.userId, name: w.userName || '' }) || isUserMatch(s.userName, { id: w.userId, name: w.userName || '' }))
+      : null;
+    const resolvedUserScore = userMatchedStage ? Number(userMatchedStage.score) || 0 : 0;
     const stageScore = Array.isArray(parsedStages)
       ? parsedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
       : 0;
-    const totalScore = stageScore || task.score || w.score || 0;
+    const totalScore = resolvedUserScore || w.score || stageScore || task.score || 0;
 
     return {
       ...w,
@@ -586,7 +623,8 @@ export default function WorklogPage() {
 
   // Form helpers for manual stages
   const getStrategicFormats = (type: string) => {
-    if (type === 'Content Plan' || type === 'Production Lead' || type === 'Production Assistant' || type === 'PA') return ['4 Jam', '8 Jam'];
+    if (type === 'Production Assistant' || type === 'PA') return ['1 Jam', '4 Jam', '8 Jam'];
+    if (type === 'Content Plan' || type === 'Production Lead') return ['4 Jam', '8 Jam'];
     if (type === 'Editing Plan') return ['Per Item'];
     if (type === 'Supervisi') return ['Per Check'];
     if (type === 'Presentasi' || type === 'Meeting Brief' || type === 'Content Proposal') return ['Per Session'];
