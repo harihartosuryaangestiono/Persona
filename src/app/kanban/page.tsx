@@ -544,11 +544,20 @@ export default function KanbanPage() {
     setIsCreatingTask(true);
     try {
       const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
-      const totalScore = getStagesTotalScore(newStages);
-      const assignedIds = Array.from(new Set(newStages.map((s) => s.userId)));
+      const sanitizedStages = newStages.map((stg) => {
+        const u = allUsers.find((user) => user.id === stg.userId || isUserMatch(stg.userId, user, allUsers) || isUserMatch(stg.userName, user, allUsers));
+        return {
+          ...stg,
+          userId: u?.id || stg.userId,
+          userName: u?.name || stg.userName,
+        };
+      });
+
+      const totalScore = getStagesTotalScore(sanitizedStages);
+      const assignedIds = Array.from(new Set(sanitizedStages.map((s) => s.userId)));
       const startingStatus = getFirstStatus(newCategory);
 
-      const editorOrContentStage = newStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || newStages[0];
+      const editorOrContentStage = sanitizedStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || sanitizedStages[0];
       let taskFormat = editorOrContentStage && editorOrContentStage.format && editorOrContentStage.format !== 'Per Post' && editorOrContentStage.format !== '4 Jam' ? editorOrContentStage.format : 'Reels';
       if (newTitle.toLowerCase().includes('story') || newCategory === 'Scheduling') {
         taskFormat = 'Story Video';
@@ -569,7 +578,7 @@ export default function KanbanPage() {
         score: totalScore,
         cogs: totalScore * 250,
         driveLink: formattedDriveLink,
-        stages: newStages,
+        stages: sanitizedStages,
         category: newCategory,
         format: taskFormat,
         taskType: taskType,
@@ -627,8 +636,17 @@ export default function KanbanPage() {
     }
 
     const targetClient = clients.find((c) => c.id === editClientId) || clients[0];
-    const totalScore = getStagesTotalScore(editStages);
-    const assignedIds = Array.from(new Set(editStages.map((s) => s.userId)));
+    const sanitizedEditStages = editStages.map((stg) => {
+      const u = allUsers.find((user) => user.id === stg.userId || isUserMatch(stg.userId, user, allUsers) || isUserMatch(stg.userName, user, allUsers));
+      return {
+        ...stg,
+        userId: u?.id || stg.userId,
+        userName: u?.name || stg.userName,
+      };
+    });
+
+    const totalScore = getStagesTotalScore(sanitizedEditStages);
+    const assignedIds = Array.from(new Set(sanitizedEditStages.map((s) => s.userId)));
 
     // Enforce assignee restrictions (Requirement 7: PA/Editor/Scheduler cannot assign others)
     const isExecutive = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
@@ -644,7 +662,7 @@ export default function KanbanPage() {
 
     const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
     const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
-    const editorOrContentStage = editStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || editStages[0];
+    const editorOrContentStage = sanitizedEditStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || sanitizedEditStages[0];
     const primaryFormat = editorOrContentStage ? editorOrContentStage.format : selectedTaskDetail.format;
     const primaryTaskType = editorOrContentStage ? editorOrContentStage.taskType : selectedTaskDetail.taskType;
     const primaryQty = editorOrContentStage ? (editorOrContentStage.qty || 1) : (selectedTaskDetail.qty || 1);
@@ -661,7 +679,7 @@ export default function KanbanPage() {
       cogs: totalScore * 250,
       driveLink: formattedDrive,
       previewLink: formattedPreview,
-      stages: editStages,
+      stages: sanitizedEditStages,
       format: primaryFormat,
       taskType: primaryTaskType,
       qty: primaryQty,

@@ -584,28 +584,33 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
     const dbRoles: string[] = typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles;
-    const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
-
-    if (!isExecutive) {
-      return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
-    }
-
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
 
-    const cleanId = id.replace(/^task-/, '');
+    const cleanId = id.replace(/^(task|worklog-task|worklog|wl)-/, '');
     const oldTask = await prisma.task.findFirst({
       where: {
         OR: [
           { id },
           { id: cleanId },
           { id: `task-${cleanId}` },
+          { contentId: id },
+          { contentId: cleanId },
         ]
       }
     });
 
     if (oldTask) {
+      const hasAccess = checkTaskAccess(
+        { id: userRecord.id, name: userRecord.name, roles: dbRoles },
+        { assignedUserIds: typeof oldTask.assignedUserIds === 'string' ? oldTask.assignedUserIds : JSON.stringify(oldTask.assignedUserIds || []), stages: oldTask.stages, status: oldTask.status }
+      );
+      const isAllowedRole = Array.isArray(dbRoles) && dbRoles.some((r: string) => ['Admin', 'Owner', 'Strategist', 'Editor', 'Production Assistant', 'Scheduler'].includes(r));
+      if (!hasAccess && !isAllowedRole) {
+        return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
+      }
+
       await prisma.worklog.deleteMany({
         where: {
           OR: [

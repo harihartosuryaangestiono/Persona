@@ -596,7 +596,18 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Worklog ID required' }, { status: 400 });
 
-    const existingWorklog = await prisma.worklog.findUnique({ where: { id } });
+    const cleanId = id.replace(/^(worklog-task|task|worklog|wl)-/, '');
+    const existingWorklog = await prisma.worklog.findFirst({
+      where: {
+        OR: [
+          { id },
+          { id: cleanId },
+          { id: `wl-${cleanId}` },
+          { contentId: id },
+          { contentId: cleanId },
+        ]
+      }
+    });
     if (!existingWorklog) return NextResponse.json({ error: 'Worklog not found' }, { status: 404 });
 
     // Ownership & Access Control Check
@@ -604,11 +615,12 @@ export async function DELETE(req: Request) {
       { id: userRecord.id, name: userRecord.name, roles: dbRoles },
       { userId: existingWorklog.userId, stages: existingWorklog.stages }
     );
-    if (!hasAccess) {
+    const isAllowedRole = Array.isArray(dbRoles) && dbRoles.some((r: string) => ['Admin', 'Owner', 'Strategist', 'Editor', 'Production Assistant', 'Scheduler'].includes(r));
+    if (!hasAccess && !isAllowedRole) {
       return NextResponse.json({ error: 'You do not have permission to access this resource.' }, { status: 403 });
     }
 
-    await prisma.worklog.delete({ where: { id } });
+    await prisma.worklog.delete({ where: { id: existingWorklog.id } });
 
     if (existingWorklog.clientId) {
       const client = await prisma.client.findUnique({ where: { id: existingWorklog.clientId } });

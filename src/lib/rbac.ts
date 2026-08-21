@@ -68,7 +68,11 @@ export function hasAnyRole(user: { roles: string[] | string }, targetRoles: User
   return targetRoles.some((r) => roles.includes(r));
 }
 
-export function isUserMatch(target: string | null | undefined, user: { id: string; name: string } | null | undefined): boolean {
+export function isUserMatch(
+  target: string | null | undefined,
+  user: { id: string; name: string } | null | undefined,
+  allUsersList?: { id: string; name: string }[]
+): boolean {
   if (!target || !user) return false;
   const t = String(target).trim().toLowerCase();
   const uid = String(user.id).trim().toLowerCase();
@@ -76,12 +80,34 @@ export function isUserMatch(target: string | null | undefined, user: { id: strin
 
   if (t === uid || t === uname) return true;
 
-  if (uname.includes('dinda') && (t.includes('dinda') || t.includes('dindong'))) return true;
-  if (uname.includes('anggi') && t.includes('anggi')) return true;
-  if (uname.includes('devi') && t.includes('devi')) return true;
-  if (uname.includes('gigi') && (t.includes('gigi') || t.includes('gigie'))) return true;
-  if (uname.includes('jabin') && t.includes('jabin')) return true;
-  if ((uname.includes('prisca') || uname.includes('priska')) && (t.includes('prisca') || t.includes('priska'))) return true;
+  if (allUsersList && Array.isArray(allUsersList)) {
+    const targetUser = allUsersList.find((u) => u.id.toLowerCase() === t || u.name.toLowerCase() === t);
+    if (targetUser && targetUser.name.toLowerCase() === uname) return true;
+  }
+
+  const isTargetDinda = t.includes('dinda') || t.includes('dindong');
+  const isUserDinda = uname.includes('dinda') || uid.includes('dinda') || uid.includes('dindong');
+  if (isTargetDinda && isUserDinda) return true;
+
+  const isTargetAnggi = t.includes('anggi');
+  const isUserAnggi = uname.includes('anggi') || uid.includes('anggi');
+  if (isTargetAnggi && isUserAnggi) return true;
+
+  const isTargetDevi = t.includes('devi');
+  const isUserDevi = uname.includes('devi') || uid.includes('devi');
+  if (isTargetDevi && isUserDevi) return true;
+
+  const isTargetGigi = t.includes('gigi') || t.includes('gigie');
+  const isUserGigi = uname.includes('gigi') || uid.includes('gigi') || uid.includes('gigie');
+  if (isTargetGigi && isUserGigi) return true;
+
+  const isTargetJabin = t.includes('jabin');
+  const isUserJabin = uname.includes('jabin') || uid.includes('jabin');
+  if (isTargetJabin && isUserJabin) return true;
+
+  const isTargetPriska = t.includes('prisca') || t.includes('priska');
+  const isUserPriska = uname.includes('prisca') || uname.includes('priska') || uid.includes('priska');
+  if (isTargetPriska && isUserPriska) return true;
 
   return false;
 }
@@ -110,14 +136,14 @@ export function resolvePrimaryEmployee(
       )
     );
     if (editorStage && (editorStage.userId || editorStage.userName)) {
-      const match = allUsers.find((u) => isUserMatch(editorStage.userId, u) || isUserMatch(editorStage.userName, u));
+      const match = allUsers.find((u) => isUserMatch(editorStage.userId, u, allUsers) || isUserMatch(editorStage.userName, u, allUsers));
       if (match) return match;
     }
 
     // 2. Prioritize any assigned stage user
     for (const stg of parsedStages) {
       if (stg && (stg.userId || stg.userName)) {
-        const match = allUsers.find((u) => isUserMatch(stg.userId, u) || isUserMatch(stg.userName, u));
+        const match = allUsers.find((u) => isUserMatch(stg.userId, u, allUsers) || isUserMatch(stg.userName, u, allUsers));
         if (match) return match;
       }
     }
@@ -126,13 +152,13 @@ export function resolvePrimaryEmployee(
   // 3. From assignedIds, prioritize operational employees over Admin/Owner
   if (Array.isArray(parsedAssignedIds) && parsedAssignedIds.length > 0) {
     const nonExecUser = allUsers.find((u) =>
-      parsedAssignedIds.some((id) => isUserMatch(id, u)) &&
+      parsedAssignedIds.some((id) => isUserMatch(id, u, allUsers)) &&
       !u.roles.includes('Admin') &&
       !u.roles.includes('Owner')
     );
     if (nonExecUser) return nonExecUser;
 
-    const anyAssignedUser = allUsers.find((u) => parsedAssignedIds.some((id) => isUserMatch(id, u)));
+    const anyAssignedUser = allUsers.find((u) => parsedAssignedIds.some((id) => isUserMatch(id, u, allUsers)));
     if (anyAssignedUser) return anyAssignedUser;
   }
 

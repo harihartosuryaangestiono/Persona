@@ -465,21 +465,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTask = (taskId: string) => {
-    const cleanId = taskId.replace(/^task-/, '');
-    const oldTask = tasks.find((t) => t.id === taskId || t.id === cleanId || t.id === `task-${cleanId}`);
+    const cleanId = taskId.replace(/^(task|worklog-task|worklog|wl)-/, '');
+    const oldTask = tasks.find((t) => t.id === taskId || t.id === cleanId || t.id === `task-${cleanId}` || (t.contentId && t.contentId === cleanId));
     if (oldTask) {
-      const score = oldTask.score || 0;
-      setClients((prev) =>
-        prev.map((c) =>
-          c.id === oldTask.clientId
-            ? {
-                ...c,
-                usedPoint: Math.max(0, c.usedPoint - score),
-                remainingPoint: c.monthlyPointBudget - Math.max(0, c.usedPoint - score),
-              }
-            : c
-        )
-      );
+      const stages = oldTask.stages ? (typeof oldTask.stages === 'string' ? JSON.parse(oldTask.stages) : oldTask.stages) : [];
+      const stageScore = Array.isArray(stages) ? stages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0) : 0;
+      const totalScore = stageScore || oldTask.score || 0;
+
+      if (totalScore > 0) {
+        setClients((prev) =>
+          prev.map((c) =>
+            c.id === oldTask.clientId
+              ? {
+                  ...c,
+                  usedPoint: Math.max(0, c.usedPoint - totalScore),
+                  remainingPoint: c.monthlyPointBudget - Math.max(0, c.usedPoint - totalScore),
+                }
+              : c
+          )
+        );
+      }
 
       setWorklogs((prev) =>
         prev.filter((w) => {
@@ -491,16 +496,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     setTasks((prev) =>
-      prev.filter((t) => t.id !== taskId && t.id !== cleanId && (oldTask?.contentId ? t.contentId !== oldTask.contentId : true))
+      prev.filter((t) => t.id !== taskId && t.id !== cleanId && t.id !== `task-${cleanId}` && (oldTask?.contentId ? t.contentId !== oldTask.contentId : true))
     );
 
     if (currentUser) {
-      fetch(`/api/tasks?id=${taskId}`, {
+      const headers = {
+        'X-User-Id': currentUser.id,
+        'X-User-Role': currentUser.roles.join(','),
+      };
+      fetch(`/api/tasks?id=${cleanId}`, {
         method: 'DELETE',
-        headers: {
-          'X-User-Id': currentUser.id,
-          'X-User-Role': currentUser.roles.join(','),
-        },
+        headers,
+      }).catch(console.error);
+      fetch(`/api/worklogs?id=${cleanId}`, {
+        method: 'DELETE',
+        headers,
       }).catch(console.error);
     }
   };
@@ -723,11 +733,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteWorklog = async (worklogId: string) => {
-    const isTaskDerived = worklogId.startsWith('worklog-task-');
-    const cleanId = worklogId.replace(/^worklog-task-/, '');
+    const cleanId = worklogId.replace(/^(worklog-task-|task-|worklog-|wl-)/, '');
 
-    const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId);
-    const targetTask = tasks.find((t) => t.id === cleanId || t.id === `task-${cleanId}`);
+    const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId || w.id === `wl-${cleanId}` || (w.contentId && w.contentId === cleanId));
+    const targetTask = tasks.find((t) => t.id === worklogId || t.id === cleanId || t.id === `task-${cleanId}` || (t.contentId && t.contentId === cleanId));
 
     const targetClientId = targetWl?.clientId || targetTask?.clientId;
     const targetClientName = targetWl?.clientName || targetTask?.clientName;
@@ -758,11 +767,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    if (isTaskDerived) {
-      setTasks((prev) => prev.filter((t) => t.id !== cleanId && t.id !== `task-${cleanId}`));
-    } else {
-      setWorklogs((prev) => prev.filter((w) => w.id !== worklogId && w.id !== cleanId));
-    }
+    const targetContentId = targetWl?.contentId || targetTask?.contentId;
+
+    setTasks((prev) => prev.filter((t) => t.id !== worklogId && t.id !== cleanId && t.id !== `task-${cleanId}` && (targetContentId ? t.contentId !== targetContentId : true)));
+    setWorklogs((prev) => prev.filter((w) => w.id !== worklogId && w.id !== cleanId && w.id !== `wl-${cleanId}` && (targetContentId ? w.contentId !== targetContentId : true)));
 
     try {
       const headers: HeadersInit = {};
@@ -771,17 +779,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers['X-User-Role'] = currentUser.roles.join(',');
       }
 
-      if (isTaskDerived) {
-        await fetch(`/api/tasks?id=${cleanId}`, {
-          method: 'DELETE',
-          headers,
-        });
-      } else {
-        await fetch(`/api/worklogs?id=${cleanId}`, {
-          method: 'DELETE',
-          headers,
-        });
-      }
+      await Promise.all([
+        fetch(`/api/tasks?id=${cleanId}`, { method: 'DELETE', headers }).catch(console.error),
+        fetch(`/api/worklogs?id=${cleanId}`, { method: 'DELETE', headers }).catch(console.error),
+      ]);
     } catch (e) {
       console.error('Failed to delete worklog on server:', e);
       showToast('Gagal menghapus item di server', 'error');
