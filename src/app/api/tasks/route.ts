@@ -54,6 +54,11 @@ async function validateCategoryAssignments(assignedUserIds: string[], category: 
     if (!assignedUser) continue;
     const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
 
+    // Admin & Owner can manage and be assigned to any category
+    if (roles.includes('Admin') || roles.includes('Owner')) {
+      continue;
+    }
+
     const categoryLower = category.toLowerCase();
     let isAllowed = false;
 
