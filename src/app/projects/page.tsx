@@ -31,7 +31,7 @@ export default function ProjectsPage() {
       return c.workspaceId === 'ws-inhouse' || c.code?.toLowerCase().includes('inhouse') || c.name?.toLowerCase().includes('in-house');
     }
     if (selectedScope === 'PERSONA') {
-      return c.workspaceId === 'ws-team-anggi' || (!c.workspaceId && !c.code?.toLowerCase().includes('inhouse'));
+      return c.workspaceId === 'ws-team-anggi' || c.name?.toLowerCase().includes('motodw') || c.code?.toLowerCase().includes('mdw') || (!c.workspaceId && !c.code?.toLowerCase().includes('inhouse'));
     }
     return true;
   });

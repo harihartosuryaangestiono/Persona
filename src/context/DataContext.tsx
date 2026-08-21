@@ -71,20 +71,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { currentWorkspace } = useWorkspace();
 
   const clients = useMemo(() => {
-    return rawClients.filter((c) => c.workspaceId === currentWorkspace.id);
+    return rawClients.filter((c) => {
+      if (c.workspaceId === currentWorkspace.id) return true;
+      const isMotoDW = c.name?.toLowerCase().includes('motodw') || c.code?.toLowerCase().includes('mdw');
+      if (isMotoDW) return true;
+      return false;
+    });
   }, [rawClients, currentWorkspace.id]);
 
   const tasks = useMemo(() => {
-    return rawTasks.filter((t) => t.workspaceId === currentWorkspace.id);
+    return rawTasks.filter((t) => {
+      if (t.workspaceId === currentWorkspace.id) return true;
+      const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+      if (isMotoDW) return true;
+      return false;
+    });
   }, [rawTasks, currentWorkspace.id]);
 
   const worklogs = useMemo(() => {
     return rawWorklogs.filter((w) => {
-      if ((w as any).workspaceId) {
-        return (w as any).workspaceId === currentWorkspace.id;
-      }
+      if ((w as any).workspaceId && (w as any).workspaceId === currentWorkspace.id) return true;
       const matchedClient = rawClients.find((c) => c.id === w.clientId);
-      return matchedClient?.workspaceId === currentWorkspace.id;
+      if (matchedClient?.workspaceId === currentWorkspace.id) return true;
+      const isMotoDW = (w.clientName && w.clientName.toLowerCase().includes('motodw')) || (w.clientId && w.clientId.toLowerCase().includes('motodw'));
+      if (isMotoDW) return true;
+      return false;
     });
   }, [rawWorklogs, rawClients, currentWorkspace.id]);
 
