@@ -107,8 +107,20 @@ export function Sidebar() {
 
     return false;
   }).length;
-  const editingCount = tasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
-  const schedulingCount = tasks.filter((t) => (t.status === 'Scheduling' || t.status === 'Ready to Post') && t.workspaceId === currentWorkspace?.id && !t.isArchived).length;
+  const editingCount = tasks.filter((t) => {
+    if (t.isArchived) return false;
+    const isStatus = t.status === 'Editing' || t.status === 'Revision';
+    if (!isStatus) return false;
+    const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+    return t.workspaceId === currentWorkspace?.id || isMotoDW;
+  }).length;
+  const schedulingCount = tasks.filter((t) => {
+    if (t.isArchived) return false;
+    const isStatus = t.status === 'Scheduling' || t.status === 'Ready to Post';
+    if (!isStatus) return false;
+    const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+    return t.workspaceId === currentWorkspace?.id || isMotoDW;
+  }).length;
 
   // Dynamic capacity calculation
   const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);

@@ -226,13 +226,14 @@ export default function KanbanPage() {
     }
   }, [editPostingDate]);
 
-  // Workspace filtering — strict: task must match currentWorkspace, or fall back via client
+  // Workspace filtering — task must match currentWorkspace or be MotoDW
   const workspaceTasks = tasks.filter((t) => {
     if (t.workspaceId === currentWorkspace.id) return true;
+    const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && t.clientId.toLowerCase().includes('motodw'));
+    if (isMotoDW) return true;
     if (!t.workspaceId) {
-      // Task has no workspaceId — fall back to matching by client's workspace
       const taskClient = clients.find((c) => c.id === t.clientId);
-      return taskClient ? taskClient.workspaceId === currentWorkspace.id : false;
+      return taskClient ? (taskClient.workspaceId === currentWorkspace.id || taskClient.name?.toLowerCase().includes('motodw')) : false;
     }
     return false;
   });
