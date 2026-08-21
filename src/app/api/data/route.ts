@@ -27,12 +27,14 @@ export async function GET(req: Request) {
     if (userRecord) {
       const isExecutive = dbRoles.includes('Admin') || dbRoles.includes('Owner') || dbRoles.includes('Strategist');
       if (!isExecutive) {
-        // Default: only fetch tasks that reference the user by assignedUserIds or stages
+        // Default: only fetch tasks that reference the user by assignedUserIds, stages, or handover
         const orClauses: any[] = [
           { assignedUserIds: { contains: userRecord.id } },
           { assignedUserIds: { contains: userRecord.name } },
           { stages: { contains: userRecord.id } },
           { stages: { contains: userRecord.name } },
+          { handoverUserId: userRecord.id },
+          { handoverUserId: userRecord.name },
         ];
 
         // If user has Scheduler role, also include scheduling-stage tasks or tasks that mention Scheduler role

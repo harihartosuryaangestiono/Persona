@@ -278,6 +278,22 @@ export default function KanbanPage() {
 
     allowed.add('Waiting for Approval');
 
+    // Always include status columns of tasks explicitly assigned to currentUser
+    workspaceTasks.forEach((t) => {
+      if (t.isArchived) return;
+      const assignedIds = t.assignedUserIds
+        ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
+        : [];
+      const isAssigned = currentUser && (assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name));
+      const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const isStageAssignee = currentUser && Array.isArray(logStages) && logStages.some(
+        (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
+      );
+      if (isAssigned || isStageAssignee) {
+        allowed.add(t.status);
+      }
+    });
+
     return columns.filter((col) => allowed.has(col));
   };
 
@@ -288,14 +304,34 @@ export default function KanbanPage() {
     // Exclude archived tasks from active board (Requirement 4)
     if (t.isArchived) return false;
 
+    // Check if task is explicitly assigned to currentUser
+    const assignedIds = t.assignedUserIds
+      ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
+      : [];
+    const isAssignedToCurrentUser = currentUser && (
+      assignedIds.includes(currentUser.id) ||
+      assignedIds.includes(currentUser.name)
+    );
+    const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+    const isStageAssigneeToCurrentUser = currentUser && Array.isArray(logStages) && logStages.some(
+      (s: any) => s.userId === currentUser.id || s.userName === currentUser.name
+    );
+    const isExplicitlyAssigned = isAssignedToCurrentUser || isStageAssigneeToCurrentUser;
+
     // Filter by Active Board type (Requirement 5: Correct Workflow Detection based on Task Category)
-    // Strategic board shows: Strategic category tasks + Production/Shooting-status tasks (PA workflow)
-    if (activeBoard === 'strategic') {
-      const isStrategicTask = t.category === 'Strategic';
-      const isProductionStatusTask = t.status === 'Production' || t.status === 'Shooting';
-      if (!isStrategicTask && !isProductionStatusTask) return false;
+    // Assigned tasks bypass board category filters so team members never miss tasks assigned to them
+    if (!isExplicitlyAssigned) {
+      if (activeBoard === 'strategic') {
+        const isStrategicTask = t.category === 'Strategic';
+        const isProductionStatusTask = t.status === 'Production' || t.status === 'Shooting';
+        if (!isStrategicTask && !isProductionStatusTask) return false;
+      }
+      if (activeBoard === 'production') {
+        const isProductionStatus = PRODUCTION_COLUMNS.includes(t.status as any);
+        const isProductionCategory = t.category !== 'Strategic';
+        if (!isProductionStatus && !isProductionCategory) return false;
+      }
     }
-    if (activeBoard === 'production' && (t.category === 'Strategic' || t.status === 'Production' || t.status === 'Shooting')) return false;
 
     // Client Filter
     if (selectedClientFilter !== 'ALL' && t.clientId !== selectedClientFilter) return false;
@@ -328,14 +364,6 @@ export default function KanbanPage() {
     const isManager = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
     if (isAdmin || isManager) return true;
 
-    const assignedIds = t.assignedUserIds
-      ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
-      : [];
-    const isAssigned = assignedIds.includes(currentUser.id) || assignedIds.includes(currentUser.name);
-
-    const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-    const isStageAssignee = logStages.some((s: any) => s.userId === currentUser.id || s.userName === currentUser.name);
-
     let matchesCategory = false;
     const catStr = t.category as string;
     if (currentUser.roles.includes('Strategist') && (catStr === 'Strategic' || catStr === 'Strategist')) matchesCategory = true;
@@ -351,7 +379,7 @@ export default function KanbanPage() {
     const hasSchedulingStage = Array.isArray(logStages) && logStages.some((s: any) => (s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))));
     if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
 
-    return isAssigned || isStageAssignee || matchesCategory || isCreator;
+    return isAssignedToCurrentUser || isStageAssigneeToCurrentUser || matchesCategory || isCreator;
   });
 
   // Sort tasks for table view
@@ -940,12 +968,20 @@ export default function KanbanPage() {
               );
             }
 
-            // Other roles: show role-appropriate pipeline label
-            // Any user with Scheduler role gets Scheduling Pipeline label
-            const isScheduler = roles.includes('Scheduler');
+            // Other roles: allow tab switching between Production, Strategic, and All Pipelines
             return (
-              <div className="flex items-center bg-white border border-neutral-200 px-3 py-1.5 rounded-xl shadow-2xs text-xs font-bold text-neutral-800">
-                {isScheduler ? 'Scheduling Pipeline' : 'Production Pipeline'}
+              <div className="flex items-center bg-white border border-neutral-200 p-1 rounded-xl shadow-2xs">
+                {(['production', 'strategic', 'main'] as const).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setActiveBoard(b)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition ${
+                      activeBoard === b ? 'bg-neutral-900 text-white shadow-xs' : 'text-neutral-500 hover:text-neutral-900'
+                    }`}
+                  >
+                    {b === 'main' ? 'All Pipelines' : b === 'strategic' ? 'Strategic Pipeline' : 'Production Pipeline'}
+                  </button>
+                ))}
               </div>
             );
           })()}
