@@ -624,7 +624,10 @@ export async function DELETE(req: Request) {
 
       const client = await prisma.client.findUnique({ where: { id: oldTask.clientId } });
       if (client) {
-        const newUsed = Math.max(0, client.usedPoint - oldTask.score);
+        const stages = oldTask.stages ? (typeof oldTask.stages === 'string' ? JSON.parse(oldTask.stages) : oldTask.stages) : [];
+        const stageScore = Array.isArray(stages) ? stages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0) : 0;
+        const taskScore = stageScore || oldTask.score || 0;
+        const newUsed = Math.max(0, client.usedPoint - taskScore);
         await prisma.client.update({
           where: { id: oldTask.clientId },
           data: {

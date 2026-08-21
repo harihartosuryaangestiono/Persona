@@ -609,6 +609,24 @@ export async function DELETE(req: Request) {
     }
 
     await prisma.worklog.delete({ where: { id } });
+
+    if (existingWorklog.clientId) {
+      const client = await prisma.client.findUnique({ where: { id: existingWorklog.clientId } });
+      if (client) {
+        const stages = existingWorklog.stages ? (typeof existingWorklog.stages === 'string' ? JSON.parse(existingWorklog.stages) : existingWorklog.stages) : [];
+        const stageScore = Array.isArray(stages) ? stages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0) : 0;
+        const wlScore = stageScore || existingWorklog.score || 0;
+        const newUsed = Math.max(0, client.usedPoint - wlScore);
+        await prisma.client.update({
+          where: { id: existingWorklog.clientId },
+          data: {
+            usedPoint: newUsed,
+            remainingPoint: client.monthlyPointBudget - newUsed,
+          },
+        });
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error('Error deleting worklog:', e);

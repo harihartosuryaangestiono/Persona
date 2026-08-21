@@ -373,7 +373,26 @@ export default function WorklogPage() {
     };
   });
 
-  const combinedLogs = [...normalizedWorklogs, ...activeTaskLogs];
+  const rawCombinedLogs = [...normalizedWorklogs, ...activeTaskLogs];
+
+  const combinedLogs: WorklogItem[] = [];
+  const seenContentIds = new Set<string>();
+  const seenTitleKeys = new Set<string>();
+
+  for (const log of rawCombinedLogs) {
+    if (log.contentId) {
+      if (seenContentIds.has(log.contentId)) continue;
+      seenContentIds.add(log.contentId);
+    }
+    const cleanTitle = (log.contentTitle || '').toLowerCase().trim();
+    const dateStr = log.date ? new Date(log.date).toISOString().substring(0, 10) : '';
+    const key = `${cleanTitle}_${log.clientId}_${dateStr}`;
+    if (cleanTitle && dateStr) {
+      if (seenTitleKeys.has(key)) continue;
+      seenTitleKeys.add(key);
+    }
+    combinedLogs.push(log);
+  }
 
   // Formats list for filtering
   const uniqueFormats = Array.from(new Set(combinedLogs.map((w) => w.format).filter(Boolean)));

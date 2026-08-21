@@ -723,23 +723,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteWorklog = async (worklogId: string) => {
+    const isTaskDerived = worklogId.startsWith('worklog-task-');
     const cleanId = worklogId.replace(/^worklog-task-/, '');
 
-    const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId || w.contentId === worklogId || w.contentId === cleanId);
-    const targetScore = targetWl?.score || 0;
-    const targetClientId = targetWl?.clientId;
-    const targetClientName = targetWl?.clientName;
-    const targetContentId = targetWl?.contentId;
+    const targetWl = worklogs.find((w) => w.id === worklogId || w.id === cleanId);
+    const targetTask = tasks.find((t) => t.id === cleanId || t.id === `task-${cleanId}`);
 
-    const matchingTaskIds = new Set<string>();
-    if (targetContentId) {
-      tasks.forEach((t) => {
-        if (t.contentId === targetContentId) matchingTaskIds.add(t.id);
-      });
-    }
-    if (cleanId) {
-      matchingTaskIds.add(cleanId);
-    }
+    const targetClientId = targetWl?.clientId || targetTask?.clientId;
+    const targetClientName = targetWl?.clientName || targetTask?.clientName;
+
+    const stagesArr = targetWl?.stages
+      ? (typeof targetWl.stages === 'string' ? JSON.parse(targetWl.stages) : targetWl.stages)
+      : (targetTask?.stages ? (typeof targetTask.stages === 'string' ? JSON.parse(targetTask.stages) : targetTask.stages) : []);
+
+    const stageSum = Array.isArray(stagesArr)
+      ? stagesArr.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
+      : 0;
+
+    const targetScore = stageSum || targetWl?.score || targetTask?.score || 0;
 
     if (targetScore > 0 && (targetClientId || targetClientName)) {
       setClients((prev) =>
@@ -757,64 +758,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    setWorklogs((prev) =>
-      prev.filter(
-        (w) =>
-          w.id !== worklogId &&
-          w.id !== cleanId &&
-          (w.contentId ? w.contentId !== worklogId && w.contentId !== cleanId && w.contentId !== targetContentId : true)
-      )
-    );
-
-    setTasks((prev) =>
-      prev.filter((t) => {
-        if (matchingTaskIds.has(t.id)) return false;
-        if (targetContentId && t.contentId === targetContentId) return false;
-        return t.id !== worklogId && t.id !== cleanId && (t.contentId ? t.contentId !== worklogId && t.contentId !== cleanId : true);
-      })
-    );
+    if (isTaskDerived) {
+      setTasks((prev) => prev.filter((t) => t.id !== cleanId && t.id !== `task-${cleanId}`));
+    } else {
+      setWorklogs((prev) => prev.filter((w) => w.id !== worklogId && w.id !== cleanId));
+    }
 
     try {
-      const requests = [];
       const headers: HeadersInit = {};
       if (currentUser) {
         headers['X-User-Id'] = currentUser.id;
         headers['X-User-Role'] = currentUser.roles.join(',');
       }
 
-      if (!worklogId.startsWith('worklog-task-')) {
-        requests.push(
-          fetch(`/api/worklogs?id=${cleanId}`, {
-            method: 'DELETE',
-            headers,
-          })
-        );
-      }
-      matchingTaskIds.forEach((taskId) => {
-        requests.push(
-          fetch(`/api/tasks?id=${taskId}`, {
-            method: 'DELETE',
-            headers,
-          })
-        );
-      });
-      const responses = await Promise.all(requests);
-
-      let hasError = false;
-      for (const res of responses) {
-        if (!res.ok) {
-          hasError = true;
-          const errText = await res.text();
-          console.error('Failed to delete resource on server:', errText);
-        }
-      }
-      if (hasError) {
-        showToast('Gagal menghapus beberapa item di server', 'error');
-        await fetchInitialData();
+      if (isTaskDerived) {
+        await fetch(`/api/tasks?id=${cleanId}`, {
+          method: 'DELETE',
+          headers,
+        });
+      } else {
+        await fetch(`/api/worklogs?id=${cleanId}`, {
+          method: 'DELETE',
+          headers,
+        });
       }
     } catch (e) {
-      console.error('Failed to delete worklog:', e);
-      showToast('Gagal menghapus worklog', 'error');
+      console.error('Failed to delete worklog on server:', e);
+      showToast('Gagal menghapus item di server', 'error');
       await fetchInitialData();
     }
   };
