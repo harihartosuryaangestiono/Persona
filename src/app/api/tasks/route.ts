@@ -162,15 +162,10 @@ export async function POST(req: Request) {
         if (existingTask) {
           const existingAssigned = existingTask.assignedUserIds ? (typeof existingTask.assignedUserIds === 'string' ? JSON.parse(existingTask.assignedUserIds) : existingTask.assignedUserIds) : [];
           const newAssigned = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : (body.assignedUserIds ? JSON.parse(body.assignedUserIds) : []);
-          const mergedAssigned = Array.from(new Set([...(existingAssigned || []), ...(newAssigned || [])]));
-          const existingStages = existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : [];
-          const newStages = body.stages ? (Array.isArray(body.stages) ? body.stages : JSON.parse(body.stages)) : [];
-          const mergedStages = [...existingStages];
-          for (const stage of newStages) {
-            if (!mergedStages.some((s: any) => s.id === stage.id || (s.userId === stage.userId && s.role === stage.role && s.taskType === stage.taskType))) {
-              mergedStages.push(stage);
-            }
-          }
+          const finalAssigned = newAssigned.length > 0 ? newAssigned : existingAssigned;
+
+          const newStages = body.stages ? (Array.isArray(body.stages) ? body.stages : JSON.parse(body.stages)) : null;
+          const finalStages = newStages !== null ? newStages : (existingTask.stages ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages) : []);
 
           const updated = await tx.task.update({
             where: { id: existingTask.id },
@@ -187,14 +182,14 @@ export async function POST(req: Request) {
               workspaceId: targetWorkspaceId,
               postingDate: body.postingDate ? new Date(body.postingDate) : existingTask.postingDate,
               deadline,
-              assignedUserIds: JSON.stringify(mergedAssigned),
+              assignedUserIds: JSON.stringify(finalAssigned),
               score: body.score !== undefined ? body.score : existingTask.score,
               cogs: body.cogs !== undefined ? body.cogs : existingTask.cogs,
               driveLink: body.driveLink !== undefined ? body.driveLink : existingTask.driveLink,
               previewLink: body.previewLink !== undefined ? body.previewLink : existingTask.previewLink,
               checklist: JSON.stringify(body.checklist || (existingTask.checklist ? JSON.parse(existingTask.checklist) : [])),
               comments: JSON.stringify(body.comments || (existingTask.comments ? JSON.parse(existingTask.comments) : [])),
-              stages: mergedStages.length ? JSON.stringify(mergedStages) : existingTask.stages,
+              stages: JSON.stringify(finalStages),
               month: body.month || existingTask.month,
               year: body.year ? Number(body.year) : existingTask.year,
               contentId: body.contentId,

@@ -1263,16 +1263,20 @@ export default function KanbanPage() {
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                     {colTasks.map((task) => {
                       const isBeingDragged = draggedTaskId === task.id;
-                      const stageNames = task.stages
-                        ? Array.from(new Set((typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages).map((s: any) => s.userName)))
+                      const rawStages = task.stages ? (typeof task.stages === 'string' ? JSON.parse(task.stages) : task.stages) : [];
+                      const stageNames = Array.isArray(rawStages) && rawStages.length > 0
+                        ? Array.from(new Set(rawStages.map((s: any) => {
+                            const u = allUsers.find((user) => user.id === s.userId || isUserMatch(s.userId, user, allUsers) || isUserMatch(s.userName, user, allUsers));
+                            return u?.name || s.userName;
+                          }).filter(Boolean)))
                         : [];
                       const assignedIds = task.assignedUserIds
                         ? (typeof task.assignedUserIds === 'string' ? JSON.parse(task.assignedUserIds) : task.assignedUserIds)
                         : [];
-                      const assignedNames = assignedIds
-                        .map((id: string) => allUsers.find((u) => u.id === id)?.name || id)
+                      const assignedNames = (Array.isArray(assignedIds) ? assignedIds : [])
+                        .map((id: string) => allUsers.find((u) => u.id === id || isUserMatch(id, u, allUsers))?.name || id)
                         .filter(Boolean);
-                      const uniqueUserNames = Array.from(new Set([...stageNames, ...assignedNames]));
+                      const uniqueUserNames = stageNames.length > 0 ? stageNames : Array.from(new Set(assignedNames));
 
                       // Calculate Dynamic Priority (Requirement 3)
                       const dynamicPriority = calculatePriority(task.deadline, task.status, task.postingDate);
