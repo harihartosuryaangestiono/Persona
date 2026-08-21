@@ -106,6 +106,33 @@ export default function ProductionPage() {
       setSubmittingId(null);
     }
   };
+
+  // Complete task directly in Strategic without sending to Production/Editing pipeline
+  const handleCompleteInStrategic = async (task: any) => {
+    setSubmittingId(task.id);
+    try {
+      const rawTimeline = task.workflowTimeline ? (typeof task.workflowTimeline === 'string' ? JSON.parse(task.workflowTimeline) : task.workflowTimeline) : [];
+      rawTimeline.push({
+        status: 'Completed',
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || 'u-system',
+      });
+
+      await updateTask(task.id, {
+        status: 'Completed',
+        category: 'Strategic',
+        workflowTimeline: JSON.stringify(rawTimeline),
+      });
+
+      setSuccessMsg(`Task "${task.title}" completed directly in Strategic pipeline!`);
+      setTimeout(() => setSuccessMsg(null), 2000);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to complete task in Strategic', 'error');
+    } finally {
+      setSubmittingId(null);
+    }
+  };
  
   return (
     <div className="space-y-6 animate-fadeIn text-neutral-900 relative min-h-[80vh]">
@@ -178,14 +205,26 @@ export default function ProductionPage() {
                     Start Shooting
                   </button>
                 ) : t.status === 'Shooting' ? (
-                  <button
-                    onClick={() => openCompleteModal(t)}
-                    disabled={submittingId === t.id}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl transition text-xs flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    Complete & Send to Edit
-                  </button>
+                  <div className="flex-1 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => openCompleteModal(t)}
+                      disabled={submittingId === t.id}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-2 rounded-xl transition text-[11px] flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+                      title="Complete shooting & send to Production / Editing pipeline"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                      Complete & Edit
+                    </button>
+                    <button
+                      onClick={() => handleCompleteInStrategic(t)}
+                      disabled={submittingId === t.id}
+                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold py-2 px-2 rounded-xl transition text-[11px] flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+                      title="Complete task directly in Strategic without sending to Production pipeline"
+                    >
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      Complete in Strategic
+                    </button>
+                  </div>
                 ) : (
                   <div className="text-neutral-450 font-semibold text-xs italic flex items-center gap-1.5 py-1">
                     <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
@@ -233,23 +272,34 @@ export default function ProductionPage() {
                 />
               </div>
  
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setDriveModalTask(null)}
-                  className="px-4 py-2 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition"
+                  className="px-3 py-2 bg-neutral-100 text-neutral-700 font-semibold rounded-lg hover:bg-neutral-200 transition"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  onClick={() => {
+                    const task = driveModalTask;
+                    setDriveModalTask(null);
+                    handleCompleteInStrategic(task);
+                  }}
+                  className="px-3 py-2 bg-neutral-900 text-white font-bold rounded-lg hover:bg-neutral-800 transition flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5" /> Complete in Strategic
+                </button>
+                <button
                   type="submit"
                   disabled={submittingId === driveModalTask.id}
-                  className="px-5 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {submittingId === driveModalTask.id ? (
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    'Submit & Send'
+                    'Complete & Send to Edit'
                   )}
                 </button>
               </div>

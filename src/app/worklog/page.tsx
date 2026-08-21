@@ -135,7 +135,10 @@ export default function WorklogPage() {
     else if (userRoles.includes('Scheduler')) category = 'Scheduler';
 
     const calculatedScore = calculateTaskScore(category, taskTypeVal, normalizeFormat(formatVal), qtyVal);
-    setEditScore(userStage?.score || calculatedScore || w.score || 400);
+    const stageSum = Array.isArray(parsedStages) && parsedStages.length > 0
+      ? parsedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
+      : 0;
+    setEditScore(stageSum || w.score || userStage?.score || calculatedScore || 800);
 
     setEditDate(w.date ? new Date(w.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     setEditStatus(getStatusLabel(w.status || 'Brief'));
@@ -347,14 +350,10 @@ export default function WorklogPage() {
       qty: task.qty || 1,
       score: 0,
     }));
-    const userMatchedStage = Array.isArray(parsedStages) && parsedStages.length > 0
-      ? parsedStages.find((s: any) => isUserMatch(s.userId, { id: w.userId, name: w.userName || '' }) || isUserMatch(s.userName, { id: w.userId, name: w.userName || '' }))
-      : null;
-    const resolvedUserScore = userMatchedStage ? Number(userMatchedStage.score) || 0 : 0;
-    const stageScore = Array.isArray(parsedStages)
+    const stageScore = Array.isArray(parsedStages) && parsedStages.length > 0
       ? parsedStages.reduce((sum: number, s: any) => sum + (Number(s.score) || 0), 0)
       : 0;
-    const totalScore = resolvedUserScore || w.score || stageScore || task.score || 0;
+    const totalScore = stageScore || task.score || w.score || 0;
 
     return {
       ...w,

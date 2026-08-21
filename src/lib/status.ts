@@ -111,6 +111,7 @@ export const PRODUCTION_STATUS_OPTIONS = [
   'Ready to Post',
   'Scheduling',
   'Posted',
+  'Completed',
 ] as const;
 
 export function isStrategicPipeline(category?: string | null, taskType?: string | null): boolean {

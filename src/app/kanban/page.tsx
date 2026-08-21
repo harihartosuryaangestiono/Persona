@@ -24,7 +24,8 @@ import {
   FolderOpen,
   Calendar as CalendarIcon,
   Zap,
-  Play
+  Play,
+  CheckCircle2
 } from 'lucide-react';
 import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
@@ -766,6 +767,37 @@ export default function KanbanPage() {
     setSelectedTaskDetail(null);
   };
 
+  const handleCompleteInStrategic = async (task: TaskItem) => {
+    const rawTimeline = task.workflowTimeline || '[]';
+    let timeline: any[] = [];
+    try {
+      timeline = JSON.parse(rawTimeline);
+    } catch {
+      timeline = [];
+    }
+    timeline.push({
+      status: 'Completed',
+      timestamp: new Date().toISOString(),
+      userId: currentUser?.id || 'u-system',
+    });
+
+    await updateTask(task.id, {
+      status: 'Completed',
+      category: 'Strategic',
+      workflowTimeline: JSON.stringify(timeline),
+    } as any);
+
+    addActivity(
+      currentUser?.id || 'u-system',
+      'TASK',
+      task.id,
+      'MOVED',
+      `Completed content "${task.title}" directly in Strategic board without sending to Production`
+    );
+
+    showToast(`Task "${task.title}" completed directly in Strategic board!`, 'success');
+  };
+
   // Task Status updates (via drag & drop)
   const handleUpdateStatusWithWorklog = (taskId: string, newStatus: TaskItem['status']) => {
     const isAnggiOrGigie = currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie';
@@ -1332,6 +1364,31 @@ export default function KanbanPage() {
                               />
                             </div>
                           </div>
+
+                          {/* Production / Shooting completion choice buttons */}
+                          {((col as string) === 'Production / Shooting' || (task.status as any) === 'Production / Shooting' || task.status === 'Shooting' || task.status === 'Production') && task.category === 'Strategic' && (
+                            <div className="pt-2 border-t border-neutral-100 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Finish Shooting Choice:</div>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openHandoverModal(task)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[9px] py-1.5 px-1 rounded-lg transition flex items-center justify-center gap-1 shadow-xs"
+                                  title="Complete & move to Production / Editing pipeline"
+                                >
+                                  <Play className="w-3 h-3 shrink-0" /> Complete & Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompleteInStrategic(task)}
+                                  className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[9px] py-1.5 px-1 rounded-lg transition flex items-center justify-center gap-1 shadow-xs"
+                                  title="Complete directly in Strategic without sending to Production pipeline"
+                                >
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" /> Complete in Strategic
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1409,18 +1466,40 @@ export default function KanbanPage() {
                       <td className="px-4 py-3.5 font-mono text-amber-800 font-bold">{t.deadline ? t.deadline.substring(0, 10) : 'N/A'}</td>
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-neutral-900">{t.score}</td>
                       <td className="px-4 py-3.5 text-center">
-                        <button
-                          onClick={() => {
-                            if (canAccessTaskDetails(t)) {
-                              setSelectedTaskDetail(t);
-                            } else {
-                              showToast('Unauthorized: You are not assigned to this task.', 'warning');
-                            }
-                          }}
-                          className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {t.category === 'Strategic' && ((t.status as any) === 'Production / Shooting' || t.status === 'Shooting' || t.status === 'Production' || t.status === 'Ready for Production') && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openHandoverModal(t); }}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 shadow-xs"
+                                title="Complete & move to Production / Editing pipeline"
+                              >
+                                <Play className="w-3 h-3 shrink-0" /> Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleCompleteInStrategic(t); }}
+                                className="px-2 py-1 bg-neutral-900 hover:bg-neutral-800 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 shadow-xs"
+                                title="Complete directly in Strategic without sending to Production pipeline"
+                              >
+                                <CheckCircle2 className="w-3 h-3 shrink-0" /> Strategic
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => {
+                              if (canAccessTaskDetails(t)) {
+                                setSelectedTaskDetail(t);
+                              } else {
+                                showToast('Unauthorized: You are not assigned to this task.', 'warning');
+                              }
+                            }}
+                            className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2149,14 +2228,34 @@ export default function KanbanPage() {
                     Close
                   </button>
 
-                  {/* Send to Production Handover Action Button (Requirement 1, 6, 16) */}
-                  {selectedTaskDetail.category === 'Strategic' && selectedTaskDetail.status === 'Ready for Production' && (currentUser?.roles.includes('Strategist') || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (
-                    <button
-                      onClick={() => openHandoverModal(selectedTaskDetail)}
-                      className="bg-emerald-600 hover:bg-emerald-750 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1"
-                    >
-                      <Play className="w-3.5 h-3.5" /> Send to Production
-                    </button>
+                  {/* Shooting Completion Choice Buttons (Complete & Edit OR Complete in Strategic) */}
+                  {selectedTaskDetail.category === 'Strategic' && ((selectedTaskDetail.status as any) === 'Production / Shooting' || selectedTaskDetail.status === 'Shooting' || selectedTaskDetail.status === 'Production' || selectedTaskDetail.status === 'Ready for Production') && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetTask = selectedTaskDetail;
+                          setSelectedTaskDetail(null);
+                          openHandoverModal(targetTask);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 text-xs shadow-xs"
+                        title="Complete & move to Production / Editing pipeline"
+                      >
+                        <Play className="w-3.5 h-3.5" /> Complete & Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetTask = selectedTaskDetail;
+                          setSelectedTaskDetail(null);
+                          handleCompleteInStrategic(targetTask);
+                        }}
+                        className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 text-xs shadow-xs"
+                        title="Complete directly in Strategic without sending to Production pipeline"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Complete in Strategic
+                      </button>
+                    </div>
                   )}
 
                   {!(selectedTaskDetail.category !== 'Strategic' && (currentUser?.id === 'u-anggi' || currentUser?.id === 'u-gigie' || currentUser?.name?.toLowerCase() === 'anggi' || currentUser?.name?.toLowerCase() === 'gigie')) && (selectedTaskDetail.status === 'Posted' || selectedTaskDetail.status === 'Completed' || currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner')) && (

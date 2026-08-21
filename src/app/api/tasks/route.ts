@@ -482,13 +482,13 @@ export async function PATCH(req: Request) {
     if (body.previewLink !== undefined) updateData.previewLink = body.previewLink;
 
     if (body.checklist !== undefined) {
-      updateData.checklist = JSON.stringify(body.checklist);
+      updateData.checklist = typeof body.checklist === 'string' ? body.checklist : JSON.stringify(body.checklist);
     }
     if (body.comments !== undefined) {
-      updateData.comments = JSON.stringify(body.comments);
+      updateData.comments = typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments);
     }
     if (body.stages !== undefined) {
-      updateData.stages = JSON.stringify(body.stages);
+      updateData.stages = typeof body.stages === 'string' ? body.stages : JSON.stringify(body.stages);
     }
 
     // Execute atomic transaction to sync task changes and client budget usage (Requirement 10)
