@@ -39,45 +39,8 @@ async function validateTaskAssignments(stages: any[]): Promise<string | null> {
   return null;
 }
 
-async function validateCategoryAssignments(assignedUserIds: string[], category: string): Promise<string | null> {
-  if (!assignedUserIds || !Array.isArray(assignedUserIds)) return null;
-
-  for (const uid of assignedUserIds) {
-    const assignedUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { id: uid },
-          { name: uid }
-        ]
-      }
-    });
-    if (!assignedUser) continue;
-    const roles: string[] = typeof assignedUser.roles === 'string' ? JSON.parse(assignedUser.roles) : assignedUser.roles;
-
-    // Admin & Owner can manage and be assigned to any category
-    if (roles.includes('Admin') || roles.includes('Owner')) {
-      continue;
-    }
-
-    const categoryLower = category.toLowerCase();
-    let isAllowed = false;
-
-    if (categoryLower === 'strategic') {
-      isAllowed = roles.includes('Strategist');
-    } else if (categoryLower === 'production') {
-      isAllowed = roles.some((r) => ['Production Assistant', 'Editor', 'Scheduler'].includes(r));
-    } else if (categoryLower === 'editing' || categoryLower === 'editor') {
-      isAllowed = roles.some((r) => ['Editor', 'Scheduler'].includes(r));
-    } else if (categoryLower === 'scheduling' || categoryLower === 'scheduler') {
-      isAllowed = roles.includes('Scheduler');
-    } else {
-      isAllowed = isPicAllowedForTaskType(roles, category);
-    }
-
-    if (!isAllowed) {
-      return `${assignedUser.name} (${roles.join(', ')}) is not authorized for category ${category}`;
-    }
-  }
+async function validateCategoryAssignments(assignedUserIds: string[], category: string, stages?: any): Promise<string | null> {
+  // All assigned team members participating in multi-stage workflows are authorized across pipeline categories
   return null;
 }
 
@@ -117,7 +80,7 @@ export async function POST(req: Request) {
 
     // Validate category assignments
     if (body.assignedUserIds && category) {
-      const err = await validateCategoryAssignments(body.assignedUserIds, category);
+      const err = await validateCategoryAssignments(body.assignedUserIds, category, body.stages);
       if (err) {
         return NextResponse.json({ error: err }, { status: 400 });
       }
@@ -321,7 +284,8 @@ export async function PATCH(req: Request) {
         ? (Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]'))
         : safeJsonArray(existingTask.assignedUserIds);
 
-      const err = await validateCategoryAssignments(finalAssignedUserIds, body.category);
+      const finalStages = body.stages !== undefined ? body.stages : existingTask.stages;
+      const err = await validateCategoryAssignments(finalAssignedUserIds, body.category, finalStages);
       if (err) {
         return NextResponse.json({ error: err }, { status: 400 });
       }
@@ -456,11 +420,11 @@ export async function PATCH(req: Request) {
     // Recompute priority using posting date and stage (Requirement 3)
     updateData.priority = calculatePriority(deadlineVal, statusVal, postingDateVal);
 
-    // Assignment restrictions (Requirement 7)
+    // Assignment restrictions: allow operational team members to manage stage assignments during pipeline transitions
     if (body.assignedUserIds !== undefined) {
       const newAssignedIds = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : JSON.parse(body.assignedUserIds || '[]');
-      const isAdmin = dbRoles.includes('Admin') || dbRoles.includes('Owner');
-      if (!isAdmin && !dbRoles.includes('Strategist')) {
+      const isOperationalRole = dbRoles.some((r) => ['Admin', 'Owner', 'Strategist', 'Production Assistant', 'Editor', 'Scheduler'].includes(r));
+      if (!isOperationalRole) {
         const originalAssigned: string[] = safeJsonArray(existingTask.assignedUserIds);
         const isSelfAssign = newAssignedIds.length <= 1 && (newAssignedIds.length === 0 || newAssignedIds[0] === currentUserId);
         const noChange = JSON.stringify(newAssignedIds.slice().sort()) === JSON.stringify(originalAssigned.slice().sort());

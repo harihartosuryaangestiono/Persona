@@ -18,6 +18,26 @@ function formatUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
+function getTaskFormat(t: any): string {
+  const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+  if (Array.isArray(stages) && stages.length > 0) {
+    const paStage = stages.find((s: any) =>
+      s.role === 'Production Assistant' ||
+      s.taskType === 'Production Assistant' ||
+      s.role === 'Production' ||
+      (s.taskType && String(s.taskType).includes('Production'))
+    );
+    if (paStage && paStage.format) {
+      return paStage.format;
+    }
+    const firstStageWithFormat = stages.find((s: any) => s.format);
+    if (firstStageWithFormat && firstStageWithFormat.format) {
+      return firstStageWithFormat.format;
+    }
+  }
+  return t.format || 'N/A';
+}
+
 export default function ProductionPage() {
   const { tasks, updateTask } = useData();
   const { currentWorkspace } = useWorkspace();
@@ -56,9 +76,9 @@ export default function ProductionPage() {
  
     const userRoles = currentUser?.roles || [];
     let matchesCategory = false;
-    if (userRoles.includes('Production Assistant') && t.category === 'Production') matchesCategory = true;
-    if (userRoles.includes('Editor') && t.category === 'Editor') matchesCategory = true;
-    if (userRoles.includes('Strategist') && t.category === 'Strategic') matchesCategory = true;
+    if (userRoles.some((r) => ['Production Assistant', 'Editor', 'Strategist', 'Admin', 'Owner'].includes(r))) {
+      matchesCategory = true;
+    }
  
     return isAssigned || isStageAssignee || matchesCategory;
   });
@@ -184,7 +204,7 @@ export default function ProductionPage() {
                   </div>
                   <div>
                     <span className="text-neutral-550 text-[10px]">Format:</span>
-                    <p className="font-semibold text-neutral-900 mt-0.5">{t.format || 'N/A'}</p>
+                    <p className="font-semibold text-neutral-900 mt-0.5">{getTaskFormat(t)}</p>
                   </div>
                 </div>
               </div>

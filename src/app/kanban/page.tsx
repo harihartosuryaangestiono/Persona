@@ -557,12 +557,13 @@ export default function KanbanPage() {
       const assignedIds = Array.from(new Set(sanitizedStages.map((s) => s.userId)));
       const startingStatus = getFirstStatus(newCategory);
 
-      const editorOrContentStage = sanitizedStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || sanitizedStages[0];
-      let taskFormat = editorOrContentStage && editorOrContentStage.format && editorOrContentStage.format !== 'Per Post' && editorOrContentStage.format !== '4 Jam' ? editorOrContentStage.format : 'Reels';
+      const isProdTask = newCategory === 'Production' || (startingStatus as string) === 'Production' || (startingStatus as string) === 'Shooting';
+      const matchedStage = sanitizedStages.find((s) => isProdTask ? (s.role === 'Production Assistant' || s.taskType === 'Production Assistant') : (s.role === 'Editor' || s.taskType === 'Editing')) || sanitizedStages[0];
+      let taskFormat = matchedStage && matchedStage.format && matchedStage.format !== 'Per Post' ? matchedStage.format : (isProdTask ? '4 Jam' : 'Reels');
       if (newTitle.toLowerCase().includes('story') || newCategory === 'Scheduling') {
         taskFormat = 'Story Video';
       }
-      const taskType = editorOrContentStage ? editorOrContentStage.taskType : (newCategory === 'Scheduling' ? 'Scheduling' : 'Editing');
+      const taskType = matchedStage ? matchedStage.taskType : (newCategory === 'Scheduling' ? 'Scheduling' : (isProdTask ? 'Production Assistant' : 'Editing'));
 
       const formattedDriveLink = newDriveLink ? formatUrl(newDriveLink) : '';
       await addTask({
@@ -662,10 +663,11 @@ export default function KanbanPage() {
 
     const formattedDrive = editDriveLink ? formatUrl(editDriveLink) : '';
     const formattedPreview = editPreviewLink ? formatUrl(editPreviewLink) : '';
-    const editorOrContentStage = sanitizedEditStages.find((s) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) || sanitizedEditStages[0];
-    const primaryFormat = editorOrContentStage ? editorOrContentStage.format : selectedTaskDetail.format;
-    const primaryTaskType = editorOrContentStage ? editorOrContentStage.taskType : selectedTaskDetail.taskType;
-    const primaryQty = editorOrContentStage ? (editorOrContentStage.qty || 1) : (selectedTaskDetail.qty || 1);
+    const isEditProdTask = editStatus === 'Production' || editStatus === 'Shooting' || selectedTaskDetail?.category === 'Production';
+    const primaryStage = sanitizedEditStages.find((s) => isEditProdTask ? (s.role === 'Production Assistant' || s.taskType === 'Production Assistant') : (s.role === 'Editor' || s.taskType === 'Editing')) || sanitizedEditStages[0];
+    const primaryFormat = primaryStage ? primaryStage.format : selectedTaskDetail.format;
+    const primaryTaskType = primaryStage ? primaryStage.taskType : selectedTaskDetail.taskType;
+    const primaryQty = primaryStage ? (primaryStage.qty || 1) : (selectedTaskDetail.qty || 1);
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,

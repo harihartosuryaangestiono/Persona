@@ -109,20 +109,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : null;
     let resolvedFormat = t.format;
     if (Array.isArray(stages) && stages.length > 0) {
-      const editorOrContentStage = stages.find((s: any) =>
-        s.role === 'Editor' ||
-        s.taskType === 'Editing' ||
-        ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
-      );
-      if (editorOrContentStage && editorOrContentStage.format && editorOrContentStage.format !== 'Per Post' && editorOrContentStage.format !== '4 Jam') {
-        resolvedFormat = editorOrContentStage.format;
+      const isProductionTask = t.status === 'Production' || t.status === 'Shooting' || t.category === 'Production';
+      const matchedStage = isProductionTask
+        ? stages.find((s: any) => s.role === 'Production Assistant' || s.taskType === 'Production Assistant' || (s.format && s.format.includes('Jam')))
+        : stages.find((s: any) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format));
+
+      const targetStage = matchedStage || stages.find((s: any) => s.format);
+      if (targetStage && targetStage.format && targetStage.format !== 'Per Post') {
+        resolvedFormat = targetStage.format;
       }
     }
 
     const titleLower = t.title ? t.title.toLowerCase() : '';
     if (titleLower.includes('story')) {
       resolvedFormat = 'Story Video';
-    } else if (!resolvedFormat || resolvedFormat === 'Reels' || resolvedFormat === 'Per Post') {
+    } else if (!resolvedFormat || (resolvedFormat === 'Reels' && (t.category === 'Scheduler' || t.taskType === 'Scheduling')) || resolvedFormat === 'Per Post') {
       if (t.category === 'Scheduler' || t.taskType === 'Scheduling') {
         if (titleLower.includes('carousel')) resolvedFormat = 'Carousel';
         else if (titleLower.includes('grafis')) resolvedFormat = 'Grafis';
