@@ -7,6 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { Video, Calendar, MapPin, Users, CheckSquare, Camera, Upload, X, Check, Link } from 'lucide-react';
  
 import { useToast } from '@/context/ToastContext';
+import { resolvePrimaryEmployee } from '@/lib/rbac';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -39,9 +40,9 @@ function getTaskFormat(t: any): string {
 }
 
 export default function ProductionPage() {
-  const { tasks, updateTask } = useData();
+  const { tasks, updateTask, addWorklog } = useData();
   const { currentWorkspace } = useWorkspace();
-  const { currentUser } = useUser();
+  const { currentUser, allUsers } = useUser();
   const { showToast } = useToast();
  
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -144,6 +145,26 @@ export default function ProductionPage() {
         workflowTimeline: JSON.stringify(rawTimeline),
       });
 
+      const primaryAssignedUser = resolvePrimaryEmployee(task.stages, task.assignedUserIds, allUsers, currentUser);
+      await addWorklog({
+        clientId: task.clientId,
+        clientName: task.clientName,
+        contentTitle: task.title,
+        userId: primaryAssignedUser?.id || currentUser?.id,
+        userName: primaryAssignedUser?.name || currentUser?.name,
+        taskType: task.taskType || 'Production Assistant',
+        format: getTaskFormat(task),
+        qty: task.qty || 1,
+        score: task.score || 0,
+        previewLink: task.previewLink || task.driveLink || '',
+        stages: task.stages || null,
+        date: task.postingDate || new Date().toISOString(),
+        status: 'Completed',
+        month: task.month,
+        year: task.year,
+        contentId: task.contentId,
+      });
+
       setSuccessMsg(`Task "${task.title}" completed directly in Strategic pipeline!`);
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err) {
@@ -155,7 +176,7 @@ export default function ProductionPage() {
   };
  
   return (
-    <div className="space-y-6 animate-fadeIn text-neutral-900 relative min-h-[80vh]">
+    <div className="space-y-6 animate-fadeIn text-neutral-900 relative min-h-[80vh] pb-28">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">

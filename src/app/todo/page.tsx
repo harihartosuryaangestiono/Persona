@@ -95,7 +95,7 @@ export default function ToDoPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn text-neutral-900">
+    <div className="space-y-6 animate-fadeIn text-neutral-900 pb-28">
       {/* Top Header & Quick Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

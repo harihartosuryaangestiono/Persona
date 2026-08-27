@@ -143,16 +143,9 @@ export function normalizeStatusForPipeline(
   category?: string | null,
   taskType?: string | null
 ): string {
+  if (!status) return 'Brief';
   const resolved = getDbStatus(status);
-  const clean = resolved.trim();
-  const strategic = isStrategicPipeline(category, taskType);
-
-  if (strategic) {
-    if (clean.toLowerCase() === 'posted') return 'Completed';
-  } else {
-    if (clean.toLowerCase() === 'completed') return 'Posted';
-  }
-  return clean;
+  return resolved.trim();
 }
 
 

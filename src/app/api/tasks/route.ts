@@ -513,6 +513,76 @@ export async function PATCH(req: Request) {
         console.error('Failed to create activity log/notification for auto-assigned scheduler:', e);
       }
 
+      // Automatically create or update Worklog entry upon task completion / posting so score is recorded in Worklogs
+      if (res.status === 'Completed' || res.status === 'Posted') {
+        try {
+          const contentIdVal = res.contentId || existingTask.contentId || `content-${res.id}`;
+          const existingWl = await tx.worklog.findFirst({
+            where: {
+              OR: [
+                { contentId: contentIdVal },
+                { contentTitle: res.title }
+              ]
+            }
+          });
+
+          const finalStages = res.stages || existingTask.stages;
+          const parsedStages = finalStages ? (typeof finalStages === 'string' ? JSON.parse(finalStages) : finalStages) : [];
+          const assignedUserIds = res.assignedUserIds ? (typeof res.assignedUserIds === 'string' ? JSON.parse(res.assignedUserIds) : res.assignedUserIds) : [];
+
+          let targetUserId = currentUserId;
+          if (Array.isArray(parsedStages) && parsedStages.length > 0) {
+            const firstStageUser = parsedStages.find((s: any) => s.userId);
+            if (firstStageUser) targetUserId = firstStageUser.userId;
+          } else if (Array.isArray(assignedUserIds) && assignedUserIds.length > 0) {
+            targetUserId = assignedUserIds[0];
+          }
+
+          if (existingWl) {
+            await tx.worklog.update({
+              where: { id: existingWl.id },
+              data: {
+                status: res.status,
+                score: res.score,
+                cogs: res.cogs,
+                stages: typeof finalStages === 'string' ? finalStages : JSON.stringify(finalStages),
+                contentTitle: res.title,
+                clientId: res.clientId,
+                taskType: res.taskType || 'Editing',
+                format: res.format || 'Single Foto',
+                qty: res.qty || 1,
+                date: res.postingDate || existingWl.date,
+              }
+            });
+          } else {
+            await tx.worklog.create({
+              data: {
+                date: res.postingDate || new Date(),
+                userId: targetUserId,
+                clientId: res.clientId,
+                contentTitle: res.title,
+                taskType: res.taskType || 'Editing',
+                format: res.format || 'Single Foto',
+                qty: res.qty || 1,
+                score: res.score || 0,
+                cogs: res.cogs || 0,
+                status: res.status,
+                source: 'Automated Task Completion',
+                deadline: res.deadline,
+                previewLink: res.previewLink || res.driveLink || '',
+                stages: typeof finalStages === 'string' ? finalStages : JSON.stringify(finalStages),
+                month: res.month || 'July',
+                year: res.year || 2026,
+                contentId: contentIdVal,
+                isArchived: false,
+              }
+            });
+          }
+        } catch (wlErr) {
+          console.error('Failed to auto-create worklog on task completion:', wlErr);
+        }
+      }
+
       return res;
     });
 
