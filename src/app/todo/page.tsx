@@ -52,6 +52,20 @@ export default function ToDoPage() {
 
   const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
 
+  const getPicDisplayName = (t: any) => {
+    const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+    const stageUserIds = Array.isArray(stages) ? stages.map((s: any) => s.userId || s.userName).filter(Boolean) : [];
+    const assignedIds = typeof t.assignedUserIds === 'string' 
+      ? JSON.parse(t.assignedUserIds) 
+      : (t.assignedUserIds || []);
+    
+    const allIds = Array.from(new Set([...(assignedIds || []), ...stageUserIds]));
+    if (allIds.length === 0) return 'Jabin';
+
+    const names = allIds.map((id) => userMap.get(id) || id).filter(Boolean);
+    return names.join(', ');
+  };
+
   const displayedTasks = tasks.filter((t) => {
     const matchesClient = selectedClientId === 'ALL' || t.clientId === selectedClientId;
 
@@ -65,8 +79,11 @@ export default function ToDoPage() {
 
     const matchesCategory = selectedCategoryFilter === 'ALL' || taskCat === selectedCategoryFilter;
 
+    const picName = getPicDisplayName(t);
+
     const matchesSearch =
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      picName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (t.taskType && t.taskType.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -100,12 +117,6 @@ export default function ToDoPage() {
     setNewTitle('');
     setNewPreviewLink('');
     setIsAddModalOpen(false);
-  };
-
-  const getPicDisplayName = (assignedUserIds?: string[]) => {
-    if (!assignedUserIds || assignedUserIds.length === 0) return 'Jabin';
-    const firstId = assignedUserIds[0];
-    return userMap.get(firstId) || firstId || 'Jabin';
   };
 
   return (
@@ -256,7 +267,7 @@ export default function ToDoPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {displayedTasks.map((t, idx) => {
-                const picName = getPicDisplayName(t.assignedUserIds);
+                const picName = getPicDisplayName(t);
                 return (
                   <tr key={t.id} className="hover:bg-neutral-50/80 transition">
                     <td className="px-4 py-3 text-center font-mono text-neutral-400">{idx + 1}</td>
@@ -291,11 +302,15 @@ export default function ToDoPage() {
 
                     {/* PIC Avatar / Name */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-[9px]">
-                          {picName.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-neutral-800 font-semibold">{picName}</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {picName.split(', ').map((name, i) => (
+                          <div key={i} className="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-800 text-[11px] font-semibold">
+                            <div className="w-3.5 h-3.5 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-[8px]">
+                              {name.charAt(0).toUpperCase()}
+                            </div>
+                            <span>{name}</span>
+                          </div>
+                        ))}
                       </div>
                     </td>
 
