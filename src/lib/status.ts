@@ -133,18 +133,65 @@ export function isStrategicPipeline(category?: string | null, taskType?: string 
   return false;
 }
 
+export function hasSchedulerStage(
+  category?: string | null,
+  taskType?: string | null,
+  stages?: any,
+  assignedUserIds?: any
+): boolean {
+  if (category === 'Scheduler' || taskType === 'Scheduling') return true;
+
+  if (stages) {
+    let parsed: any[] = [];
+    if (typeof stages === 'string') {
+      try { parsed = JSON.parse(stages); } catch {}
+    } else if (Array.isArray(stages)) {
+      parsed = stages;
+    }
+    if (parsed.some((s: any) =>
+      s.role === 'Scheduler' ||
+      s.taskType === 'Scheduling' ||
+      (s.userName && s.userName.toLowerCase().includes('dinda')) ||
+      (s.userId && (s.userId === 'u-dindong' || String(s.userId).toLowerCase().includes('dinda')))
+    )) {
+      return true;
+    }
+  }
+
+  if (assignedUserIds) {
+    let parsedIds: any[] = [];
+    if (typeof assignedUserIds === 'string') {
+      try { parsedIds = JSON.parse(assignedUserIds); } catch {}
+    } else if (Array.isArray(assignedUserIds)) {
+      parsedIds = assignedUserIds;
+    }
+    if (parsedIds.some((id: string) => String(id).toLowerCase().includes('dindong') || String(id).toLowerCase().includes('dinda'))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Normalizes status based on pipeline requirement:
- * - Strategic pipeline terminal status is 'Completed' ('Posted' -> 'Completed')
- * - Production pipeline terminal status is 'Posted' ('Completed' -> 'Posted')
+ * - If status is 'Completed' (or 'Complete') AND task has a Scheduler stage (or Dinda as Scheduler) -> status becomes 'Posted'
+ * - If status is 'Completed' AND task does NOT have a Scheduler stage -> status remains 'Completed'
  */
 export function normalizeStatusForPipeline(
   status: string | null | undefined,
   category?: string | null,
-  taskType?: string | null
+  taskType?: string | null,
+  stages?: any,
+  assignedUserIds?: any
 ): string {
   if (!status) return 'Brief';
   const resolved = getDbStatus(status);
+
+  if ((resolved === 'Completed' || resolved === 'Complete') && hasSchedulerStage(category, taskType, stages, assignedUserIds)) {
+    return 'Posted';
+  }
+
   return resolved.trim();
 }
 

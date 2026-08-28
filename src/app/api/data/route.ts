@@ -9,8 +9,8 @@ import {
   LeaveRequest,
   ClientMonthlyBudget,
   ActivityLog,
-  Notification,
 } from '@prisma/client';
+import { normalizeStatusForPipeline } from '@/lib/status';
 
 export async function GET(req: Request) {
   try {
@@ -135,36 +135,47 @@ export async function GET(req: Request) {
       prisma.notification.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }),
     ]);
 
-    // Parse JSON fields in tasks
-    const formattedTasks = tasks.map((t: Task) => ({
-      ...t,
-      clientName: clients.find((c: Client) => c.id === t.clientId)?.name || 'Unknown Client',
-      clientColor: clients.find((c: Client) => c.id === t.clientId)?.clientColor || '#3B82F6',
-      assignedUserIds: t.assignedUserIds ? JSON.parse(t.assignedUserIds) : [],
-      files: t.files ? JSON.parse(t.files) : [],
-      checklist: t.checklist ? JSON.parse(t.checklist) : [],
-      comments: t.comments ? JSON.parse(t.comments) : [],
-      stages: t.stages ? JSON.parse(t.stages) : null,
-      postingDate: t.postingDate ? t.postingDate.toISOString().split('T')[0] : null,
-      deadline: t.deadline.toISOString().split('T')[0],
-      createdAt: t.createdAt.toISOString(),
-      updatedAt: t.updatedAt.toISOString(),
-      isArchived: t.isArchived,
-      archivedAt: t.archivedAt ? t.archivedAt.toISOString() : null,
-      archivedBy: t.archivedBy || null,
-      handoverUserId: t.handoverUserId || null,
-      handoverTime: t.handoverTime ? t.handoverTime.toISOString() : null,
-      workflowTimeline: t.workflowTimeline || null,
-    }));
+    // Parse JSON fields in tasks and normalize status
+    const formattedTasks = tasks.map((t: Task) => {
+      const assignedIds = t.assignedUserIds ? JSON.parse(t.assignedUserIds) : [];
+      const stagesObj = t.stages ? JSON.parse(t.stages) : null;
+      const normalizedStatus = normalizeStatusForPipeline(t.status, t.category, t.taskType, stagesObj, assignedIds);
+      return {
+        ...t,
+        status: normalizedStatus,
+        clientName: clients.find((c: Client) => c.id === t.clientId)?.name || 'Unknown Client',
+        clientColor: clients.find((c: Client) => c.id === t.clientId)?.clientColor || '#3B82F6',
+        assignedUserIds: assignedIds,
+        files: t.files ? JSON.parse(t.files) : [],
+        checklist: t.checklist ? JSON.parse(t.checklist) : [],
+        comments: t.comments ? JSON.parse(t.comments) : [],
+        stages: stagesObj,
+        postingDate: t.postingDate ? t.postingDate.toISOString().split('T')[0] : null,
+        deadline: t.deadline.toISOString().split('T')[0],
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+        isArchived: t.isArchived,
+        archivedAt: t.archivedAt ? t.archivedAt.toISOString() : null,
+        archivedBy: t.archivedBy || null,
+        handoverUserId: t.handoverUserId || null,
+        handoverTime: t.handoverTime ? t.handoverTime.toISOString() : null,
+        workflowTimeline: t.workflowTimeline || null,
+      };
+    });
 
-    const formattedWorklogs = worklogs.map((w: Worklog) => ({
-      ...w,
-      clientName: clients.find((c: Client) => c.id === w.clientId)?.name || 'Unknown Client',
-      userName: users.find((u: User) => u.id === w.userId)?.name || 'Unknown User',
-      date: w.date.toISOString(),
-      stages: w.stages ? JSON.parse(w.stages) : null,
-      isArchived: w.isArchived,
-    }));
+    const formattedWorklogs = worklogs.map((w: Worklog) => {
+      const stagesObj = w.stages ? JSON.parse(w.stages) : null;
+      const normalizedStatus = normalizeStatusForPipeline(w.status, (w as any).category, w.taskType, stagesObj, w.userId);
+      return {
+        ...w,
+        status: normalizedStatus,
+        clientName: clients.find((c: Client) => c.id === w.clientId)?.name || 'Unknown Client',
+        userName: users.find((u: User) => u.id === w.userId)?.name || 'Unknown User',
+        date: w.date.toISOString(),
+        stages: stagesObj,
+        isArchived: w.isArchived,
+      };
+    });
 
     const formattedBudgets = budgets.map((b: ClientMonthlyBudget) => ({
       ...b,
@@ -206,7 +217,7 @@ export async function GET(req: Request) {
         createdAt: w.createdAt.toISOString(),
         updatedAt: w.updatedAt.toISOString(),
       })),
-      notifications: notifications.map((n: Notification) => ({
+      notifications: notifications.map((n: any) => ({
         ...n,
         createdAt: n.createdAt.toISOString(),
       })),

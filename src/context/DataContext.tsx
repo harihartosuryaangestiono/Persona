@@ -161,13 +161,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       format: resolvedFormat || (resolvedCategory === 'Scheduler' ? 'Per Post' : 'Story Video'),
       score: resolvedScore,
       cogs: (resolvedScore || 0) * 250,
-      status: normalizeStatusForPipeline(t.status, resolvedCategory, t.taskType) as any,
+      status: normalizeStatusForPipeline(t.status, resolvedCategory, t.taskType, t.stages, t.assignedUserIds) as any,
     };
   };
 
   const normalizeWorklog = (w: WorklogItem): WorklogItem => ({
     ...w,
-    status: normalizeStatusForPipeline(w.status, (w as any).category, w.taskType),
+    status: normalizeStatusForPipeline(w.status, (w as any).category, w.taskType, w.stages, w.userId),
   });
 
   const fetchInitialData = async () => {

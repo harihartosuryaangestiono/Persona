@@ -323,7 +323,9 @@ export async function PATCH(req: Request) {
     if (body.status !== undefined) {
       const categoryVal = updateData.category || existingTask.category;
       const taskTypeVal = updateData.taskType || existingTask.taskType;
-      const dbStatus = normalizeStatusForPipeline(body.status, categoryVal, taskTypeVal);
+      const finalStagesForStatus = body.stages !== undefined ? body.stages : existingTask.stages;
+      const finalAssignedForStatus = body.assignedUserIds !== undefined ? body.assignedUserIds : existingTask.assignedUserIds;
+      const dbStatus = normalizeStatusForPipeline(body.status, categoryVal, taskTypeVal, finalStagesForStatus, finalAssignedForStatus);
       updateData.status = dbStatus;
       if (dbStatus !== existingTask.status) {
         const rawTimeline = existingTask.workflowTimeline || '[]';
