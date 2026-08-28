@@ -56,13 +56,15 @@ export default function ToDoPage() {
     const rows: any[] = [];
     tasks.forEach((t) => {
       const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : null;
-      const assignedIds = typeof t.assignedUserIds === 'string'
+      const assignedIds: string[] = typeof t.assignedUserIds === 'string'
         ? JSON.parse(t.assignedUserIds)
         : (t.assignedUserIds || []);
 
-      if (Array.isArray(stages) && stages.length > 1) {
+      const hasExplicitStages = Array.isArray(stages) && stages.length > 0;
+
+      if (hasExplicitStages) {
         stages.forEach((s: any, idx: number) => {
-          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && s.userName.toLowerCase().includes('dinda'));
+          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && s.userName.toLowerCase().includes('dinda')) || (s.userId && String(s.userId).toLowerCase().includes('dinda'));
           const isAssis = s.role === 'Production Assistant' || s.taskType === 'Production Assistant';
           const isStrat = s.role === 'Strategist' || isStrategicPipeline(undefined, s.taskType);
 
@@ -76,7 +78,7 @@ export default function ToDoPage() {
 
           const taskType = s.taskType || (cat === 'Scheduler' ? 'Scheduling' : 'Editing');
           const format = cat === 'Scheduler' ? 'Per Post' : (s.format || t.format || 'Story Video');
-          const pic = s.userName || userMap.get(s.userId) || s.userId || (assignedIds[idx] ? userMap.get(assignedIds[idx]) : 'Jabin');
+          const pic = s.userName || userMap.get(s.userId) || s.userId || (assignedIds[idx] ? (userMap.get(assignedIds[idx]) || assignedIds[idx]) : 'Jabin');
 
           let rowStatus = t.status;
           if (cat === 'Scheduler') {
@@ -116,20 +118,31 @@ export default function ToDoPage() {
           });
         });
       } else {
-        const isSched = t.taskType === 'Scheduling' || t.category === 'Scheduler';
-        const isAssis = t.taskType === 'Production Assistant' || t.category === 'Assistant';
-        const isStrat = isStrategicPipeline(t.category, t.taskType);
+        // Derive roles from assignedUserIds or task properties
+        const hasDinda = assignedIds.some((id: string) => {
+          const name = (userMap.get(id) || id || '').toLowerCase();
+          return name.includes('dinda') || id.toLowerCase().includes('dindong');
+        });
 
-        const cat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = isSched
+        // 1. Primary role
+        const primaryIsSched = t.taskType === 'Scheduling' || t.category === 'Scheduler';
+        const primaryIsAssis = t.taskType === 'Production Assistant' || t.category === 'Assistant';
+        const primaryIsStrat = isStrategicPipeline(t.category, t.taskType);
+
+        const primaryCat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = primaryIsSched
           ? 'Scheduler'
-          : isAssis
+          : primaryIsAssis
           ? 'Assistant'
-          : isStrat
+          : primaryIsStrat
           ? 'Strategic'
-          : (t.category === 'Scheduler' ? 'Scheduler' : t.category === 'Assistant' ? 'Assistant' : t.category === 'Strategic' ? 'Strategic' : 'Editor');
+          : 'Editor';
 
-        const firstPicId = assignedIds[0];
-        const picName = firstPicId ? (userMap.get(firstPicId) || firstPicId) : 'Jabin';
+        const firstPicId = assignedIds.find((id: string) => {
+          const name = (userMap.get(id) || id || '').toLowerCase();
+          return !name.includes('dinda') && !id.toLowerCase().includes('dindong');
+        }) || assignedIds[0];
+
+        const primaryPicName = firstPicId ? (userMap.get(firstPicId) || firstPicId) : 'Jabin';
 
         rows.push({
           rowId: t.id,
@@ -140,31 +153,76 @@ export default function ToDoPage() {
           month: t.month,
           year: t.year,
           title: t.title,
-          picName: picName,
-          category: cat,
-          taskType: t.taskType || (cat === 'Scheduler' ? 'Scheduling' : 'Editing'),
-          format: cat === 'Scheduler' ? 'Per Post' : t.format,
-          status: t.status,
-          score: cat === 'Scheduler' ? (t.score === 25 || t.score === 30 || t.score === 33 || t.score === 150 ? 5 * (t.qty || 1) : t.score) : t.score,
+          picName: primaryPicName,
+          category: primaryCat,
+          taskType: t.taskType || (primaryCat === 'Scheduler' ? 'Scheduling' : 'Editing'),
+          format: primaryCat === 'Scheduler' ? 'Per Post' : t.format,
+          status: (primaryCat === 'Scheduler' && t.status === 'Completed') ? 'Posted' : ((primaryCat !== 'Scheduler' && (t.status === 'Posted' || t.status === 'Completed')) ? 'Completed' : t.status),
+          score: primaryCat === 'Scheduler' ? (t.score === 25 || t.score === 30 || t.score === 33 || t.score === 150 ? 5 * (t.qty || 1) : t.score) : t.score,
           qty: t.qty || 1,
           previewLink: t.previewLink,
           driveLink: t.driveLink,
           originalTask: t,
         });
+
+        // 2. If Dinda is in assignedUserIds and primary task wasn't already Scheduling, add Dinda's Scheduling row
+        if (hasDinda && !primaryIsSched) {
+          const dindaId = assignedIds.find((id: string) => (userMap.get(id) || id || '').toLowerCase().includes('dinda')) || 'Dinda';
+          const dindaName = userMap.get(dindaId) || dindaId || 'Dinda';
+
+          rows.push({
+            rowId: `${t.id}-dinda-sched`,
+            originalTaskId: t.id,
+            clientId: t.clientId,
+            postingDate: t.postingDate,
+            deadline: t.deadline,
+            month: t.month,
+            year: t.year,
+            title: t.title,
+            picName: dindaName,
+            category: 'Scheduler',
+            taskType: 'Scheduling',
+            format: 'Per Post',
+            status: (t.status === 'Completed' || t.status === 'Posted') ? 'Posted' : 'Scheduling',
+            score: 5 * (t.qty || 1),
+            qty: t.qty || 1,
+            previewLink: t.previewLink,
+            driveLink: t.driveLink,
+            originalTask: t,
+          });
+        }
       }
     });
     return rows;
   }, [tasks, userMap]);
 
+  const categoryCounts = useMemo(() => {
+    const clientFiltered = allRows.filter((r) => selectedClientId === 'ALL' || r.clientId === selectedClientId);
+    return {
+      ALL: clientFiltered.length,
+      Editor: clientFiltered.filter((r) => r.category === 'Editor').length,
+      Scheduler: clientFiltered.filter((r) => r.category === 'Scheduler').length,
+      Assistant: clientFiltered.filter((r) => r.category === 'Assistant').length,
+      Strategic: clientFiltered.filter((r) => r.category === 'Strategic').length,
+    };
+  }, [allRows, selectedClientId]);
+
   const displayedRows = useMemo(() => {
     return allRows.filter((r) => {
       const matchesClient = selectedClientId === 'ALL' || r.clientId === selectedClientId;
       const matchesCategory = selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter;
+
+      const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
-        r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.picName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.taskType.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        r.title.toLowerCase().includes(q) ||
+        r.picName.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q) ||
+        r.taskType.toLowerCase().includes(q) ||
+        (r.format && r.format.toLowerCase().includes(q)) ||
+        (r.status && r.status.toLowerCase().includes(q)) ||
+        (r.postingDate && r.postingDate.includes(q)) ||
+        (r.deadline && r.deadline.includes(q));
 
       return matchesClient && matchesCategory && matchesSearch;
     });
@@ -235,7 +293,7 @@ export default function ToDoPage() {
                 : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
             }`}
           >
-            All Tasks
+            All Tasks ({categoryCounts.ALL})
           </button>
           <button
             onClick={() => setSelectedCategoryFilter('Editor')}
@@ -245,7 +303,7 @@ export default function ToDoPage() {
                 : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
             }`}
           >
-            Editing Tasks (25-150 pts)
+            Editing Tasks (25-150 pts) ({categoryCounts.Editor})
           </button>
           <button
             onClick={() => setSelectedCategoryFilter('Scheduler')}
@@ -255,7 +313,7 @@ export default function ToDoPage() {
                 : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
             }`}
           >
-            Scheduling Tasks (5 pts)
+            Scheduling Tasks (5 pts) ({categoryCounts.Scheduler})
           </button>
           <button
             onClick={() => setSelectedCategoryFilter('Assistant')}
@@ -265,7 +323,7 @@ export default function ToDoPage() {
                 : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
             }`}
           >
-            Production Tasks
+            Production Tasks ({categoryCounts.Assistant})
           </button>
           <button
             onClick={() => setSelectedCategoryFilter('Strategic')}
@@ -275,7 +333,7 @@ export default function ToDoPage() {
                 : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
             }`}
           >
-            Strategic Tasks
+            Strategic Tasks ({categoryCounts.Strategic})
           </button>
         </div>
 
