@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculatePriority } from '@/lib/score-calculator';
 import { isPicAllowedForTaskType, checkTaskAccess } from '@/lib/rbac';
-import { getDbStatus, normalizeStatusForPipeline } from '@/lib/status';
+import { getDbStatus, normalizeStatusForPipeline, isStrategicPipeline } from '@/lib/status';
 
 function checkAuth(req: Request, allowedRoles: string[]): boolean {
   const userRoleHeader = req.headers.get('X-User-Role') || '';
@@ -52,7 +52,13 @@ export async function POST(req: Request) {
     const isAdmin = roles.includes('Admin') || roles.includes('Owner');
 
     const body = await req.json();
-    const category = body.category || 'Editor';
+    let category = body.category;
+    if (!category || (category === 'Editor' && body.taskType === 'Scheduling')) {
+      if (body.taskType === 'Scheduling') category = 'Scheduler';
+      else if (body.taskType === 'Production Assistant') category = 'Assistant';
+      else if (isStrategicPipeline(undefined, body.taskType)) category = 'Strategic';
+      else if (!category) category = 'Editor';
+    }
 
     // Role restrictions on creation (Requirement 7 & 8)
     if (!isAdmin) {

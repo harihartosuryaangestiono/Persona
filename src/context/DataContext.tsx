@@ -132,12 +132,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    let resolvedCategory = t.category;
+    if (t.taskType === 'Scheduling') {
+      resolvedCategory = 'Scheduler';
+    } else if (t.taskType === 'Production Assistant') {
+      resolvedCategory = 'Assistant';
+    } else if (isStrategicPipeline(undefined, t.taskType)) {
+      resolvedCategory = 'Strategic';
+    } else if (!resolvedCategory) {
+      resolvedCategory = 'Editor';
+    }
+
     return {
       ...t,
+      category: resolvedCategory as any,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
       clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
       format: resolvedFormat || 'Story Video',
-      status: normalizeStatusForPipeline(t.status, t.category, t.taskType) as any,
+      status: normalizeStatusForPipeline(t.status, resolvedCategory, t.taskType) as any,
     };
   };
 

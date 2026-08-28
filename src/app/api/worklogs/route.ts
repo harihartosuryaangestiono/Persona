@@ -255,7 +255,12 @@ export async function POST(req: Request) {
         if (contentTitle !== undefined) taskUpdateData.title = contentTitle;
         if (clientId !== undefined) taskUpdateData.clientId = resolvedClientId;
         if (score !== undefined) taskUpdateData.score = Number(score);
-        if (taskType !== undefined) taskUpdateData.taskType = taskType;
+        if (taskType !== undefined) {
+          taskUpdateData.taskType = taskType;
+          if (taskType === 'Scheduling') taskUpdateData.category = 'Scheduler';
+          else if (taskType === 'Production Assistant') taskUpdateData.category = 'Assistant';
+          else if (isStrategicPipeline(undefined, taskType)) taskUpdateData.category = 'Strategic';
+        }
         if (format !== undefined) taskUpdateData.format = format;
         if (date !== undefined) {
           taskUpdateData.postingDate = new Date(date);

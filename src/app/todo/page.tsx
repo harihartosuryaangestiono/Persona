@@ -236,7 +236,15 @@ export default function ToDoPage() {
                       {t.title}
                     </td>
 
-                    <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{t.category || 'Editor'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-neutral-600">
+                      {t.taskType === 'Scheduling'
+                        ? 'Scheduler'
+                        : t.taskType === 'Production Assistant'
+                        ? 'Assistant'
+                        : isStrategicPipeline(t.category, t.taskType)
+                        ? 'Strategic'
+                        : t.category || 'Editor'}
+                    </td>
 
                     <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{t.taskType || 'Editing'}</td>
 
