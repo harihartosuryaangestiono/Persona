@@ -8,6 +8,10 @@ import { Plus, X, Calendar as CalendarIcon, Link2, CheckCircle2 } from 'lucide-r
 import { calculateAutoDeadline } from '@/lib/score-calculator';
 
 export function FloatingQuickAction() {
+  return null;
+}
+
+function FloatingQuickActionDisabled() {
   const { currentUser, allUsers } = useUser();
   const { clients, addTask } = useData();
   const { currentWorkspace } = useWorkspace();

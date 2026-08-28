@@ -176,7 +176,7 @@ export default function ProductionPage() {
   };
  
   return (
-    <div className="space-y-6 animate-fadeIn text-neutral-900 relative min-h-[80vh] pb-28">
+    <div className="space-y-6 animate-fadeIn text-neutral-900 relative min-h-[80vh] pb-36">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">

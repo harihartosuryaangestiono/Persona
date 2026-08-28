@@ -873,7 +873,7 @@ export default function WorklogPage() {
   };
 
   return (
-    <div className="space-y-6 text-neutral-900 animate-fadeIn pb-28">
+    <div className="space-y-6 text-neutral-900 animate-fadeIn pb-36">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

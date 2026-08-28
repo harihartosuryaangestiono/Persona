@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
@@ -50,45 +50,125 @@ export default function ToDoPage() {
   const [newPreviewLink, setNewPreviewLink] = useState('');
   const [newQty, setNewQty] = useState(1);
 
-  const userMap = new Map(allUsers.map((u) => [u.id, u.name]));
+  const userMap = useMemo(() => new Map(allUsers.map((u) => [u.id, u.name])), [allUsers]);
 
-  const getPicDisplayName = (t: any) => {
-    const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-    const stageUserIds = Array.isArray(stages) ? stages.map((s: any) => s.userId || s.userName).filter(Boolean) : [];
-    const assignedIds = typeof t.assignedUserIds === 'string' 
-      ? JSON.parse(t.assignedUserIds) 
-      : (t.assignedUserIds || []);
-    
-    const allIds = Array.from(new Set([...(assignedIds || []), ...stageUserIds]));
-    if (allIds.length === 0) return 'Jabin';
+  const allRows = useMemo(() => {
+    const rows: any[] = [];
+    tasks.forEach((t) => {
+      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : null;
+      const assignedIds = typeof t.assignedUserIds === 'string'
+        ? JSON.parse(t.assignedUserIds)
+        : (t.assignedUserIds || []);
 
-    const names = allIds.map((id) => userMap.get(id) || id).filter(Boolean);
-    return names.join(', ');
-  };
+      if (Array.isArray(stages) && stages.length > 1) {
+        stages.forEach((s: any, idx: number) => {
+          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && s.userName.toLowerCase().includes('dinda'));
+          const isAssis = s.role === 'Production Assistant' || s.taskType === 'Production Assistant';
+          const isStrat = s.role === 'Strategist' || isStrategicPipeline(undefined, s.taskType);
 
-  const displayedTasks = tasks.filter((t) => {
-    const matchesClient = selectedClientId === 'ALL' || t.clientId === selectedClientId;
+          const cat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = isSched
+            ? 'Scheduler'
+            : isAssis
+            ? 'Assistant'
+            : isStrat
+            ? 'Strategic'
+            : 'Editor';
 
-    const taskCat = t.taskType === 'Scheduling'
-      ? 'Scheduler'
-      : t.taskType === 'Production Assistant'
-      ? 'Assistant'
-      : isStrategicPipeline(t.category, t.taskType)
-      ? 'Strategic'
-      : (t.category || 'Editor');
+          const taskType = s.taskType || (cat === 'Scheduler' ? 'Scheduling' : 'Editing');
+          const format = cat === 'Scheduler' ? 'Per Post' : (s.format || t.format || 'Story Video');
+          const pic = s.userName || userMap.get(s.userId) || s.userId || (assignedIds[idx] ? userMap.get(assignedIds[idx]) : 'Jabin');
 
-    const matchesCategory = selectedCategoryFilter === 'ALL' || taskCat === selectedCategoryFilter;
+          let rowStatus = t.status;
+          if (cat === 'Scheduler') {
+            rowStatus = (t.status === 'Posted' || t.status === 'Completed' || t.status === 'Scheduling')
+              ? (t.status === 'Completed' ? 'Posted' : t.status)
+              : 'Scheduling';
+          } else {
+            if (t.status === 'Posted' || t.status === 'Completed') {
+              rowStatus = 'Completed';
+            }
+          }
 
-    const picName = getPicDisplayName(t);
+          let score = Number(s.score);
+          if (isNaN(score) || score <= 0) {
+            score = cat === 'Scheduler' ? 5 * (s.qty || t.qty || 1) : (t.score || 10);
+          }
 
-    const matchesSearch =
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      picName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (t.taskType && t.taskType.toLowerCase().includes(searchQuery.toLowerCase()));
+          rows.push({
+            rowId: `${t.id}-stage-${idx}`,
+            originalTaskId: t.id,
+            clientId: t.clientId,
+            postingDate: t.postingDate,
+            deadline: t.deadline,
+            month: t.month,
+            year: t.year,
+            title: t.title,
+            picName: pic,
+            category: cat,
+            taskType: taskType,
+            format: format,
+            status: rowStatus,
+            score: score,
+            qty: s.qty || t.qty || 1,
+            previewLink: t.previewLink,
+            driveLink: t.driveLink,
+            originalTask: t,
+          });
+        });
+      } else {
+        const isSched = t.taskType === 'Scheduling' || t.category === 'Scheduler';
+        const isAssis = t.taskType === 'Production Assistant' || t.category === 'Assistant';
+        const isStrat = isStrategicPipeline(t.category, t.taskType);
 
-    return matchesClient && matchesCategory && matchesSearch;
-  });
+        const cat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = isSched
+          ? 'Scheduler'
+          : isAssis
+          ? 'Assistant'
+          : isStrat
+          ? 'Strategic'
+          : (t.category === 'Scheduler' ? 'Scheduler' : t.category === 'Assistant' ? 'Assistant' : t.category === 'Strategic' ? 'Strategic' : 'Editor');
+
+        const firstPicId = assignedIds[0];
+        const picName = firstPicId ? (userMap.get(firstPicId) || firstPicId) : 'Jabin';
+
+        rows.push({
+          rowId: t.id,
+          originalTaskId: t.id,
+          clientId: t.clientId,
+          postingDate: t.postingDate,
+          deadline: t.deadline,
+          month: t.month,
+          year: t.year,
+          title: t.title,
+          picName: picName,
+          category: cat,
+          taskType: t.taskType || (cat === 'Scheduler' ? 'Scheduling' : 'Editing'),
+          format: cat === 'Scheduler' ? 'Per Post' : t.format,
+          status: t.status,
+          score: cat === 'Scheduler' ? (t.score === 25 || t.score === 30 || t.score === 33 || t.score === 150 ? 5 * (t.qty || 1) : t.score) : t.score,
+          qty: t.qty || 1,
+          previewLink: t.previewLink,
+          driveLink: t.driveLink,
+          originalTask: t,
+        });
+      }
+    });
+    return rows;
+  }, [tasks, userMap]);
+
+  const displayedRows = useMemo(() => {
+    return allRows.filter((r) => {
+      const matchesClient = selectedClientId === 'ALL' || r.clientId === selectedClientId;
+      const matchesCategory = selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter;
+      const matchesSearch =
+        r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.picName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.taskType.toLowerCase().includes(searchQuery.toLowerCase());
+
+      return matchesClient && matchesCategory && matchesSearch;
+    });
+  }, [allRows, selectedClientId, selectedCategoryFilter, searchQuery]);
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +200,7 @@ export default function ToDoPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn text-neutral-900 pb-28">
+    <div className="space-y-6 animate-fadeIn text-neutral-900 pb-36">
       {/* Top Header & Quick Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -266,17 +346,16 @@ export default function ToDoPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {displayedTasks.map((t, idx) => {
-                const picName = getPicDisplayName(t);
+              {displayedRows.map((r, idx) => {
                 return (
-                  <tr key={t.id} className="hover:bg-neutral-50/80 transition">
+                  <tr key={r.rowId} className="hover:bg-neutral-50/80 transition">
                     <td className="px-4 py-3 text-center font-mono text-neutral-400">{idx + 1}</td>
 
                     {/* Tanggal Posting Editable */}
                     <td className="px-4 py-3 font-mono whitespace-nowrap">
                       <input
                         type="date"
-                        value={formatDateForInput(t.postingDate)}
+                        value={formatDateForInput(r.postingDate)}
                         onChange={(e) => {
                           const newPosting = e.target.value;
                           if (!newPosting) return;
@@ -286,10 +365,10 @@ export default function ToDoPage() {
                             'January', 'February', 'March', 'April', 'May', 'June',
                             'July', 'August', 'September', 'October', 'November', 'December'
                           ];
-                          const newMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : t.month;
-                          const newYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : t.year;
+                          const newMonth = !isNaN(dateObj.getTime()) ? monthNames[dateObj.getMonth()] : r.month;
+                          const newYear = !isNaN(dateObj.getTime()) ? dateObj.getFullYear() : r.year;
 
-                          updateTask(t.id, {
+                          updateTask(r.originalTaskId, {
                             postingDate: newPosting,
                             deadline: newDL,
                             month: newMonth,
@@ -302,62 +381,54 @@ export default function ToDoPage() {
 
                     {/* PIC Avatar / Name */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {picName.split(', ').map((name, i) => (
-                          <div key={i} className="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-800 text-[11px] font-semibold">
-                            <div className="w-3.5 h-3.5 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-[8px]">
-                              {name.charAt(0).toUpperCase()}
-                            </div>
-                            <span>{name}</span>
+                      <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-800 text-[11px] font-semibold">
+                          <div className="w-3.5 h-3.5 rounded-full bg-neutral-900 text-white flex items-center justify-center font-bold text-[8px]">
+                            {r.picName.charAt(0).toUpperCase()}
                           </div>
-                        ))}
+                          <span>{r.picName}</span>
+                        </div>
                       </div>
                     </td>
 
                     {/* Deadline Auto (-3d) */}
                     <td className="px-4 py-3 font-mono text-neutral-900 font-semibold whitespace-nowrap">
-                      {t.deadline}
+                      {r.deadline}
                     </td>
 
                     {/* Content Title */}
-                    <td className="px-4 py-3 font-medium text-neutral-900 max-w-xs truncate" title={t.title}>
-                      {t.title}
+                    <td className="px-4 py-3 font-medium text-neutral-900 max-w-xs truncate" title={r.title}>
+                      {r.title}
                     </td>
 
-                    <td className="px-4 py-3 whitespace-nowrap text-neutral-600">
-                      {t.taskType === 'Scheduling'
-                        ? 'Scheduler'
-                        : t.taskType === 'Production Assistant'
-                        ? 'Assistant'
-                        : isStrategicPipeline(t.category, t.taskType)
-                        ? 'Strategic'
-                        : t.category || 'Editor'}
+                    <td className="px-4 py-3 whitespace-nowrap font-medium text-neutral-800">
+                      {r.category}
                     </td>
 
-                    <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{t.taskType || 'Editing'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{r.taskType}</td>
 
                     <td className="px-4 py-3 font-mono text-neutral-700 whitespace-nowrap font-medium">
-                      {t.taskType === 'Scheduling' || t.category === 'Scheduler' ? 'Per Post' : t.format}
+                      {r.format}
                     </td>
 
                     {/* Status Badge Select */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <select
-                        value={t.status}
-                        onChange={(e) => updateTask(t.id, { status: e.target.value as any })}
+                        value={r.status}
+                        onChange={(e) => updateTask(r.originalTaskId, { status: e.target.value as any })}
                         className={`bg-white border border-neutral-200 rounded px-2.5 py-1 text-[11px] font-semibold focus:outline-hidden ${
-                          t.status === 'Posted' || t.status === 'Completed'
+                          r.status === 'Posted' || r.status === 'Completed'
                             ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                            : t.status === 'Waiting for Approval' || t.status === 'Approval'
+                            : r.status === 'Waiting for Approval' || r.status === 'Approval'
                             ? 'text-amber-700 bg-amber-50 border-amber-200'
-                            : (t.status as any) === 'Ready to Post' || (t.status as any) === 'Ready To Post'
+                            : (r.status as any) === 'Ready to Post' || (r.status as any) === 'Ready To Post'
                             ? 'text-blue-700 bg-blue-50 border-blue-200'
-                            : t.status === 'Brief'
+                            : r.status === 'Brief'
                             ? 'text-neutral-500 bg-neutral-50'
                             : 'text-neutral-800'
                         }`}
                       >
-                        {(isStrategicPipeline(t.category, t.taskType)
+                        {(r.category === 'Strategic'
                           ? STRATEGIC_STATUS_OPTIONS
                           : PRODUCTION_STATUS_OPTIONS
                         ).map((st) => (
@@ -370,16 +441,14 @@ export default function ToDoPage() {
 
                     {/* Score (Pts) */}
                     <td className="px-4 py-3 text-center font-mono font-bold text-neutral-900 whitespace-nowrap">
-                      {t.taskType === 'Scheduling' || t.category === 'Scheduler'
-                        ? (t.score === 25 || t.score === 30 || t.score === 33 || t.score === 150 ? 5 * (t.qty || 1) : t.score)
-                        : t.score} pts
+                      {r.score} pts
                     </td>
 
                     {/* Preview Link */}
                     <td className="px-4 py-3 text-center whitespace-nowrap">
-                      {t.previewLink || t.driveLink ? (
+                      {r.previewLink || r.driveLink ? (
                         <a
-                          href={t.previewLink || t.driveLink}
+                          href={r.previewLink || r.driveLink}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex p-1 rounded hover:bg-neutral-100 text-neutral-800 transition"
@@ -392,12 +461,12 @@ export default function ToDoPage() {
                       )}
                     </td>
 
-                    <td className="px-4 py-3 text-center font-mono font-semibold">{t.qty}</td>
+                    <td className="px-4 py-3 text-center font-mono font-semibold">{r.qty}</td>
                   </tr>
                 );
               })}
 
-              {displayedTasks.length === 0 && (
+              {displayedRows.length === 0 && (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-neutral-400 italic">
                     No tasks found matching current filter.

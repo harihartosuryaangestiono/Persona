@@ -34,7 +34,6 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
         </main>
       </div>
       <div className="print:hidden">
-        <FloatingQuickAction />
         <PersonaAIFloatingWidget />
         <WelcomeModal />
       </div>

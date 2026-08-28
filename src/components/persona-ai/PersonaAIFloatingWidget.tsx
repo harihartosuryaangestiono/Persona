@@ -142,12 +142,12 @@ export default function PersonaAIFloatingWidget() {
         <button
           onClick={() => setIsOpen(true)}
           title="Open Persona AI BI Chat"
-          className="fixed bottom-6 right-24 z-40 bg-neutral-900/95 text-white font-semibold text-xs px-3.5 py-2.5 rounded-full shadow-xl hover:bg-neutral-800 transition transform hover:scale-105 active:scale-95 flex items-center gap-2 border border-neutral-700/80 backdrop-blur-md group"
+          className="fixed bottom-5 right-5 z-30 bg-neutral-900/95 text-white font-semibold text-xs p-2.5 sm:px-3.5 sm:py-2 rounded-full shadow-xl hover:bg-neutral-800 transition transform hover:scale-105 active:scale-95 flex items-center gap-2 border border-neutral-700/80 backdrop-blur-md group"
         >
           <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
             <Sparkles className="w-3 h-3 animate-pulse" />
           </div>
-          <span className="hidden sm:inline">Persona AI BI Chat</span>
+          <span className="hidden sm:inline text-[11px]">Persona AI BI Chat</span>
         </button>
       )}
 
