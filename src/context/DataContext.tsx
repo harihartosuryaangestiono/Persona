@@ -133,8 +133,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     let resolvedCategory = t.category;
-    if (t.taskType === 'Scheduling') {
+    let resolvedScore = t.score;
+    if (t.taskType === 'Scheduling' || resolvedCategory === 'Scheduler') {
       resolvedCategory = 'Scheduler';
+      resolvedFormat = 'Per Post';
+      let schedScore = 5 * (t.qty || 1);
+      if (Array.isArray(stages) && stages.length > 0) {
+        const schedStage = stages.find((s: any) => s.role === 'Scheduler' || s.taskType === 'Scheduling');
+        if (schedStage && Number(schedStage.score) > 0) {
+          schedScore = Number(schedStage.score);
+        }
+      }
+      resolvedScore = schedScore;
     } else if (t.taskType === 'Production Assistant') {
       resolvedCategory = 'Assistant';
     } else if (isStrategicPipeline(undefined, t.taskType)) {
@@ -148,7 +158,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       category: resolvedCategory as any,
       clientName: t.clientName || matchedClient?.name || 'Unknown Client',
       clientColor: t.clientColor || matchedClient?.clientColor || '#3B82F6',
-      format: resolvedFormat || 'Story Video',
+      format: resolvedFormat || (resolvedCategory === 'Scheduler' ? 'Per Post' : 'Story Video'),
+      score: resolvedScore,
+      cogs: (resolvedScore || 0) * 250,
       status: normalizeStatusForPipeline(t.status, resolvedCategory, t.taskType) as any,
     };
   };

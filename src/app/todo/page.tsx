@@ -34,6 +34,7 @@ export default function ToDoPage() {
   const { currentWorkspace } = useWorkspace();
 
   const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'ALL' | 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -53,10 +54,23 @@ export default function ToDoPage() {
 
   const displayedTasks = tasks.filter((t) => {
     const matchesClient = selectedClientId === 'ALL' || t.clientId === selectedClientId;
+
+    const taskCat = t.taskType === 'Scheduling'
+      ? 'Scheduler'
+      : t.taskType === 'Production Assistant'
+      ? 'Assistant'
+      : isStrategicPipeline(t.category, t.taskType)
+      ? 'Strategic'
+      : (t.category || 'Editor');
+
+    const matchesCategory = selectedCategoryFilter === 'ALL' || taskCat === selectedCategoryFilter;
+
     const matchesSearch =
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesClient && matchesSearch;
+      (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (t.taskType && t.taskType.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return matchesClient && matchesCategory && matchesSearch;
   });
 
   const handleCreateTask = (e: React.FormEvent) => {
@@ -115,49 +129,108 @@ export default function ToDoPage() {
         </button>
       </div>
 
-      {/* Client Selector & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
-        {/* Client Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+      {/* Client & Category Selector Controls */}
+      <div className="space-y-3 p-4 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
+        {/* Category Filter Pills */}
+        <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 overflow-x-auto text-xs">
+          <span className="text-neutral-500 font-medium shrink-0 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> Category:
+          </span>
           <button
-            onClick={() => setSelectedClientId('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              selectedClientId === 'ALL'
+            onClick={() => setSelectedCategoryFilter('ALL')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedCategoryFilter === 'ALL'
                 ? 'bg-neutral-900 text-white shadow-xs'
                 : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
             }`}
           >
-            All Clients ({tasks.length})
+            All Tasks
           </button>
-          {clients.map((c) => {
-            const clientTaskCount = tasks.filter((t) => t.clientId === c.id).length;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setSelectedClientId(c.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${
-                  selectedClientId === c.id
-                    ? 'bg-neutral-900 text-white shadow-xs'
-                    : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.clientColor }} />
-                {c.name} ({clientTaskCount})
-              </button>
-            );
-          })}
+          <button
+            onClick={() => setSelectedCategoryFilter('Editor')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedCategoryFilter === 'Editor'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+          >
+            Editing Tasks (25-150 pts)
+          </button>
+          <button
+            onClick={() => setSelectedCategoryFilter('Scheduler')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedCategoryFilter === 'Scheduler'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+            }`}
+          >
+            Scheduling Tasks (5 pts)
+          </button>
+          <button
+            onClick={() => setSelectedCategoryFilter('Assistant')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedCategoryFilter === 'Assistant'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            Production Tasks
+          </button>
+          <button
+            onClick={() => setSelectedCategoryFilter('Strategic')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedCategoryFilter === 'Strategic'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            Strategic Tasks
+          </button>
         </div>
 
-        {/* Search Input */}
-        <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
-          <Search className="w-4 h-4 text-neutral-400" />
-          <input
-            type="text"
-            placeholder="Search title, category..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent focus:outline-none placeholder-neutral-400 w-48"
-          />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Client Filter Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+            <button
+              onClick={() => setSelectedClientId('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                selectedClientId === 'ALL'
+                  ? 'bg-neutral-900 text-white shadow-xs'
+                  : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              All Clients ({tasks.length})
+            </button>
+            {clients.map((c) => {
+              const clientTaskCount = tasks.filter((t) => t.clientId === c.id).length;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedClientId(c.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-2 ${
+                    selectedClientId === c.id
+                      ? 'bg-neutral-900 text-white shadow-xs'
+                      : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.clientColor }} />
+                  {c.name} ({clientTaskCount})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search Input */}
+          <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
+            <Search className="w-4 h-4 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Search title, category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent focus:outline-none placeholder-neutral-400 w-48"
+            />
+          </div>
         </div>
       </div>
 
@@ -248,7 +321,9 @@ export default function ToDoPage() {
 
                     <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{t.taskType || 'Editing'}</td>
 
-                    <td className="px-4 py-3 font-mono text-neutral-700 whitespace-nowrap font-medium">{t.format}</td>
+                    <td className="px-4 py-3 font-mono text-neutral-700 whitespace-nowrap font-medium">
+                      {t.taskType === 'Scheduling' || t.category === 'Scheduler' ? 'Per Post' : t.format}
+                    </td>
 
                     {/* Status Badge Select */}
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -280,7 +355,9 @@ export default function ToDoPage() {
 
                     {/* Score (Pts) */}
                     <td className="px-4 py-3 text-center font-mono font-bold text-neutral-900 whitespace-nowrap">
-                      {t.score} pts
+                      {t.taskType === 'Scheduling' || t.category === 'Scheduler'
+                        ? (t.score === 25 || t.score === 30 || t.score === 33 || t.score === 150 ? 5 * (t.qty || 1) : t.score)
+                        : t.score} pts
                     </td>
 
                     {/* Preview Link */}

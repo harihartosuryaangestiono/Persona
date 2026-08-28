@@ -16,8 +16,17 @@ export async function GET(req: Request) {
   try {
     const userIdHeader = req.headers.get('X-User-Id') || '';
     
-    // Authenticate and fetch user from DB to identify roles
-    const userRecord = userIdHeader ? await prisma.user.findUnique({ where: { id: userIdHeader } }) : null;
+    // Authenticate and fetch user from DB to identify roles with transient retry
+    let userRecord = null;
+    if (userIdHeader) {
+      try {
+        userRecord = await prisma.user.findUnique({ where: { id: userIdHeader } });
+      } catch (err) {
+        console.warn('Prisma user lookup transient retry:', err);
+        await new Promise((r) => setTimeout(r, 400));
+        userRecord = await prisma.user.findUnique({ where: { id: userIdHeader } }).catch(() => null);
+      }
+    }
     const dbRoles: string[] = userRecord ? (typeof userRecord.roles === 'string' ? JSON.parse(userRecord.roles) : userRecord.roles) : [];
     
     let tasksQuery: any = { orderBy: { createdAt: 'desc' } };
