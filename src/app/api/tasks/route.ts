@@ -301,7 +301,13 @@ export async function PATCH(req: Request) {
 
     if (body.title !== undefined) updateData.title = body.title;
     if (body.description !== undefined) updateData.description = body.description;
-    if (body.category !== undefined) updateData.category = body.category;
+    if (body.category !== undefined) {
+      updateData.category = body.category;
+    } else if (body.taskType === 'Scheduling') {
+      updateData.category = 'Scheduler';
+    } else if (body.taskType === 'Production Assistant') {
+      updateData.category = 'Production';
+    }
     if (body.taskType !== undefined) updateData.taskType = body.taskType;
     if (body.format !== undefined) updateData.format = body.format;
     if (body.qty !== undefined) updateData.qty = Number(body.qty);

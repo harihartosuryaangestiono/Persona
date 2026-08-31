@@ -668,11 +668,25 @@ export default function KanbanPage() {
     const primaryFormat = primaryStage ? primaryStage.format : selectedTaskDetail.format;
     const primaryTaskType = primaryStage ? primaryStage.taskType : selectedTaskDetail.taskType;
     const primaryQty = primaryStage ? (primaryStage.qty || 1) : (selectedTaskDetail.qty || 1);
+    let derivedCategory = selectedTaskDetail.category;
+    if (primaryStage) {
+      if (primaryStage.role === 'Scheduler' || primaryStage.taskType === 'Scheduling') {
+        derivedCategory = 'Scheduler' as any;
+      } else if (primaryStage.role === 'Production Assistant' || primaryStage.taskType === 'Production Assistant') {
+        derivedCategory = 'Production' as any;
+      } else if (primaryStage.role === 'Strategist') {
+        derivedCategory = 'Strategic' as any;
+      } else if (primaryStage.role === 'Editor' || primaryStage.taskType === 'Editing' || primaryStage.taskType === 'Revisi') {
+        derivedCategory = 'Editor' as any;
+      }
+    }
+
     const updates: Partial<TaskItem> = {
       title: editTitle,
       clientId: targetClient.id,
       clientName: targetClient.name,
       clientColor: targetClient.clientColor,
+      category: derivedCategory,
       postingDate: editPostingDate,
       deadline: editDeadline,
       status: editStatus,
