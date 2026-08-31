@@ -30,6 +30,7 @@ import {
 import { calculateTaskScore, calculateCOGS, calculateAutoDeadline, calculatePriority, getPriorityColorClass } from '@/lib/score-calculator';
 import { TaskItem, ClientItem, UserPersona } from '@/lib/types';
 import { normalizeRoles, hasRole, hasAnyRole, isUserMatch, resolvePrimaryEmployee } from '@/lib/rbac';
+import { formatWorkflowCategory } from '@/lib/status';
 
 // Updated column configurations (Requirement 12)
 const STRATEGIC_COLUMNS: TaskItem['status'][] = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production', 'Production / Shooting' as any, 'Completed'];
@@ -1493,7 +1494,7 @@ export default function KanbanPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <span className="font-bold text-neutral-900">{t.title}</span>
-                        <span className="text-[10px] text-neutral-400 font-mono block mt-0.5">{t.category} workflow</span>
+                        <span className="text-[10px] text-neutral-400 font-mono block mt-0.5">{formatWorkflowCategory(t.category)} workflow</span>
                       </td>
                       <td className="px-4 py-3.5 font-semibold">{t.clientName}</td>
                       <td className="px-4 py-3.5">

@@ -195,4 +195,15 @@ export function normalizeStatusForPipeline(
   return resolved.trim();
 }
 
+export function formatWorkflowCategory(category?: string | null): string {
+  if (!category) return 'Scheduler';
+  const c = category.trim().toLowerCase();
+  if (c === 'scheduling' || c === 'scheduler') return 'Scheduler';
+  if (c === 'editing' || c === 'editor') return 'Editor';
+  if (c === 'production' || c === 'assistant') return 'Production';
+  if (c === 'strategic' || c === 'strategist') return 'Strategic';
+  return category;
+}
+
+
 
