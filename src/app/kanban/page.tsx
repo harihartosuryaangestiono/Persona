@@ -1615,7 +1615,23 @@ export default function KanbanPage() {
                   <input
                     type="date"
                     value={newPostingDate}
-                    onChange={(e) => setNewPostingDate(e.target.value)}
+                    onChange={(e) => {
+                      const pDate = e.target.value;
+                      setNewPostingDate(pDate);
+                      if (pDate) {
+                        setNewDeadline(calculateAutoDeadline(pDate, -3));
+                      }
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-neutral-700 font-semibold">Deadline Date</label>
+                  <input
+                    type="date"
+                    value={newDeadline}
+                    onChange={(e) => setNewDeadline(e.target.value)}
                     className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
                   />
                 </div>
@@ -1876,6 +1892,16 @@ export default function KanbanPage() {
                       type="date"
                       value={editPostingDate}
                       onChange={(e) => setEditPostingDate(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-neutral-700 font-semibold">Deadline Date</label>
+                    <input
+                      type="date"
+                      value={editDeadline}
+                      onChange={(e) => setEditDeadline(e.target.value)}
                       className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-hidden"
                     />
                   </div>
