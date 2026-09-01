@@ -151,8 +151,8 @@ export function hasSchedulerStage(
     if (parsed.some((s: any) =>
       s.role === 'Scheduler' ||
       s.taskType === 'Scheduling' ||
-      (s.userName && s.userName.toLowerCase().includes('dinda')) ||
-      (s.userId && (s.userId === 'u-dindong' || String(s.userId).toLowerCase().includes('dinda')))
+      (s.userName && (s.userName.toLowerCase().includes('dinda') || s.userName.toLowerCase().includes('gigi') || s.userName.toLowerCase().includes('gigie'))) ||
+      (s.userId && (s.userId === 'u-dindong' || s.userId === 'u-gigie' || String(s.userId).toLowerCase().includes('dinda') || String(s.userId).toLowerCase().includes('gigi') || String(s.userId).toLowerCase().includes('gigie')))
     )) {
       return true;
     }
@@ -165,7 +165,7 @@ export function hasSchedulerStage(
     } else if (Array.isArray(assignedUserIds)) {
       parsedIds = assignedUserIds;
     }
-    if (parsedIds.some((id: string) => String(id).toLowerCase().includes('dindong') || String(id).toLowerCase().includes('dinda'))) {
+    if (parsedIds.some((id: string) => String(id).toLowerCase().includes('dindong') || String(id).toLowerCase().includes('dinda') || String(id).toLowerCase().includes('gigie') || String(id).toLowerCase().includes('gigi'))) {
       return true;
     }
   }

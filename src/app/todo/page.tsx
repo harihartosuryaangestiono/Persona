@@ -64,7 +64,7 @@ export default function ToDoPage() {
 
       if (hasExplicitStages) {
         stages.forEach((s: any, idx: number) => {
-          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && s.userName.toLowerCase().includes('dinda')) || (s.userId && String(s.userId).toLowerCase().includes('dinda'));
+          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && (s.userName.toLowerCase().includes('dinda') || s.userName.toLowerCase().includes('gigi') || s.userName.toLowerCase().includes('gigie'))) || (s.userId && (String(s.userId).toLowerCase().includes('dinda') || String(s.userId).toLowerCase().includes('gigie') || String(s.userId).toLowerCase().includes('gigi')));
           const isAssis = s.role === 'Production Assistant' || s.taskType === 'Production Assistant';
           const isStrat = s.role === 'Strategist' || isStrategicPipeline(undefined, s.taskType);
 
