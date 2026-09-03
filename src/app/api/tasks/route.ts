@@ -44,6 +44,48 @@ async function validateCategoryAssignments(assignedUserIds: string[], category: 
   return null;
 }
 
+async function getSchedulerForWorkspace(workspaceId?: string | null, clientId?: string | null) {
+  let targetWsId = workspaceId;
+  if (!targetWsId && clientId) {
+    const clientObj = await prisma.client.findUnique({ where: { id: clientId } });
+    if (clientObj) {
+      targetWsId = clientObj.workspaceId;
+    }
+  }
+
+  const isInhouse = targetWsId === 'ws-inhouse' || String(targetWsId).toLowerCase().includes('inhouse');
+
+  if (isInhouse) {
+    const gigie = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { name: { equals: 'Gigie', mode: 'insensitive' } },
+          { name: { equals: 'Gigi', mode: 'insensitive' } },
+          { id: 'u-gigie' },
+          { id: 'u-gigi' },
+          { email: 'gigi@personaos.com' },
+          { email: 'gigie@personaos.com' },
+        ],
+      },
+    });
+    if (gigie) return gigie;
+  } else {
+    const dinda = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { name: { equals: 'Dinda', mode: 'insensitive' } },
+          { id: 'u-dindong' },
+          { id: 'u-dinda' },
+          { email: 'dinda@personaos.com' },
+        ],
+      },
+    });
+    if (dinda) return dinda;
+  }
+
+  return await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } });
+}
+
 export async function POST(req: Request) {
   try {
     const userRoleHeader = req.headers.get('X-User-Role') || '';
@@ -170,6 +212,34 @@ export async function POST(req: Request) {
         }
       }
 
+      let initialStages = body.stages;
+      let initialAssignedIds = Array.isArray(body.assignedUserIds) ? body.assignedUserIds : (body.assignedUserIds ? JSON.parse(body.assignedUserIds) : []);
+
+      const parsedStagesCheck = initialStages ? (typeof initialStages === 'string' ? JSON.parse(initialStages) : initialStages) : [];
+      const hasSchedStageInNew = Array.isArray(parsedStagesCheck) && parsedStagesCheck.some((s: any) =>
+        s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))
+      );
+
+      if ((defaultStatus === 'Scheduling' || defaultStatus === 'Posted' || category === 'Scheduler') && !hasSchedStageInNew) {
+        const chosenScheduler = await getSchedulerForWorkspace(targetWorkspaceId, body.clientId);
+        if (chosenScheduler) {
+          const autoStage = {
+            id: `stg-${Date.now()}`,
+            role: 'Scheduler',
+            userId: chosenScheduler.id,
+            userName: chosenScheduler.name,
+            taskType: 'Scheduling',
+            format: 'Per Post',
+            qty: body.qty || 1,
+            score: (body.score && body.score > 0) ? body.score : 5 * (body.qty || 1),
+          };
+          initialStages = Array.isArray(parsedStagesCheck) ? [...parsedStagesCheck, autoStage] : [autoStage];
+          if (!initialAssignedIds.includes(chosenScheduler.id)) {
+            initialAssignedIds = [...initialAssignedIds, chosenScheduler.id];
+          }
+        }
+      }
+
       const created = await tx.task.create({
         data: {
           title: body.title,
@@ -184,14 +254,14 @@ export async function POST(req: Request) {
           workspaceId: targetWorkspaceId,
           postingDate: body.postingDate ? new Date(body.postingDate) : null,
           deadline,
-          assignedUserIds: JSON.stringify(body.assignedUserIds || []),
+          assignedUserIds: JSON.stringify(initialAssignedIds),
           score: body.score || 0,
           cogs: body.cogs || 0,
           driveLink: body.driveLink || '',
           previewLink: body.previewLink || '',
           checklist: JSON.stringify(body.checklist || []),
           comments: JSON.stringify(body.comments || []),
-          stages: body.stages ? JSON.stringify(body.stages) : null,
+          stages: initialStages ? (typeof initialStages === 'string' ? initialStages : JSON.stringify(initialStages)) : null,
           month: body.month || 'July',
           year: body.year ? Number(body.year) : 2026,
           contentId: body.contentId || `content-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -357,9 +427,11 @@ export async function PATCH(req: Request) {
           updateData.handoverTime = new Date();
         }
 
-        // When a task is moved to Scheduling, ensure there's an explicit Scheduler stage and assignment
-        if (dbStatus === 'Scheduling') {
-          updateData.previewLink = '';
+        // When a task is moved to Scheduling or Posted, ensure there's an explicit Scheduler stage and assignment if not present
+        if (dbStatus === 'Scheduling' || dbStatus === 'Posted') {
+          if (dbStatus === 'Scheduling' && body.previewLink === undefined) {
+            updateData.previewLink = '';
+          }
           try {
             const existingStages = existingTask.stages
               ? (typeof existingTask.stages === 'string' ? JSON.parse(existingTask.stages) : existingTask.stages)
@@ -368,7 +440,10 @@ export async function PATCH(req: Request) {
               s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))
             );
             if (!hasSchedulerStage) {
-              const chosenScheduler = await prisma.user.findFirst({ where: { roles: { contains: 'Scheduler' } } });
+              const chosenScheduler = await getSchedulerForWorkspace(
+                updateData.workspaceId || existingTask.workspaceId,
+                updateData.clientId || existingTask.clientId
+              );
 
               if (chosenScheduler) {
                 const schedId = chosenScheduler.id;

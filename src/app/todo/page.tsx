@@ -119,10 +119,12 @@ export default function ToDoPage() {
         });
       } else {
         // Derive roles from assignedUserIds or task properties
-        const hasDinda = assignedIds.some((id: string) => {
+        const isSchedulerId = (id: string) => {
           const name = (userMap.get(id) || id || '').toLowerCase();
-          return name.includes('dinda') || id.toLowerCase().includes('dindong');
-        });
+          return name.includes('dinda') || name.includes('gigi') || name.includes('gigie') || id.toLowerCase().includes('dindong') || id.toLowerCase().includes('gigie');
+        };
+
+        const assignedSchedulerId = assignedIds.find(isSchedulerId);
 
         // 1. Primary role
         const primaryIsSched = t.taskType === 'Scheduling' || t.category === 'Scheduler';
@@ -137,10 +139,7 @@ export default function ToDoPage() {
           ? 'Strategic'
           : 'Editor';
 
-        const firstPicId = assignedIds.find((id: string) => {
-          const name = (userMap.get(id) || id || '').toLowerCase();
-          return !name.includes('dinda') && !id.toLowerCase().includes('dindong');
-        }) || assignedIds[0];
+        const firstPicId = assignedIds.find((id: string) => !isSchedulerId(id)) || assignedIds[0];
 
         const primaryPicName = firstPicId ? (userMap.get(firstPicId) || firstPicId) : 'Jabin';
 
@@ -165,13 +164,18 @@ export default function ToDoPage() {
           originalTask: t,
         });
 
-        // 2. If Dinda is in assignedUserIds and primary task wasn't already Scheduling, add Dinda's Scheduling row
-        if (hasDinda && !primaryIsSched) {
-          const dindaId = assignedIds.find((id: string) => (userMap.get(id) || id || '').toLowerCase().includes('dinda')) || 'Dinda';
-          const dindaName = userMap.get(dindaId) || dindaId || 'Dinda';
+        // 2. If a Scheduler is in assignedUserIds or task is in Scheduling/Posted without explicit stages, add workspace Scheduler row
+        let targetSchedulerName = '';
+        if (assignedSchedulerId) {
+          targetSchedulerName = userMap.get(assignedSchedulerId) || assignedSchedulerId;
+        } else if (!primaryIsSched && (t.status === 'Scheduling' || t.status === 'Posted')) {
+          const isInhouse = t.workspaceId === 'ws-inhouse';
+          targetSchedulerName = isInhouse ? 'Gigi' : 'Dinda';
+        }
 
+        if (targetSchedulerName && !primaryIsSched) {
           rows.push({
-            rowId: `${t.id}-dinda-sched`,
+            rowId: `${t.id}-sched-row`,
             originalTaskId: t.id,
             clientId: t.clientId,
             postingDate: t.postingDate,
@@ -179,7 +183,7 @@ export default function ToDoPage() {
             month: t.month,
             year: t.year,
             title: t.title,
-            picName: dindaName,
+            picName: targetSchedulerName,
             category: 'Scheduler',
             taskType: 'Scheduling',
             format: 'Per Post',
