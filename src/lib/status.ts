@@ -139,7 +139,15 @@ export function hasSchedulerStage(
   stages?: any,
   assignedUserIds?: any
 ): boolean {
-  if (category === 'Scheduler' || taskType === 'Scheduling') return true;
+  const cat = (category || '').trim().toLowerCase();
+  const tt = (taskType || '').trim().toLowerCase();
+
+  // Production or Assistant categories and Shooting/Production Assistant task types NEVER have a Scheduler stage
+  if (cat === 'production' || cat === 'assistant' || tt.includes('production') || tt.includes('shooting')) {
+    return false;
+  }
+
+  if (cat === 'scheduler' || tt === 'scheduling') return true;
 
   if (stages) {
     let parsed: any[] = [];
@@ -149,23 +157,8 @@ export function hasSchedulerStage(
       parsed = stages;
     }
     if (parsed.some((s: any) =>
-      s.role === 'Scheduler' ||
-      s.taskType === 'Scheduling' ||
-      (s.userName && (s.userName.toLowerCase().includes('dinda') || s.userName.toLowerCase().includes('gigi') || s.userName.toLowerCase().includes('gigie'))) ||
-      (s.userId && (s.userId === 'u-dindong' || s.userId === 'u-gigie' || String(s.userId).toLowerCase().includes('dinda') || String(s.userId).toLowerCase().includes('gigi') || String(s.userId).toLowerCase().includes('gigie')))
+      s && (s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase() === 'scheduling'))
     )) {
-      return true;
-    }
-  }
-
-  if (assignedUserIds) {
-    let parsedIds: any[] = [];
-    if (typeof assignedUserIds === 'string') {
-      try { parsedIds = JSON.parse(assignedUserIds); } catch {}
-    } else if (Array.isArray(assignedUserIds)) {
-      parsedIds = assignedUserIds;
-    }
-    if (parsedIds.some((id: string) => String(id).toLowerCase().includes('dindong') || String(id).toLowerCase().includes('dinda') || String(id).toLowerCase().includes('gigie') || String(id).toLowerCase().includes('gigi'))) {
       return true;
     }
   }
@@ -175,8 +168,8 @@ export function hasSchedulerStage(
 
 /**
  * Normalizes status based on pipeline requirement:
- * - If status is 'Completed' (or 'Complete') AND task has a Scheduler stage (or Dinda as Scheduler) -> status becomes 'Posted'
- * - If status is 'Completed' AND task does NOT have a Scheduler stage -> status remains 'Completed'
+ * - If status is 'Completed' (or 'Complete') AND task has a Scheduler stage -> status becomes 'Posted'
+ * - If status is 'Completed' AND task does NOT have a Scheduler stage (e.g. Production/Strategic/PA tasks) -> status remains 'Completed'
  */
 export function normalizeStatusForPipeline(
   status: string | null | undefined,
@@ -187,6 +180,12 @@ export function normalizeStatusForPipeline(
 ): string {
   if (!status) return 'Brief';
   const resolved = getDbStatus(status);
+
+  const cat = (category || '').trim().toLowerCase();
+  const tt = (taskType || '').trim().toLowerCase();
+  if (cat === 'production' || cat === 'assistant' || tt.includes('production') || tt.includes('shooting')) {
+    return resolved.trim();
+  }
 
   if ((resolved === 'Completed' || resolved === 'Complete') && hasSchedulerStage(category, taskType, stages, assignedUserIds)) {
     return 'Posted';

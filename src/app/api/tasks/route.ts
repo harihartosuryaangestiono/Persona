@@ -428,7 +428,8 @@ export async function PATCH(req: Request) {
         }
 
         // When a task is moved to Scheduling or Posted, ensure there's an explicit Scheduler stage and assignment if not present
-        if (dbStatus === 'Scheduling' || dbStatus === 'Posted') {
+        const isProdCategory = ['production', 'assistant'].includes((categoryVal || '').toLowerCase()) || (taskTypeVal || '').toLowerCase().includes('production') || (taskTypeVal || '').toLowerCase().includes('shooting');
+        if ((dbStatus === 'Scheduling' || dbStatus === 'Posted') && !isProdCategory) {
           if (dbStatus === 'Scheduling' && body.previewLink === undefined) {
             updateData.previewLink = '';
           }

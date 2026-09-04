@@ -105,7 +105,7 @@ export default function ProductionPage() {
     setDriveLinkInput(task.driveLink || '');
   };
  
-  // Complete shooting and move to Editing status
+  // Complete shooting and move to Editing status (for video editing)
   const handleCompleteShooting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!driveModalTask) return;
@@ -117,6 +117,27 @@ export default function ProductionPage() {
         status: 'Editing',
         driveLink: formattedLink,
       });
+
+      const primaryAssignedUser = resolvePrimaryEmployee(driveModalTask.stages, driveModalTask.assignedUserIds, allUsers, currentUser);
+      await addWorklog({
+        clientId: driveModalTask.clientId,
+        clientName: driveModalTask.clientName,
+        contentTitle: driveModalTask.title,
+        userId: primaryAssignedUser?.id || currentUser?.id,
+        userName: primaryAssignedUser?.name || currentUser?.name,
+        taskType: driveModalTask.taskType || 'Production Assistant',
+        format: getTaskFormat(driveModalTask),
+        qty: driveModalTask.qty || 1,
+        score: driveModalTask.score || 0,
+        previewLink: formattedLink || driveModalTask.driveLink || '',
+        stages: driveModalTask.stages || null,
+        date: driveModalTask.postingDate || new Date().toISOString(),
+        status: 'Completed',
+        month: driveModalTask.month,
+        year: driveModalTask.year,
+        contentId: driveModalTask.contentId,
+      });
+
       setDriveModalTask(null);
       setSuccessMsg('Shooting completed & forwarded to Editor!');
       setTimeout(() => setSuccessMsg(null), 2000);
@@ -128,9 +149,10 @@ export default function ProductionPage() {
     }
   };
 
-  // Complete task directly in Strategic without sending to Production/Editing pipeline
-  const handleCompleteInStrategic = async (task: any) => {
+  // Complete Production task directly with Completed status
+  const handleCompleteProduction = async (task: any, customDriveLink?: string) => {
     setSubmittingId(task.id);
+    const finalDriveLink = customDriveLink ? formatUrl(customDriveLink) : task.driveLink;
     try {
       const rawTimeline = task.workflowTimeline ? (typeof task.workflowTimeline === 'string' ? JSON.parse(task.workflowTimeline) : task.workflowTimeline) : [];
       rawTimeline.push({
@@ -141,7 +163,7 @@ export default function ProductionPage() {
 
       await updateTask(task.id, {
         status: 'Completed',
-        category: 'Strategic',
+        driveLink: finalDriveLink || '',
         workflowTimeline: JSON.stringify(rawTimeline),
       });
 
@@ -156,7 +178,7 @@ export default function ProductionPage() {
         format: getTaskFormat(task),
         qty: task.qty || 1,
         score: task.score || 0,
-        previewLink: task.previewLink || task.driveLink || '',
+        previewLink: task.previewLink || finalDriveLink || '',
         stages: task.stages || null,
         date: task.postingDate || new Date().toISOString(),
         status: 'Completed',
@@ -165,11 +187,12 @@ export default function ProductionPage() {
         contentId: task.contentId,
       });
 
-      setSuccessMsg(`Task "${task.title}" completed directly in Strategic pipeline!`);
+      if (driveModalTask) setDriveModalTask(null);
+      setSuccessMsg(`Production task "${task.title}" completed & points logged!`);
       setTimeout(() => setSuccessMsg(null), 2000);
     } catch (err) {
       console.error(err);
-      showToast('Failed to complete task in Strategic', 'error');
+      showToast('Failed to complete production task', 'error');
     } finally {
       setSubmittingId(null);
     }
@@ -248,22 +271,22 @@ export default function ProductionPage() {
                 ) : t.status === 'Shooting' ? (
                   <div className="flex-1 grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => openCompleteModal(t)}
+                      onClick={() => handleCompleteProduction(t)}
                       disabled={submittingId === t.id}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-2 rounded-xl transition text-[11px] flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
-                      title="Complete shooting & send to Production / Editing pipeline"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5 shrink-0" />
-                      Complete & Edit
-                    </button>
-                    <button
-                      onClick={() => handleCompleteInStrategic(t)}
-                      disabled={submittingId === t.id}
-                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold py-2 px-2 rounded-xl transition text-[11px] flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
-                      title="Complete task directly in Strategic without sending to Production pipeline"
+                      title="Mark production session completed & log points"
                     >
                       <Check className="w-3.5 h-3.5 shrink-0" />
-                      Complete in Strategic
+                      Complete Production
+                    </button>
+                    <button
+                      onClick={() => openCompleteModal(t)}
+                      disabled={submittingId === t.id}
+                      className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold py-2 px-2 rounded-xl transition text-[11px] flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+                      title="Upload asset link & forward to Video Editor"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                      Complete & Send to Edit
                     </button>
                   </div>
                 ) : (
@@ -325,17 +348,16 @@ export default function ProductionPage() {
                   type="button"
                   onClick={() => {
                     const task = driveModalTask;
-                    setDriveModalTask(null);
-                    handleCompleteInStrategic(task);
+                    handleCompleteProduction(task, driveLinkInput);
                   }}
-                  className="px-3 py-2 bg-neutral-900 text-white font-bold rounded-lg hover:bg-neutral-800 transition flex items-center gap-1"
+                  className="px-3 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition flex items-center gap-1"
                 >
-                  <Check className="w-3.5 h-3.5" /> Complete in Strategic
+                  <Check className="w-3.5 h-3.5" /> Mark Completed
                 </button>
                 <button
                   type="submit"
                   disabled={submittingId === driveModalTask.id}
-                  className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-neutral-900 text-white font-bold rounded-lg hover:bg-neutral-800 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {submittingId === driveModalTask.id ? (
                     <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
