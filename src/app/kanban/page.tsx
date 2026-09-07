@@ -535,7 +535,8 @@ export default function KanbanPage() {
         isSubmittingRef.current = false;
         return;
       }
-      if (newCategory === 'Production' && currentUser.roles.includes('Scheduler')) {
+      const canCreateProd = currentUser.roles.includes('Strategist') || currentUser.roles.includes('Production Assistant') || currentUser.roles.includes('Editor');
+      if (newCategory === 'Production' && !canCreateProd) {
         showToast('Unauthorized: Schedulers cannot create Production tasks', 'warning');
         isSubmittingRef.current = false;
         return;

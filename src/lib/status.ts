@@ -152,7 +152,7 @@ export function hasSchedulerStage(
   if (stages) {
     let parsed: any[] = [];
     if (typeof stages === 'string') {
-      try { parsed = JSON.parse(stages); } catch {}
+      try { parsed = JSON.parse(stages); } catch { }
     } else if (Array.isArray(stages)) {
       parsed = stages;
     }

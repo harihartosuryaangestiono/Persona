@@ -107,7 +107,8 @@ export async function POST(req: Request) {
       if (category === 'Strategic' && !roles.includes('Strategist')) {
         return NextResponse.json({ error: 'Only Strategists can create Strategic tasks' }, { status: 403 });
       }
-      if (category === 'Production' && roles.includes('Scheduler') && !roles.includes('Strategist')) {
+      const canCreateProd = roles.includes('Strategist') || roles.includes('Production Assistant') || roles.includes('Editor');
+      if (category === 'Production' && !canCreateProd) {
         return NextResponse.json({ error: 'Schedulers cannot create Production tasks' }, { status: 403 });
       }
       const isAllowedCreator = roles.some((r) =>
