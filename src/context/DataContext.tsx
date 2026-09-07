@@ -101,8 +101,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const budgets = useMemo(() => {
     const clientIdsOfWorkspace = new Set(clients.map((c) => c.id));
-    return rawBudgets.filter((b) => clientIdsOfWorkspace.has(b.clientId));
-  }, [rawBudgets, clients]);
+    const clientMap = new Map(rawClients.map((c) => [c.id, c.name]));
+    return rawBudgets
+      .filter((b) => clientIdsOfWorkspace.has(b.clientId))
+      .map((b) => ({
+        ...b,
+        clientName: b.clientName || clientMap.get(b.clientId) || clients.find((c) => c.id === b.clientId)?.name || 'Unknown Client',
+      }));
+  }, [rawBudgets, clients, rawClients]);
 
   const normalizeTask = (t: TaskItem): TaskItem => {
     const matchedClient = rawClients.find((c) => c.id === t.clientId);
@@ -134,7 +140,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     let resolvedCategory = t.category;
     let resolvedScore = t.score;
-    if (t.taskType === 'Scheduling' || resolvedCategory === 'Scheduler') {
+
+    const isStandaloneScheduler = (t.category === 'Scheduler' || t.taskType === 'Scheduling') && (resolvedFormat === 'Per Post' || !resolvedFormat || resolvedFormat === 'Reels' && t.score === 5);
+
+    if (isStandaloneScheduler && (resolvedFormat === 'Per Post' || !resolvedFormat)) {
       resolvedCategory = 'Scheduler';
       resolvedFormat = 'Per Post';
       let schedScore = 5 * (t.qty || 1);
@@ -145,12 +154,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       }
       resolvedScore = schedScore;
-    } else if (t.taskType === 'Production Assistant') {
+    } else if (t.taskType === 'Production Assistant' || t.category === 'Assistant' || t.category === 'Production') {
       resolvedCategory = 'Assistant';
-    } else if (isStrategicPipeline(undefined, t.taskType)) {
+    } else if (isStrategicPipeline(t.category, t.taskType) || t.category === 'Strategic') {
       resolvedCategory = 'Strategic';
-    } else if (!resolvedCategory) {
+    } else {
       resolvedCategory = 'Editor';
+      if (!resolvedFormat || resolvedFormat === 'Per Post') {
+        if (titleLower.includes('carousel')) resolvedFormat = 'Carousel';
+        else if (titleLower.includes('grafis')) resolvedFormat = 'Grafis';
+        else if (titleLower.includes('foto') || titleLower.includes('photo')) resolvedFormat = 'Single Foto';
+        else resolvedFormat = 'Story Video';
+      }
     }
 
     return {

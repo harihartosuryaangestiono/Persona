@@ -35,6 +35,12 @@ export default function ToDoPage() {
 
   const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'ALL' | 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic'>('ALL');
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [selectedPicFilter, setSelectedPicFilter] = useState<string>('ALL');
+  const [selectedFormatFilter, setSelectedFormatFilter] = useState<string>('ALL');
+  const [startDateFilter, setStartDateFilter] = useState<string>('');
+  const [endDateFilter, setEndDateFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -64,7 +70,7 @@ export default function ToDoPage() {
 
       if (hasExplicitStages) {
         stages.forEach((s: any, idx: number) => {
-          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling' || (s.userName && (s.userName.toLowerCase().includes('dinda') || s.userName.toLowerCase().includes('gigi') || s.userName.toLowerCase().includes('gigie'))) || (s.userId && (String(s.userId).toLowerCase().includes('dinda') || String(s.userId).toLowerCase().includes('gigie') || String(s.userId).toLowerCase().includes('gigi')));
+          const isSched = s.role === 'Scheduler' || s.taskType === 'Scheduling';
           const isAssis = s.role === 'Production Assistant' || s.taskType === 'Production Assistant';
           const isStrat = s.role === 'Strategist' || isStrategicPipeline(undefined, s.taskType);
 
@@ -78,7 +84,13 @@ export default function ToDoPage() {
 
           const taskType = s.taskType || (cat === 'Scheduler' ? 'Scheduling' : 'Editing');
           const format = cat === 'Scheduler' ? 'Per Post' : (s.format || t.format || 'Story Video');
-          const pic = s.userName || userMap.get(s.userId) || s.userId || (assignedIds[idx] ? (userMap.get(assignedIds[idx]) || assignedIds[idx]) : 'Jabin');
+          let pic = s.userName || userMap.get(s.userId) || s.userId || (assignedIds[idx] ? (userMap.get(assignedIds[idx]) || assignedIds[idx]) : 'Jabin');
+
+          const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && (t.clientId.toLowerCase().includes('motodw') || t.clientId === '98451aed-8a97-4164-9c34-9e6186619613'));
+          const isTeamAnggi = t.workspaceId === 'ws-team-anggi' || isMotoDW;
+          if (cat === 'Scheduler' && isTeamAnggi) {
+            pic = 'Dinda';
+          }
 
           let rowStatus = t.status;
           if (cat === 'Scheduler') {
@@ -127,11 +139,11 @@ export default function ToDoPage() {
         const assignedSchedulerId = assignedIds.find(isSchedulerId);
 
         // 1. Primary role
-        const primaryIsSched = t.taskType === 'Scheduling' || t.category === 'Scheduler';
-        const primaryIsAssis = t.taskType === 'Production Assistant' || t.category === 'Assistant';
-        const primaryIsStrat = isStrategicPipeline(t.category, t.taskType);
+        const isExplicitSched = (t.category === 'Scheduler' || t.taskType === 'Scheduling') && (t.format === 'Per Post' || !t.format);
+        const primaryIsAssis = t.taskType === 'Production Assistant' || t.category === 'Assistant' || t.category === 'Production';
+        const primaryIsStrat = isStrategicPipeline(t.category, t.taskType) || t.category === 'Strategic';
 
-        const primaryCat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = primaryIsSched
+        const primaryCat: 'Editor' | 'Scheduler' | 'Assistant' | 'Strategic' = isExplicitSched
           ? 'Scheduler'
           : primaryIsAssis
           ? 'Assistant'
@@ -165,15 +177,19 @@ export default function ToDoPage() {
         });
 
         // 2. If a Scheduler is in assignedUserIds or task is in Scheduling/Posted without explicit stages, add workspace Scheduler row
+        const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && (t.clientId.toLowerCase().includes('motodw') || t.clientId === '98451aed-8a97-4164-9c34-9e6186619613'));
+        const isTeamAnggi = t.workspaceId === 'ws-team-anggi' || isMotoDW;
+
         let targetSchedulerName = '';
-        if (assignedSchedulerId) {
+        if (isTeamAnggi) {
+          targetSchedulerName = 'Dinda';
+        } else if (assignedSchedulerId) {
           targetSchedulerName = userMap.get(assignedSchedulerId) || assignedSchedulerId;
-        } else if (!primaryIsSched && (t.status === 'Scheduling' || t.status === 'Posted')) {
-          const isInhouse = t.workspaceId === 'ws-inhouse';
-          targetSchedulerName = isInhouse ? 'Gigi' : 'Dinda';
+        } else if (!isExplicitSched && (t.status === 'Scheduling' || t.status === 'Posted')) {
+          targetSchedulerName = 'Gigi';
         }
 
-        if (targetSchedulerName && !primaryIsSched) {
+        if (targetSchedulerName && !isExplicitSched) {
           rows.push({
             rowId: `${t.id}-sched-row`,
             originalTaskId: t.id,
@@ -200,21 +216,144 @@ export default function ToDoPage() {
     return rows;
   }, [tasks, userMap]);
 
+  const availablePics = useMemo(() => {
+    const pics = new Set<string>();
+    allRows.forEach((r) => {
+      if (r.picName) pics.add(r.picName);
+    });
+    return Array.from(pics).sort();
+  }, [allRows]);
+
+  const availableStatuses = useMemo(() => {
+    return ['ALL', 'Brief', 'Editing', 'Waiting for Approval', 'Scheduling', 'Posted', 'Completed'];
+  }, []);
+
+  const availableFormats = useMemo(() => {
+    const formats = new Set<string>();
+    allRows.forEach((r) => {
+      if (r.format) formats.add(r.format);
+    });
+    return Array.from(formats).sort();
+  }, [allRows]);
+
+  const isAnyFilterActive = useMemo(() => {
+    return (
+      selectedClientId !== 'ALL' ||
+      selectedCategoryFilter !== 'ALL' ||
+      selectedMonthFilter !== 'ALL' ||
+      selectedStatusFilter !== 'ALL' ||
+      selectedPicFilter !== 'ALL' ||
+      selectedFormatFilter !== 'ALL' ||
+      !!startDateFilter ||
+      !!endDateFilter ||
+      !!searchQuery.trim()
+    );
+  }, [selectedClientId, selectedCategoryFilter, selectedMonthFilter, selectedStatusFilter, selectedPicFilter, selectedFormatFilter, startDateFilter, endDateFilter, searchQuery]);
+
+  const handleResetFilters = () => {
+    setSelectedClientId('ALL');
+    setSelectedCategoryFilter('ALL');
+    setSelectedMonthFilter('ALL');
+    setSelectedStatusFilter('ALL');
+    setSelectedPicFilter('ALL');
+    setSelectedFormatFilter('ALL');
+    setStartDateFilter('');
+    setEndDateFilter('');
+    setSearchQuery('');
+  };
+
+  const getRowMonthFormat = (r: any): string => {
+    if (r.month) {
+      if (r.month.includes('-')) return r.month;
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const idx = monthNames.indexOf(r.month);
+      if (idx !== -1) {
+        return `${r.year || 2026}-${String(idx + 1).padStart(2, '0')}`;
+      }
+      const monthNamesId = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const idxId = monthNamesId.indexOf(r.month);
+      if (idxId !== -1) {
+        return `${r.year || 2026}-${String(idxId + 1).padStart(2, '0')}`;
+      }
+    }
+    const dStr = r.postingDate || r.deadline;
+    if (dStr) {
+      const d = new Date(dStr);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      }
+    }
+    return '2026-07';
+  };
+
+  const formatMonthDisplay = (mStr: string) => {
+    if (mStr === '2026-07') return 'Juli 2026';
+    if (mStr === '2026-08') return 'Agustus 2026';
+    if (mStr === '2026-09') return 'September 2026';
+    if (mStr === '2026-10') return 'Oktober 2026';
+    const parts = mStr.split('-');
+    if (parts.length === 2) {
+      const [y, m] = parts;
+      const monthNamesId = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const idx = parseInt(m, 10) - 1;
+      if (idx >= 0 && idx < 12) return `${monthNamesId[idx]} ${y}`;
+    }
+    return mStr;
+  };
+
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>(['2026-07', '2026-08', '2026-09']);
+    allRows.forEach((r) => {
+      const m = getRowMonthFormat(r);
+      if (m) set.add(m);
+    });
+    return Array.from(set).sort();
+  }, [allRows]);
+
+  const monthFilteredRows = useMemo(() => {
+    if (selectedMonthFilter === 'ALL') return allRows;
+    return allRows.filter((r) => getRowMonthFormat(r) === selectedMonthFilter);
+  }, [allRows, selectedMonthFilter]);
+
   const categoryCounts = useMemo(() => {
-    const clientFiltered = allRows.filter((r) => selectedClientId === 'ALL' || r.clientId === selectedClientId);
+    const baseFiltered = monthFilteredRows.filter((r) => selectedClientId === 'ALL' || r.clientId === selectedClientId);
     return {
-      ALL: clientFiltered.length,
-      Editor: clientFiltered.filter((r) => r.category === 'Editor').length,
-      Scheduler: clientFiltered.filter((r) => r.category === 'Scheduler').length,
-      Assistant: clientFiltered.filter((r) => r.category === 'Assistant').length,
-      Strategic: clientFiltered.filter((r) => r.category === 'Strategic').length,
+      ALL: baseFiltered.length,
+      Editor: baseFiltered.filter((r) => r.category === 'Editor').length,
+      Scheduler: baseFiltered.filter((r) => r.category === 'Scheduler').length,
+      Assistant: baseFiltered.filter((r) => r.category === 'Assistant').length,
+      Strategic: baseFiltered.filter((r) => r.category === 'Strategic').length,
     };
-  }, [allRows, selectedClientId]);
+  }, [monthFilteredRows, selectedClientId]);
 
   const displayedRows = useMemo(() => {
-    return allRows.filter((r) => {
+    return monthFilteredRows.filter((r) => {
       const matchesClient = selectedClientId === 'ALL' || r.clientId === selectedClientId;
       const matchesCategory = selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter;
+      const matchesStatus = selectedStatusFilter === 'ALL' || r.status === selectedStatusFilter;
+      const matchesPic = selectedPicFilter === 'ALL' || (r.picName && r.picName.toLowerCase().includes(selectedPicFilter.toLowerCase()));
+      const matchesFormat = selectedFormatFilter === 'ALL' || r.format === selectedFormatFilter;
+
+      let matchesDate = true;
+      const rowDateStr = r.postingDate || r.deadline;
+      if (startDateFilter || endDateFilter) {
+        if (rowDateStr) {
+          const rowDateVal = rowDateStr.split('T')[0];
+          if (startDateFilter && rowDateVal < startDateFilter) matchesDate = false;
+          if (endDateFilter && rowDateVal > endDateFilter) matchesDate = false;
+        } else {
+          matchesDate = false;
+        }
+      }
 
       const q = searchQuery.trim().toLowerCase();
       const matchesSearch =
@@ -228,9 +367,9 @@ export default function ToDoPage() {
         (r.postingDate && r.postingDate.includes(q)) ||
         (r.deadline && r.deadline.includes(q));
 
-      return matchesClient && matchesCategory && matchesSearch;
+      return matchesClient && matchesCategory && matchesStatus && matchesPic && matchesFormat && matchesDate && matchesSearch;
     });
-  }, [allRows, selectedClientId, selectedCategoryFilter, searchQuery]);
+  }, [monthFilteredRows, selectedClientId, selectedCategoryFilter, selectedStatusFilter, selectedPicFilter, selectedFormatFilter, startDateFilter, endDateFilter, searchQuery]);
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +406,7 @@ export default function ToDoPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
-            Client To Do List <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2.5 py-0.5 rounded-full border border-neutral-200">{tasks.length} Total Client Tasks</span>
+            Client To Do List <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2.5 py-0.5 rounded-full border border-neutral-200">{monthFilteredRows.length} Total Tasks ({displayedRows.length} Shown)</span>
           </h1>
           <p className="text-xs text-neutral-500">
             Per-client operational content board with auto-calculated deadline (<span className="font-mono text-neutral-700">Posting Date - 3 days</span>).
@@ -284,6 +423,39 @@ export default function ToDoPage() {
 
       {/* Client & Category Selector Controls */}
       <div className="space-y-3 p-4 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
+        {/* Month Filter Pills */}
+        <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 overflow-x-auto text-xs">
+          <span className="text-neutral-500 font-medium shrink-0 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-neutral-600" /> Bulan:
+          </span>
+          <button
+            onClick={() => setSelectedMonthFilter('ALL')}
+            className={`px-3 py-1 rounded-full font-semibold transition ${
+              selectedMonthFilter === 'ALL'
+                ? 'bg-neutral-900 text-white shadow-xs'
+                : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            All Months ({allRows.length})
+          </button>
+          {availableMonths.map((mStr) => {
+            const count = allRows.filter((r) => getRowMonthFormat(r) === mStr).length;
+            return (
+              <button
+                key={mStr}
+                onClick={() => setSelectedMonthFilter(mStr)}
+                className={`px-3 py-1 rounded-full font-semibold transition ${
+                  selectedMonthFilter === mStr
+                    ? 'bg-neutral-900 text-white shadow-xs'
+                    : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                {formatMonthDisplay(mStr)} ({count})
+              </button>
+            );
+          })}
+        </div>
+
         {/* Category Filter Pills */}
         <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 overflow-x-auto text-xs">
           <span className="text-neutral-500 font-medium shrink-0 flex items-center gap-1">
@@ -352,10 +524,10 @@ export default function ToDoPage() {
                   : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              All Clients ({tasks.length})
+              All Clients ({monthFilteredRows.length})
             </button>
             {clients.map((c) => {
-              const clientTaskCount = tasks.filter((t) => t.clientId === c.id).length;
+              const clientTaskCount = monthFilteredRows.filter((t) => t.clientId === c.id).length;
               return (
                 <button
                   key={c.id}
@@ -372,17 +544,106 @@ export default function ToDoPage() {
               );
             })}
           </div>
+        </div>
 
-          {/* Search Input */}
-          <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
-            <Search className="w-4 h-4 text-neutral-400" />
-            <input
-              type="text"
-              placeholder="Search title, category..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent focus:outline-none placeholder-neutral-400 w-48"
-            />
+        {/* Advanced Filters Row: Date Range, Status, PIC, Format, Search & Reset */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Date Range Filter */}
+            <div className="flex items-center gap-1.5 bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200">
+              <span className="text-neutral-500 font-medium">Tanggal:</span>
+              <input
+                type="date"
+                value={startDateFilter}
+                onChange={(e) => setStartDateFilter(e.target.value)}
+                className="bg-white border border-neutral-200 rounded px-1.5 py-0.5 text-neutral-800 focus:outline-none font-mono text-[11px]"
+                title="Dari Tanggal"
+              />
+              <span className="text-neutral-400 font-mono text-[10px]">s/d</span>
+              <input
+                type="date"
+                value={endDateFilter}
+                onChange={(e) => setEndDateFilter(e.target.value)}
+                className="bg-white border border-neutral-200 rounded px-1.5 py-0.5 text-neutral-800 focus:outline-none font-mono text-[11px]"
+                title="Sampai Tanggal"
+              />
+            </div>
+
+            {/* Status Dropdown */}
+            <div className="flex items-center gap-1 bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200">
+              <span className="text-neutral-500 font-medium">Status:</span>
+              <select
+                value={selectedStatusFilter}
+                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                className="bg-transparent font-semibold text-neutral-800 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="ALL">All Status ({monthFilteredRows.length})</option>
+                {availableStatuses.filter(s => s !== 'ALL').map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* PIC Dropdown */}
+            <div className="flex items-center gap-1 bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200">
+              <span className="text-neutral-500 font-medium">PIC:</span>
+              <select
+                value={selectedPicFilter}
+                onChange={(e) => setSelectedPicFilter(e.target.value)}
+                className="bg-transparent font-semibold text-neutral-800 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="ALL">All PICs</option>
+                {availablePics.map((pic) => (
+                  <option key={pic} value={pic}>
+                    {pic}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Format Dropdown */}
+            <div className="flex items-center gap-1 bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-200">
+              <span className="text-neutral-500 font-medium">Format:</span>
+              <select
+                value={selectedFormatFilter}
+                onChange={(e) => setSelectedFormatFilter(e.target.value)}
+                className="bg-transparent font-semibold text-neutral-800 focus:outline-none text-xs cursor-pointer"
+              >
+                <option value="ALL">All Formats</option>
+                {availableFormats.map((fmt) => (
+                  <option key={fmt} value={fmt}>
+                    {fmt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5 rounded-lg border border-neutral-200 text-xs text-neutral-700">
+              <Search className="w-4 h-4 text-neutral-400" />
+              <input
+                type="text"
+                placeholder="Search title, PIC, format..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent focus:outline-none placeholder-neutral-400 w-44"
+              />
+            </div>
+
+            {/* Reset Filter Button */}
+            {isAnyFilterActive && (
+              <button
+                onClick={handleResetFilters}
+                className="bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-3 py-1.5 rounded-lg border border-red-200 flex items-center gap-1 transition text-xs shrink-0"
+                title="Reset All Filters"
+              >
+                <X className="w-3.5 h-3.5" /> Reset
+              </button>
+            )}
           </div>
         </div>
       </div>

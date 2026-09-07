@@ -44,15 +44,19 @@ export async function POST(req: Request) {
       await prisma.client.update({
         where: { id: clientId },
         data: {
-          monthlyPointBudget: budgetVal,
-          remainingPoint: budgetVal - targetClient.usedPoint,
+          monthlyPointBudget: Math.max(targetClient.monthlyPointBudget || 0, budgetVal),
+          remainingPoint: Math.max(0, budgetVal - targetClient.usedPoint),
         }
       });
     }
 
-    return NextResponse.json(upserted);
+    return NextResponse.json({
+      ...upserted,
+      clientName: targetClient?.name || 'Unknown Client',
+    });
   } catch (e: any) {
     console.error('Error saving monthly budget:', e);
     return NextResponse.json({ error: 'Failed to save monthly budget', message: e.message }, { status: 500 });
   }
 }
+

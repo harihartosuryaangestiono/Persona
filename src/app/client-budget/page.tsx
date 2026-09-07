@@ -1,25 +1,65 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
-import { DollarSign, ShieldAlert, AlertTriangle, Plus, CheckCircle2, Edit3, X, Save } from 'lucide-react';
-import { formatRupiah } from '@/lib/score-calculator';
+import { Plus, Edit3, X, Save } from 'lucide-react';
 import { ClientMonthlyBudgetItem } from '@/lib/types';
 
 // Helper to convert task period to budget month string format (e.g. July 2026 -> 2026-07)
 const getBudgetMonthFormat = (month: string, year: number) => {
+  if (!month) return '';
+  if (month.includes('-')) return month;
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   const idx = monthNames.indexOf(month);
-  if (idx === -1) return '';
-  const mStr = String(idx + 1).padStart(2, '0');
-  return `${year}-${mStr}`;
+  if (idx !== -1) {
+    const mStr = String(idx + 1).padStart(2, '0');
+    return `${year || 2026}-${mStr}`;
+  }
+  const monthNamesId = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const idxId = monthNamesId.indexOf(month);
+  if (idxId !== -1) {
+    const mStr = String(idxId + 1).padStart(2, '0');
+    return `${year || 2026}-${mStr}`;
+  }
+  return '';
+};
+
+const formatMonthDisplay = (mStr: string) => {
+  if (!mStr) return '';
+  if (mStr === '2026-07') return 'Juli 2026';
+  if (mStr === '2026-08') return 'Agustus 2026';
+  if (mStr === '2026-09') return 'September 2026';
+  if (mStr === '2026-10') return 'Oktober 2026';
+  const parts = mStr.split('-');
+  if (parts.length === 2) {
+    const [y, m] = parts;
+    const monthNamesId = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const idx = parseInt(m, 10) - 1;
+    if (idx >= 0 && idx < 12) return `${monthNamesId[idx]} ${y}`;
+  }
+  return mStr;
+};
+
+const getClientOnboardingMonth = (client: any) => {
+  if (!client?.createdAt) return '2026-07';
+  const d = new Date(client.createdAt);
+  if (isNaN(d.getTime())) return '2026-07';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
 };
 
 export default function ClientBudgetPage() {
-  const { clients, budgets, setBudgets, tasks, saveClientBudget } = useData();
+  const { clients, budgets, tasks, saveClientBudget } = useData();
   const [selectedMonth, setSelectedMonth] = useState('ALL');
 
   // Modal State for Add & Edit Budget
@@ -29,32 +69,54 @@ export default function ClientBudgetPage() {
 
   // New Budget Form State
   const [newClientId, setNewClientId] = useState(clients[0]?.id || '');
-  const [newMonth, setNewMonth] = useState('2026-07');
+  const [newMonth, setNewMonth] = useState('2026-09');
   const [newBudgetPoints, setNewBudgetPoints] = useState(5000);
 
-  // If selectedMonth is 'ALL', we show all actual configured budgets in the DB.
-  // If selectedMonth is a specific month (e.g. '2026-07' or '2026-08'), we iterate over ALL active clients.
-  // If a client has a configured budget for that month in the DB, we use it.
-  // Otherwise, we construct a default temporary budget item using the client's default monthlyPointBudget.
-  const displayedBudgets = selectedMonth === 'ALL'
-    ? budgets
-    : clients.map(client => {
-        const existing = budgets.find(b => b.clientId === client.id && b.month === selectedMonth);
-        if (existing) return existing;
-        return {
-          id: `temp-${client.id}-${selectedMonth}`,
-          clientId: client.id,
-          clientName: client.name,
-          month: selectedMonth,
-          budget: client.monthlyPointBudget || 5000,
-          used: 0,
-          remaining: client.monthlyPointBudget || 5000,
-        };
-      });
+  // Derive displayed budgets dynamically based on month & client onboarding month
+  const displayedBudgets = useMemo(() => {
+    const monthsToDisplay = selectedMonth === 'ALL'
+      ? ['2026-07', '2026-08', '2026-09']
+      : [selectedMonth];
+
+    const items: ClientMonthlyBudgetItem[] = [];
+
+    for (const mStr of monthsToDisplay) {
+      for (const client of clients) {
+        const onboardingMonth = getClientOnboardingMonth(client);
+        const hasTasks = tasks.some(
+          (t) => t.clientId === client.id && !t.isArchived && getBudgetMonthFormat(t.month, t.year) === mStr
+        );
+        const existing = budgets.find((b) => b.clientId === client.id && b.month === mStr);
+
+        // Include client only if onboarded on or before target month, or if they have tasks/budgets in that month
+        if (onboardingMonth <= mStr || hasTasks || existing) {
+          if (existing) {
+            items.push({
+              ...existing,
+              clientName: existing.clientName || client.name,
+            });
+          } else {
+            items.push({
+              id: `temp-${client.id}-${mStr}`,
+              clientId: client.id,
+              clientName: client.name,
+              month: mStr,
+              budget: client.monthlyPointBudget || 5000,
+              used: 0,
+              remaining: client.monthlyPointBudget || 5000,
+            });
+          }
+        }
+      }
+    }
+
+    return items;
+  }, [selectedMonth, clients, budgets, tasks]);
 
   const handleAddBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
+    if (!targetClient) return;
     await saveClientBudget(targetClient.id, newMonth, newBudgetPoints);
     setIsAddModalOpen(false);
   };
@@ -90,14 +152,14 @@ export default function ClientBudgetPage() {
 
       {/* Month Filter Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-neutral-200/80 shadow-xs">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setSelectedMonth('ALL')}
             className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
               selectedMonth === 'ALL' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
             }`}
           >
-            All Months ({budgets.length})
+            All Months ({displayedBudgets.length})
           </button>
           <button
             onClick={() => setSelectedMonth('2026-07')}
@@ -114,6 +176,14 @@ export default function ClientBudgetPage() {
             }`}
           >
             Agustus 2026
+          </button>
+          <button
+            onClick={() => setSelectedMonth('2026-09')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
+              selectedMonth === '2026-09' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            September 2026
           </button>
         </div>
 
@@ -138,7 +208,7 @@ export default function ClientBudgetPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
               {displayedBudgets.map((b) => {
-                // Dynamically calculate points used in specific period from tasks (Requirement 10)
+                // Dynamically calculate points used in specific period from tasks
                 const usedPoints = tasks
                   .filter((t) => t.clientId === b.clientId && !t.isArchived && getBudgetMonthFormat(t.month, t.year) === b.month)
                   .reduce((sum, t) => sum + (t.score || 0), 0);
@@ -146,7 +216,7 @@ export default function ClientBudgetPage() {
                 const remainingPoints = Math.max(0, b.budget - usedPoints);
                 const pct = b.budget > 0 ? Math.round((usedPoints / b.budget) * 100) : 0;
                 const isWarning = pct >= 80;
-                const monthDisplay = b.month === '2026-07' ? 'Juli 2026' : b.month === '2026-08' ? 'Agustus 2026' : b.month;
+                const monthDisplay = formatMonthDisplay(b.month);
 
                 return (
                   <tr key={b.id} className="hover:bg-neutral-50/80 transition">
@@ -242,6 +312,7 @@ export default function ClientBudgetPage() {
                   <option value="2026-07">Juli 2026</option>
                   <option value="2026-08">Agustus 2026</option>
                   <option value="2026-09">September 2026</option>
+                  <option value="2026-10">Oktober 2026</option>
                 </select>
               </div>
 
@@ -287,7 +358,7 @@ export default function ClientBudgetPage() {
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
               <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-neutral-700" /> Edit Budget ({editingBudget.clientName})
+                <Edit3 className="w-4 h-4 text-neutral-700" /> Edit Budget ({editingBudget.clientName} - {formatMonthDisplay(editingBudget.month)})
               </h3>
               <button
                 type="button"
@@ -300,7 +371,7 @@ export default function ClientBudgetPage() {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-neutral-600 font-semibold mb-1">Monthly Budget Points (pts)</label>
+                <label className="block text-neutral-600 font-semibold mb-1">Monthly Budget Points (pts) for {formatMonthDisplay(editingBudget.month)}</label>
                 <input
                   type="number"
                   min="1000"
