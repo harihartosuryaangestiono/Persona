@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
-import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
+import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod, getUserMonthlyCapacity } from '@/lib/score-calculator';
 import { Filter, Calendar } from 'lucide-react';
 
 export default function ScoreSummaryPage() {
@@ -24,9 +24,9 @@ export default function ScoreSummaryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-900 flex items-center gap-2">
-            Master Score Summary & Employee Capacity <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Monthly 16,000 Pts Cap</span>
+            Master Score Summary & Employee Capacity <span className="text-xs font-mono bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded-full border border-neutral-200">Monthly Capacity Limit</span>
           </h1>
-          <p className="text-xs text-neutral-500">Tracks employee effective workload capacity (16,000 points monthly limit).</p>
+          <p className="text-xs text-neutral-500">Tracks employee effective workload capacity and monthly targets.</p>
         </div>
 
         {/* Period Selector */}
@@ -71,7 +71,7 @@ export default function ScoreSummaryPage() {
                 // Sum worklogs and active tasks matching selected period
                 const userPoints = calculateUserPointsForPeriod(usr, selectedMonth, selectedYear, worklogs, tasks);
 
-                const capacity = (usr.monthlyCapacity && usr.monthlyCapacity !== 12000) ? usr.monthlyCapacity : 16000;
+                const capacity = getUserMonthlyCapacity(usr, selectedMonth, selectedYear);
                 const remaining = Math.max(0, capacity - userPoints);
                 const health = getCapacityHealth(userPoints, capacity);
                 const cogs = userPoints * 250;

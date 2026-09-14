@@ -5,7 +5,7 @@ import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { AiOptimizerService } from '@/lib/services/ai-optimizer-service';
-import { formatRupiah } from '@/lib/score-calculator';
+import { formatRupiah, getUserMonthlyCapacity } from '@/lib/score-calculator';
 
 export default function ResourcePlannerPage() {
   const { allUsers } = useUser();
@@ -53,7 +53,7 @@ export default function ResourcePlannerPage() {
                   <img src={rec.employee.avatar} alt={rec.employee.name} className="w-7 h-7 rounded-full object-cover border border-neutral-200" />
                   <span className="font-bold text-neutral-900">{rec.employee.name}</span>
                 </div>
-                <span className="font-mono font-bold text-xs">{rec.currentPoints} / {(rec.employee.monthlyCapacity || 16000).toLocaleString()} pts</span>
+                <span className="font-mono font-bold text-xs">{rec.currentPoints} / {getUserMonthlyCapacity(rec.employee).toLocaleString()} pts</span>
               </div>
 
               <p className="text-[11px] leading-relaxed">{rec.reason}</p>
@@ -108,7 +108,7 @@ export default function ResourcePlannerPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs font-mono">
                 <span className="text-neutral-500">Used Points:</span>
-                <span className="font-bold text-neutral-900">{rec.currentPoints} / {(rec.employee.monthlyCapacity || 16000).toLocaleString()} pts</span>
+                <span className="font-bold text-neutral-900">{rec.currentPoints} / {getUserMonthlyCapacity(rec.employee).toLocaleString()} pts</span>
               </div>
               <div className="w-full bg-neutral-100 h-2 rounded-full overflow-hidden border border-neutral-200">
                 <div

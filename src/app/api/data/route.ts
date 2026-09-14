@@ -79,6 +79,11 @@ export async function GET(req: Request) {
           orClauses.push({ stages: { contains: 'u-priska' } });
           orClauses.push({ stages: { contains: 'prisca' } });
           orClauses.push({ stages: { contains: 'priska' } });
+        } else if (nameLower.includes('aqsal')) {
+          orClauses.push({ assignedUserIds: { contains: 'u-aqsal' } });
+          orClauses.push({ assignedUserIds: { contains: 'aqsal' } });
+          orClauses.push({ stages: { contains: 'u-aqsal' } });
+          orClauses.push({ stages: { contains: 'aqsal' } });
         }
 
         // If user has Scheduler role, also include scheduling-stage tasks or tasks that mention Scheduler role

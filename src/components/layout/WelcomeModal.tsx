@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
+import { getUserMonthlyCapacity } from '@/lib/score-calculator';
 import {
   Calendar,
   Clock,
@@ -144,7 +145,8 @@ export function WelcomeModal() {
     (w) => w.userName === currentUser.name || w.userId === currentUser.id
   );
   const userTotalPoints = userWorklogs.reduce((sum, w) => sum + w.score, 0);
-  const remainingCapacity = Math.max(0, currentUser.monthlyCapacity - userTotalPoints);
+  const userCap = getUserMonthlyCapacity(currentUser);
+  const remainingCapacity = Math.max(0, userCap - userTotalPoints);
 
   const handleCheckIn = async () => {
     if (isCheckingIn) return;
@@ -263,12 +265,12 @@ export function WelcomeModal() {
                 <span className="flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5 text-neutral-400" /> Remaining Capacity
                 </span>
-                <span className="font-mono text-neutral-900">{remainingCapacity} / {currentUser.monthlyCapacity} pts</span>
+                <span className="font-mono text-neutral-900">{remainingCapacity} / {userCap} pts</span>
               </div>
               <div className="w-full bg-neutral-200 h-2 rounded-full overflow-hidden">
                 <div
                   className="bg-neutral-900 h-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (remainingCapacity / currentUser.monthlyCapacity) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (remainingCapacity / userCap) * 100)}%` }}
                 />
               </div>
             </div>

@@ -3,11 +3,11 @@
 import React, { useState } from 'react';
 import { useData } from '@/context/DataContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
-import { Plus, Filter, Search, Layers, Briefcase, ChevronRight, CheckCircle2, Video, FileText } from 'lucide-react';
+import { Plus, Filter, Search, Layers, Briefcase, ChevronRight, CheckCircle2, Video, FileText, Edit2, X, Save } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ProjectsPage() {
-  const { clients, tasks } = useData();
+  const { clients, tasks, updateClient, saveClientBudget, refreshData } = useData();
   const { workspaces } = useWorkspace();
 
   // Filters State
@@ -15,6 +15,11 @@ export default function ProjectsPage() {
   const [selectedStageCategory, setSelectedStageCategory] = useState<string>('ALL');
   const [selectedSpecificStage, setSelectedSpecificStage] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Quick Score Edit Modal State
+  const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [editScoreValue, setEditScoreValue] = useState<number>(5000);
+  const [savingScore, setSavingScore] = useState(false);
 
   const STRATEGIC_STAGES = ['Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production'];
   const PRODUCTION_STAGES = ['Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling'];
@@ -24,6 +29,41 @@ export default function ProjectsPage() {
     'Brief', 'Content Proposal', 'Editorial Calendar', 'Script & Shotlist', 'Ready for Production',
     'Production', 'Shooting', 'Editing', 'Revision', 'Waiting for Approval', 'Approval', 'Ready to Post', 'Scheduling', 'Posted', 'Completed'
   ];
+
+  const handleOpenScoreModal = (client: any) => {
+    setEditingClient(client);
+    setEditScoreValue(client.monthlyPointBudget || 5000);
+  };
+
+  const handleSaveProjectScore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient) return;
+
+    try {
+      setSavingScore(true);
+      const newScore = Number(editScoreValue);
+
+      // Save via API
+      const res = await fetch(`/api/clients?id=${editingClient.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthlyPointBudget: newScore }),
+      });
+
+      if (res.ok) {
+        await updateClient(editingClient.id, { monthlyPointBudget: newScore });
+        // Also sync monthly budget table
+        const monthStr = '2026-09';
+        await saveClientBudget(editingClient.id, monthStr, newScore);
+        await refreshData();
+      }
+      setEditingClient(null);
+    } catch (e) {
+      console.error('Failed to save project score:', e);
+    } finally {
+      setSavingScore(false);
+    }
+  };
 
   // Filter clients by scope
   const filteredClients = clients.filter((c) => {
@@ -174,12 +214,14 @@ export default function ProjectsPage() {
           }
 
           const totalPoints = clientTasks.reduce((sum, t) => sum + (t.score || 0), 0);
+          const targetBudget = c.monthlyPointBudget || 5000;
+          const pct = targetBudget > 0 ? Math.min(100, Math.round((totalPoints / targetBudget) * 100)) : 0;
           const strategicCount = clientTasks.filter((t) => STRATEGIC_STAGES.includes(t.status)).length;
           const productionCount = clientTasks.filter((t) => PRODUCTION_STAGES.includes(t.status)).length;
           const postedCount = clientTasks.filter((t) => COMPLETED_STAGES.includes(t.status)).length;
 
           return (
-            <div key={c.id} className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-4 shadow-xs hover:shadow-md transition">
+            <div key={c.id} className="bg-white border border-neutral-200/80 rounded-2xl p-6 space-y-4 shadow-xs hover:shadow-md transition relative">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
@@ -192,9 +234,32 @@ export default function ProjectsPage() {
                   </div>
                   <h3 className="text-base font-bold text-neutral-900 mt-2">{c.name} Content Campaign</h3>
                 </div>
-                <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
-                  {totalPoints} pts
-                </span>
+
+                <div className="text-right space-y-1">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="text-xs font-mono font-bold text-neutral-900 bg-neutral-100 px-2.5 py-1 rounded border border-neutral-200">
+                      {totalPoints} / {targetBudget.toLocaleString()} pts
+                    </span>
+                    <button
+                      onClick={() => handleOpenScoreModal(c)}
+                      title="Edit Project Target Score"
+                      className="p-1 rounded-md bg-neutral-100 hover:bg-neutral-200 text-neutral-600 transition border border-neutral-200"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] font-mono text-neutral-500 font-semibold">{pct}% budget used</p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden border border-neutral-200">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-600'
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
               </div>
 
               {/* Stage breakdown badges */}
@@ -249,6 +314,61 @@ export default function ProjectsPage() {
           );
         })}
       </div>
+
+      {/* Quick Edit Project Score Modal */}
+      {editingClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white border border-neutral-200 rounded-3xl w-full max-w-md p-6 shadow-xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div>
+                <h3 className="font-bold text-neutral-900 text-base">Edit Project Target Score</h3>
+                <p className="text-xs text-neutral-500">{editingClient.name} ({editingClient.code})</p>
+              </div>
+              <button
+                onClick={() => setEditingClient(null)}
+                className="p-1 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProjectScore} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-700 block">Monthly Target Score (Points Budget)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="500"
+                  value={editScoreValue}
+                  onChange={(e) => setEditScoreValue(Number(e.target.value))}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3.5 py-2 text-sm font-mono font-bold text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                  placeholder="e.g. 5000"
+                />
+                <p className="text-[11px] text-neutral-400 italic">Score target ini menentukan batas kuota point bulanan untuk project ini dan dapat diubah kapan saja.</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingClient(null)}
+                  className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-xl text-xs font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingScore}
+                  className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingScore ? 'Saving...' : 'Update Score Target'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

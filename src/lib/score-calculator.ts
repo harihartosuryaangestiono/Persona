@@ -194,6 +194,28 @@ export function calculateAutoDeadline(postingDateStr: string, offsetDays: number
   return date.toISOString().split('T')[0];
 }
 
+export function getUserMonthlyCapacity(
+  user: { id?: string; name?: string; monthlyCapacity?: number } | null | undefined,
+  month?: string,
+  year?: number
+): number {
+  if (!user) return 16000;
+  const isAqsal =
+    user.id === 'u-aqsal' ||
+    user.name?.toLowerCase().includes('aqsal');
+
+  if (isAqsal) {
+    const normMonth = month ? month.trim().toLowerCase() : '';
+    if (normMonth.includes('september') || normMonth === 'sep' || normMonth === '9' || normMonth === '09') {
+      return 7200;
+    }
+    return 11200;
+  }
+
+  const cap = user.monthlyCapacity;
+  return (cap && cap !== 12000) ? cap : 16000;
+}
+
 export function getCapacityHealth(
   usedPoints: number,
   maxCapacity: number = 16000

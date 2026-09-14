@@ -59,6 +59,14 @@ async function main() {
       email: 'priska@personaos.com',
       roles: JSON.stringify(['Production Assistant', 'Editor']),
       avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80',
+      monthlyCapacity: 16000,
+    },
+    {
+      name: 'Aqsal',
+      email: 'aqsal@personaos.com',
+      roles: JSON.stringify(['Production Assistant', 'Editor']),
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=256&q=80',
+      monthlyCapacity: 11200,
     },
   ];
 
@@ -70,7 +78,7 @@ async function main() {
         email: u.email,
         roles: u.roles,
         avatar: u.avatar,
-        monthlyCapacity: 16000,
+        monthlyCapacity: u.monthlyCapacity || 16000,
         hourlyPoint: 100,
         costPerPoint: 250,
       },
@@ -125,6 +133,7 @@ async function main() {
     { name: 'Baking Empire Citra 8', code: 'BEC8', budget: 5000, used: 4350, remaining: 650, color: '#F59E0B', workspaceId: 'ws-team-anggi' },
     { name: 'Samazama Japan', code: 'SZJ', budget: 5000, used: 2441, remaining: 2559, color: '#EC4899', workspaceId: 'ws-team-anggi' },
     { name: 'Karihome', code: 'KRM', budget: 5667, used: 1799, remaining: 3868, color: '#8B5CF6', workspaceId: 'ws-team-anggi' },
+    { name: 'Mimicat', code: 'MMC', budget: 5000, used: 0, remaining: 5000, color: '#EC4899', workspaceId: 'ws-team-anggi' },
     // Inhouse
     { name: 'MotoDW', code: 'MDW', budget: 19533, used: 2240, remaining: 17293, color: '#6366F1', workspaceId: 'ws-inhouse' },
     { name: 'Hariharigimmick', code: 'HHG', budget: 5000, used: 0, remaining: 5000, color: '#8B5CF6', workspaceId: 'ws-inhouse' },

@@ -109,6 +109,10 @@ export function isUserMatch(
   const isUserPriska = uname.includes('prisca') || uname.includes('priska') || uid.includes('priska');
   if (isTargetPriska && isUserPriska) return true;
 
+  const isTargetAqsal = t.includes('aqsal');
+  const isUserAqsal = uname.includes('aqsal') || uid.includes('aqsal');
+  if (isTargetAqsal && isUserAqsal) return true;
+
   return false;
 }
 
@@ -228,6 +232,17 @@ export const PERMANENT_USERS: UserPersona[] = [
     avatar: '',
     roles: ['Production Assistant', 'Editor'],
     monthlyCapacity: 16000,
+    hourlyPoint: 100,
+    costPerPoint: 250,
+    active: true,
+  },
+  {
+    id: 'u-aqsal',
+    name: 'Aqsal',
+    email: 'aqsal@personaos.com',
+    avatar: '',
+    roles: ['Production Assistant', 'Editor'],
+    monthlyCapacity: 11200,
     hourlyPoint: 100,
     costPerPoint: 250,
     active: true,

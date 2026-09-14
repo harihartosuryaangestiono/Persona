@@ -624,6 +624,7 @@ export class PersonaAIEngine {
     'MotoDW': ['motodw', 'moto dw', 'moto'],
     'Samazama Japan': ['samazama', 'samazama japan', 'smz'],
     'Hariharigimmick': ['harihari', 'hariharigimmick', 'hhg'],
+    'Mimicat': ['mimicat', 'mmc', 'mcat', 'mimi'],
   };
 
   private static EMPLOYEE_ALIASES: Record<string, string[]> = {
@@ -632,11 +633,12 @@ export class PersonaAIEngine {
     'Anggi': ['anggi', 'ag'],
     'Priska': ['priska', 'pr'],
     'Dinda': ['dinda', 'dindong', 'dd'],
+    'Aqsal': ['aqsal', 'aqs', 'aq'],
   };
 
   public static isClientMentionedInPrompt(prompt: string): boolean {
     const clean = prompt.toLowerCase();
-    const clientKeywords = ['baking empire', 'karihome', 'motodw', 'samazama', 'harihari', 'begs', 'bekg', 'bec8', 'kh', 'smz', 'hhg', 'gading', 'serpong', 'kelapa', 'citra'];
+    const clientKeywords = ['baking empire', 'karihome', 'motodw', 'samazama', 'harihari', 'mimicat', 'begs', 'bekg', 'bec8', 'kh', 'smz', 'hhg', 'mmc', 'gading', 'serpong', 'kelapa', 'citra'];
     return clientKeywords.some((k) => clean.includes(k));
   }
 
@@ -1230,6 +1232,7 @@ export function resolveClients(keyword: string | null | undefined, allClients: C
     'MotoDW': ['motodw', 'moto dw', 'moto'],
     'Samazama Japan': ['samazama', 'samazama japan', 'smz'],
     'Hariharigimmick': ['harihari', 'hariharigimmick', 'hhg'],
+    'Mimicat': ['mimicat', 'mmc', 'mcat', 'mimi'],
   };
 
   let matchedName: string | null = null;
@@ -1287,6 +1290,7 @@ export function resolveEmployee(keyword: string | null | undefined, allUsers: Us
     'Priska': ['priska', 'prisca', 'pr'],
     'Dinda': ['dinda', 'dindong', 'dd'],
     'Gigie': ['gigie', 'gigi'],
+    'Aqsal': ['aqsal', 'aqs', 'aq'],
   };
 
   let matchedName: string | null = null;
@@ -1397,7 +1401,7 @@ export class PersonaAIQueryExecutor {
     let clientKeyword: string | null = null;
     let employeeKeyword: string | null = null;
     
-    const clientKeywords = ['baking empire', 'begs', 'bekg', 'bec8', 'gading serpong', 'kelapa gading', 'citra 8', 'karihome', 'motodw', 'samazama', 'harihari', 'kh', 'smz', 'hhg'];
+    const clientKeywords = ['baking empire', 'begs', 'bekg', 'bec8', 'gading serpong', 'kelapa gading', 'citra 8', 'karihome', 'motodw', 'samazama', 'harihari', 'mimicat', 'kh', 'smz', 'hhg', 'mmc'];
     for (const ck of clientKeywords) {
       if (clean.includes(ck)) {
         clientKeyword = ck;
@@ -1405,7 +1409,7 @@ export class PersonaAIQueryExecutor {
       }
     }
 
-    const employeeKeywords = ['jabin', 'devi', 'anggi', 'priska', 'prisca', 'dinda', 'dindong', 'gigie', 'gigi'];
+    const employeeKeywords = ['jabin', 'devi', 'anggi', 'priska', 'prisca', 'dinda', 'dindong', 'gigie', 'gigi', 'aqsal'];
     for (const ek of employeeKeywords) {
       if (clean.includes(ek)) {
         employeeKeyword = ek;
