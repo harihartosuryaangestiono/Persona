@@ -37,7 +37,7 @@ import { useData } from '@/context/DataContext';
 import { useUser } from '@/context/UserContext';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { UserRole } from '@/lib/types';
-import { calculateUserPointsForPeriod } from '@/lib/score-calculator';
+import { calculateUserPointsForPeriod, getUserMonthlyCapacity } from '@/lib/score-calculator';
 import { normalizeRoles, hasAnyRole } from '@/lib/rbac';
  
 interface NavItem {
@@ -122,9 +122,6 @@ export function Sidebar() {
     return t.workspaceId === currentWorkspace?.id || isMotoDW;
   }).length;
 
-  // Dynamic capacity calculation
-  const capacity = (companySettings?.monthlyCapacity && companySettings.monthlyCapacity !== 12000) ? companySettings.monthlyCapacity : (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000 ? currentUser.monthlyCapacity : 16000);
-  
   // Sum worklogs and active tasks matching selected period (current month/year)
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -133,6 +130,9 @@ export function Sidebar() {
   const currentDate = new Date();
   const activeMonth = monthNames[currentDate.getMonth()];
   const activeYear = currentDate.getFullYear();
+
+  // Dynamic capacity calculation
+  const capacity = currentUser ? getUserMonthlyCapacity(currentUser, activeMonth, activeYear) : 16000;
   const userPoints = currentUser ? calculateUserPointsForPeriod(currentUser, activeMonth, activeYear, worklogs, tasks) : 0;
 
   const progressPercent = capacity > 0 ? Math.min(100, (userPoints / capacity) * 100) : 0;

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/context/ToastContext';
-import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod } from '@/lib/score-calculator';
+import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod, getUserMonthlyCapacity } from '@/lib/score-calculator';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -205,7 +205,7 @@ export default function DynamicDashboardPage() {
   // Recalculate employee workload score from stages and tasks (Requirement 10: July 2026 default)
   const userTotalPoints = currentUser ? calculateUserPointsForPeriod(currentUser, selectedMonth, selectedYear, worklogs, tasks) : 0;
 
-  const maxCapacity = (currentUser?.monthlyCapacity && currentUser.monthlyCapacity !== 12000) ? currentUser.monthlyCapacity : 16000;
+  const maxCapacity = currentUser ? getUserMonthlyCapacity(currentUser, selectedMonth, selectedYear) : 16000;
   const capacityHealth = getCapacityHealth(userTotalPoints, maxCapacity);
   const remainingCapacity = maxCapacity - userTotalPoints;
   const workloadForecast = capacityHealth.percent >= 90 ? 'Critical Overload' : (capacityHealth.percent >= 75 ? 'Busy/Full Load' : 'Healthy Capacity');

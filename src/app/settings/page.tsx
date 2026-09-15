@@ -47,7 +47,7 @@ export default function SettingsPage() {
     setEditEmail(u.email);
     setEditAvatar(u.avatar || '');
     setEditRoles(u.roles);
-    setEditCapacity(u.monthlyCapacity || 16000);
+    setEditCapacity(u.monthlyCapacity || (u.name?.toLowerCase().includes('aqsal') || u.id === 'u-aqsal' ? 11200 : 16000));
   };
 
   const openPasswordModal = (u: UserPersona) => {

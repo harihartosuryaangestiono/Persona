@@ -116,7 +116,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         avatar: customAvatar !== undefined ? customAvatar : (dbU.avatar || template?.avatar || ''),
         password: customPassword || dbU.password || template?.name.toLowerCase() || dbU.name.toLowerCase(),
         roles: canonicalRoles,
-        monthlyCapacity: (dbU.monthlyCapacity && dbU.monthlyCapacity !== 12000) ? dbU.monthlyCapacity : 16000,
+        monthlyCapacity: (dbU.monthlyCapacity && dbU.monthlyCapacity !== 12000) ? dbU.monthlyCapacity : (template?.monthlyCapacity || (dbU.name?.toLowerCase().includes('aqsal') || dbU.id === 'u-aqsal' ? 11200 : 16000)),
         hourlyPoint: dbU.hourlyPoint || 100,
         costPerPoint: dbU.costPerPoint || 250,
         active: dbU.active !== undefined ? dbU.active : true,

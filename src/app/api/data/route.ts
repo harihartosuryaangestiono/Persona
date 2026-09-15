@@ -190,7 +190,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       users: users.map((u: User) => ({
         ...u,
-        monthlyCapacity: u.monthlyCapacity === 12000 || !u.monthlyCapacity ? 16000 : u.monthlyCapacity,
+        monthlyCapacity: u.monthlyCapacity === 12000 || !u.monthlyCapacity ? (u.name?.toLowerCase().includes('aqsal') || u.id === 'u-aqsal' ? 11200 : 16000) : u.monthlyCapacity,
         roles: typeof u.roles === 'string' ? JSON.parse(u.roles) : u.roles,
       })),
       clients,

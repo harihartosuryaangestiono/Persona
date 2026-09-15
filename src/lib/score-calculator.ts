@@ -205,9 +205,22 @@ export function getUserMonthlyCapacity(
     user.name?.toLowerCase().includes('aqsal');
 
   if (isAqsal) {
-    const normMonth = month ? month.trim().toLowerCase() : '';
+    const monthNames = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'
+    ];
+    let normMonth = month ? month.trim().toLowerCase() : '';
+    if (!normMonth) {
+      const curDate = new Date();
+      normMonth = monthNames[curDate.getMonth()];
+    }
+
     if (normMonth.includes('september') || normMonth === 'sep' || normMonth === '9' || normMonth === '09') {
       return 7200;
+    }
+
+    if (user.monthlyCapacity && user.monthlyCapacity !== 12000 && user.monthlyCapacity !== 16000) {
+      return user.monthlyCapacity;
     }
     return 11200;
   }

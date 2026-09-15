@@ -1,5 +1,5 @@
 import { WorklogItem, TaskItem, ClientItem, UserPersona, ClientMonthlyBudgetItem, AttendanceItem, LeaveRequestItem, MasterScoreItem } from '../types';
-import { calculateUserPointsForPeriod } from '../score-calculator';
+import { calculateUserPointsForPeriod, getUserMonthlyCapacity } from '../score-calculator';
 
 export interface ReasoningMetadata {
   client?: string;
@@ -283,7 +283,7 @@ export class FunctionRegistry {
     );
 
     const pts = calculateUserPointsForPeriod(targetUser, month, year, worklogs, tasks);
-    const cap = targetUser.monthlyCapacity || 16000;
+    const cap = getUserMonthlyCapacity(targetUser, month, year);
     const pctUsed = Math.round((pts / cap) * 100);
 
     // Client distribution
@@ -478,7 +478,7 @@ export class FunctionRegistry {
   ): PersonaAIResponse {
     const userScores = users.map((u) => {
       const pts = calculateUserPointsForPeriod(u, month, year, worklogs, tasks);
-      const cap = u.monthlyCapacity || 16000;
+      const cap = getUserMonthlyCapacity(u, month, year);
       const pct = Math.round((pts / cap) * 100);
       return { user: u, score: pts, remainingPts: Math.max(0, cap - pts), percent: pct };
     }).sort((a, b) => b.score - a.score);
@@ -824,7 +824,7 @@ export class PersonaAIEngine {
     // Employee Summary
     const userScores = users.map((u) => {
       const pts = calculateUserPointsForPeriod(u, targetMonth, targetYear, worklogs, tasks);
-      const cap = u.monthlyCapacity || 16000;
+      const cap = getUserMonthlyCapacity(u, targetMonth, targetYear);
       const pct = Math.round((pts / cap) * 100);
       return { name: u.name, score: pts, remainingPts: Math.max(0, cap - pts), percent: pct };
     });
@@ -1691,7 +1691,7 @@ export class PersonaAIQueryExecutor {
     } else if (plan.intent === 'EMPLOYEE_WORKLOAD') {
       if (resolvedEmployee) {
         const score = calculateUserPointsForPeriod(resolvedEmployee, resolvedDate.month, resolvedDate.year, worklogs, tasks);
-        const capacity = resolvedEmployee.monthlyCapacity || 12000;
+        const capacity = getUserMonthlyCapacity(resolvedEmployee, resolvedDate.month, resolvedDate.year);
         const capacityPct = Math.round((score / capacity) * 100);
         const cogs = score * 250;
         const workloadStatus = capacityPct > 100 ? 'OVERLOAD' : (capacityPct >= 90 ? 'BUSY' : 'HEALTHY');
@@ -1704,7 +1704,7 @@ export class PersonaAIQueryExecutor {
       } else {
         const teamRankings = users.map(u => {
           const score = calculateUserPointsForPeriod(u, resolvedDate.month, resolvedDate.year, worklogs, tasks);
-          const capacity = u.monthlyCapacity || 12000;
+          const capacity = getUserMonthlyCapacity(u, resolvedDate.month, resolvedDate.year);
           const capacityPct = Math.round((score / capacity) * 100);
           const cogs = score * 250;
           return {
