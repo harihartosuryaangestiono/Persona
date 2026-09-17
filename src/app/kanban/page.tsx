@@ -360,26 +360,12 @@ export default function KanbanPage() {
     }
 
     // Role & Task Visibility Constraint:
-    const isAdmin = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner');
     const isManager = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
-    if (isAdmin || isManager) return true;
-
-    let matchesCategory = false;
-    const catStr = t.category as string;
-    if (currentUser.roles.includes('Strategist') && (catStr === 'Strategic' || catStr === 'Strategist')) matchesCategory = true;
-    if (currentUser.roles.includes('Editor') && (catStr === 'Editor' || catStr === 'Editing')) matchesCategory = true;
-    if (currentUser.roles.includes('Scheduler') && (catStr === 'Scheduler' || catStr === 'Scheduling')) matchesCategory = true;
-    if (currentUser.roles.includes('Production Assistant') && (catStr === 'Production' || catStr === 'Assistant')) matchesCategory = true;
+    if (isManager) return true;
 
     const isCreator = (t as any).createdBy === currentUser.id || (t as any).createdBy === currentUser.name;
 
-    // Allow any Scheduler role to view Scheduling-stage tasks (workspace-wide visibility for scheduling)
-    const isSchedulerRole = currentUser.roles.includes('Scheduler');
-    const isSchedulingStatus = t.status === 'Scheduling' || t.status === 'Ready to Post';
-    const hasSchedulingStage = Array.isArray(logStages) && logStages.some((s: any) => (s.role === 'Scheduler' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))));
-    if (isSchedulerRole && (isSchedulingStatus || hasSchedulingStage)) return true;
-
-    return isAssignedToCurrentUser || isStageAssigneeToCurrentUser || matchesCategory || isCreator;
+    return isAssignedToCurrentUser || isStageAssigneeToCurrentUser || isCreator;
   });
 
   // Sort tasks for table view

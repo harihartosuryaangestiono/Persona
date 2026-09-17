@@ -16,6 +16,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
+import { isUserMatch } from '@/lib/rbac';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -102,9 +103,23 @@ export default function EditingQueuePage() {
   };
 
   // Filter Tasks for the current workspace and Editing/Revision stages
+  const isManager = currentUser?.roles?.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r));
   const editingTasks = tasks.filter((t) => {
     if (t.workspaceId !== currentWorkspace.id || t.isArchived) return false;
-    return t.status === 'Editing' || t.status === 'Revision';
+    if (!(t.status === 'Editing' || t.status === 'Revision')) return false;
+
+    if (!isManager && currentUser) {
+      const assignedIds: string[] = typeof t.assignedUserIds === 'string'
+        ? JSON.parse(t.assignedUserIds)
+        : (t.assignedUserIds || []);
+      const isAssigned = assignedIds.some((id) => isUserMatch(id, currentUser));
+      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+      if (!isAssigned && !isStageAssignee) {
+        return false;
+      }
+    }
+    return true;
   });
 
   // Apply filters

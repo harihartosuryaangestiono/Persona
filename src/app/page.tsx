@@ -23,6 +23,7 @@ import {
 import Link from 'next/link';
 import { useToast } from '@/context/ToastContext';
 import { formatRupiah, getCapacityHealth, calculateUserPointsForPeriod, getUserMonthlyCapacity } from '@/lib/score-calculator';
+import { isUserMatch } from '@/lib/rbac';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -551,7 +552,14 @@ export default function DynamicDashboardPage() {
         <div className="p-6 rounded-2xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
           <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Video className="w-4 h-4 text-neutral-700" /> Active Editing & Revision Queue ({workspaceTasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor').length})
+              <Video className="w-4 h-4 text-neutral-700" /> Active Editing & Revision Queue ({
+                workspaceTasks.filter((t) => {
+                  if (!(t.status === 'Editing' || t.status === 'Revision')) return false;
+                  const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+                  const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+                  return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+                }).length
+              })
             </span>
             <Link
               href="/editing"
@@ -562,7 +570,12 @@ export default function DynamicDashboardPage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {workspaceTasks
-              .filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor')
+              .filter((t) => {
+                if (!(t.status === 'Editing' || t.status === 'Revision')) return false;
+                const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+                const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+                return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+              })
               .slice(0, 4)
               .map((t) => (
                 <div
@@ -582,7 +595,12 @@ export default function DynamicDashboardPage() {
                   {renderCardActions(t)}
                 </div>
               ))}
-            {workspaceTasks.filter((t) => (t.status === 'Editing' || t.status === 'Revision') && t.category === 'Editor').length === 0 && (
+            {workspaceTasks.filter((t) => {
+              if (!(t.status === 'Editing' || t.status === 'Revision')) return false;
+              const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+              const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+              return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+            }).length === 0 && (
               <p className="col-span-2 text-neutral-400 text-center py-8 italic">No active editing or revisions queued.</p>
             )}
           </div>
@@ -597,7 +615,12 @@ export default function DynamicDashboardPage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {workspaceTasks
-              .filter((t) => t.status === 'Scheduling')
+              .filter((t) => {
+                if (t.status !== 'Scheduling') return false;
+                const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+                const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+                return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+              })
               .slice(0, 4)
               .map((t) => (
                 <div
@@ -617,7 +640,12 @@ export default function DynamicDashboardPage() {
                   {renderCardActions(t)}
                 </div>
               ))}
-            {workspaceTasks.filter((t) => t.status === 'Scheduling').length === 0 && (
+            {workspaceTasks.filter((t) => {
+              if (t.status !== 'Scheduling') return false;
+              const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+              const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+              return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+            }).length === 0 && (
               <p className="col-span-2 text-neutral-400 text-center py-8 italic">No contents ready to post.</p>
             )}
           </div>

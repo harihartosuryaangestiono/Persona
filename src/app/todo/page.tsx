@@ -7,6 +7,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { Search, ExternalLink, Plus, Filter, X } from 'lucide-react';
 import { calculateAutoDeadline } from '@/lib/score-calculator';
 import { isStrategicPipeline, STRATEGIC_STATUS_OPTIONS, PRODUCTION_STATUS_OPTIONS } from '@/lib/status';
+import { isUserMatch } from '@/lib/rbac';
 
 function formatUrl(url: string): string {
   if (!url) return '';
@@ -30,7 +31,7 @@ function formatDateForInput(d?: string | null): string {
 
 export default function ToDoPage() {
   const { tasks, clients, updateTask, addTask } = useData();
-  const { allUsers } = useUser();
+  const { currentUser, allUsers } = useUser();
   const { currentWorkspace } = useWorkspace();
 
   const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
@@ -336,7 +337,21 @@ export default function ToDoPage() {
   }, [monthFilteredRows, selectedClientId]);
 
   const displayedRows = useMemo(() => {
+    const isManager = currentUser?.roles?.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r));
     return monthFilteredRows.filter((r) => {
+      if (!isManager && currentUser) {
+        const assignedIds: string[] = typeof r.originalTask?.assignedUserIds === 'string'
+          ? JSON.parse(r.originalTask.assignedUserIds)
+          : (r.originalTask?.assignedUserIds || []);
+        const isAssigned = assignedIds.some((id) => isUserMatch(id, currentUser));
+        const matchesPic = isUserMatch(r.picName, currentUser);
+        const stages = r.originalTask?.stages ? (typeof r.originalTask.stages === 'string' ? JSON.parse(r.originalTask.stages) : r.originalTask.stages) : [];
+        const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+        if (!isAssigned && !matchesPic && !isStageAssignee) {
+          return false;
+        }
+      }
+
       const matchesClient = selectedClientId === 'ALL' || r.clientId === selectedClientId;
       const matchesCategory = selectedCategoryFilter === 'ALL' || r.category === selectedCategoryFilter;
       const matchesStatus = selectedStatusFilter === 'ALL' || r.status === selectedStatusFilter;
@@ -369,7 +384,7 @@ export default function ToDoPage() {
 
       return matchesClient && matchesCategory && matchesStatus && matchesPic && matchesFormat && matchesDate && matchesSearch;
     });
-  }, [monthFilteredRows, selectedClientId, selectedCategoryFilter, selectedStatusFilter, selectedPicFilter, selectedFormatFilter, startDateFilter, endDateFilter, searchQuery]);
+  }, [monthFilteredRows, currentUser, selectedClientId, selectedCategoryFilter, selectedStatusFilter, selectedPicFilter, selectedFormatFilter, startDateFilter, endDateFilter, searchQuery]);
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();

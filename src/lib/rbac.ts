@@ -380,28 +380,13 @@ export function checkTaskAccess(
     return true;
   }
 
-  const boardRoleCoverage = ['Production Assistant', 'Editor', 'Scheduler'] as const;
-  if (userRoles.some((r) => (boardRoleCoverage as readonly string[]).includes(r))) {
-    return true;
-  }
-
-  const userIsScheduler = userRoles.includes('Scheduler');
-  const taskStatus = task.status || '';
-  if (userIsScheduler && (taskStatus === 'Scheduling' || taskStatus === 'Ready to Post')) {
-    return true;
-  }
-
   const assignedIds: string[] = safeReadJsonArray(task.assignedUserIds);
-  if (assignedIds.includes(user.id) || assignedIds.includes(user.name)) {
+  if (assignedIds.some((id) => isUserMatch(id, user))) {
     return true;
   }
 
   const stages = safeReadJsonArray(task.stages);
-  if (Array.isArray(stages) && stages.some((s: any) => s.userId === user.id || s.userName === user.name)) {
-    return true;
-  }
-
-  if (userIsScheduler && Array.isArray(stages) && stages.some((s: any) => (s.role === 'Scheduler' || s.role === 'Scheduling') || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling')))) {
+  if (Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, user) || isUserMatch(s.userName, user))) {
     return true;
   }
 

@@ -7,7 +7,7 @@ import { useUser } from '@/context/UserContext';
 import { Video, Calendar, MapPin, Users, CheckSquare, Camera, Upload, X, Check, Link as LinkIcon, Search, Filter, ExternalLink, Clock } from 'lucide-react';
  
 import { useToast } from '@/context/ToastContext';
-import { resolvePrimaryEmployee } from '@/lib/rbac';
+import { resolvePrimaryEmployee, isUserMatch } from '@/lib/rbac';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -84,24 +84,18 @@ export default function ProductionPage() {
  
     if (!isProductionTask) return false;
  
-    const isAdmin = currentUser?.roles.includes('Admin') || currentUser?.roles.includes('Owner');
-    if (isAdmin) return true;
+    const isManager = currentUser?.roles?.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r));
+    if (isManager) return true;
  
     const assignedIds = t.assignedUserIds
       ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
       : [];
-    const isAssigned = assignedIds.includes(currentUser?.id) || assignedIds.includes(currentUser?.name);
+    const isAssigned = assignedIds.some((id: string) => isUserMatch(id, currentUser));
  
     const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-    const isStageAssignee = logStages.some((s: any) => s.userId === currentUser?.id || s.userName === currentUser?.name);
+    const isStageAssignee = logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
  
-    const userRoles = currentUser?.roles || [];
-    let matchesCategory = false;
-    if (userRoles.some((r) => ['Production Assistant', 'Editor', 'Strategist', 'Admin', 'Owner'].includes(r))) {
-      matchesCategory = true;
-    }
- 
-    return isAssigned || isStageAssignee || matchesCategory;
+    return isAssigned || isStageAssignee;
   });
 
   // Filter by completion status, month, client, and search query
