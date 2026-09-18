@@ -87,13 +87,25 @@ export default function ProductionPage() {
     const isManager = currentUser?.roles?.some((r) => ['Admin', 'Owner', 'Strategist'].includes(r));
     if (isManager) return true;
  
+    const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+    const paStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) =>
+      s && (
+        s.role === 'Production Assistant' ||
+        s.taskType?.includes('Production') ||
+        (s.name && String(s.name).toLowerCase().includes('shoot')) ||
+        (s.name && String(s.name).toLowerCase().includes('prod'))
+      )
+    ) : null;
+
+    if (paStage && (paStage.userId || paStage.userName)) {
+      return isUserMatch(paStage.userId, currentUser) || isUserMatch(paStage.userName, currentUser);
+    }
+
     const assignedIds = t.assignedUserIds
       ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds)
       : [];
     const isAssigned = assignedIds.some((id: string) => isUserMatch(id, currentUser));
- 
-    const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-    const isStageAssignee = logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+    const isStageAssignee = Array.isArray(parsedStages) && parsedStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
  
     return isAssigned || isStageAssignee;
   });

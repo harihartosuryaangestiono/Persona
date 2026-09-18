@@ -8,6 +8,7 @@ import { CheckCircle, RotateCcw, ShieldCheck, ExternalLink, LayoutGrid, CheckSqu
 import confetti from 'canvas-confetti';
 
 import { useToast } from '@/context/ToastContext';
+import { isUserMatch } from '@/lib/rbac';
 
 export default function ApprovalPage() {
   const { currentUser, allUsers } = useUser();
@@ -91,14 +92,16 @@ export default function ApprovalPage() {
 
     // Apply PIC filter
     if (selectedPIC !== 'ALL') {
-      const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
-      const userObj = allUsers.find((u) => u.id === selectedPIC);
-      const isAssigned = assignedIds.includes(selectedPIC) || (userObj && assignedIds.includes(userObj.name));
-      
-      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => s.userId === selectedPIC || (userObj && s.userName === userObj.name));
+      const targetUser = allUsers.find((u) => u.id === selectedPIC || isUserMatch(selectedPIC, u));
+      if (targetUser) {
+        const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
+        const isAssigned = (Array.isArray(assignedIds) ? assignedIds : []).some((id: string) => isUserMatch(id, targetUser));
+        
+        const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+        const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, targetUser) || isUserMatch(s.userName, targetUser));
 
-      if (!isAssigned && !isStageAssignee) return false;
+        if (!isAssigned && !isStageAssignee) return false;
+      }
     }
 
     // Apply format filter

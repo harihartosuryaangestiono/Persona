@@ -109,13 +109,29 @@ export default function EditingQueuePage() {
     if (!(t.status === 'Editing' || t.status === 'Revision')) return false;
 
     if (!isManager && currentUser) {
-      const assignedIds: string[] = typeof t.assignedUserIds === 'string'
-        ? JSON.parse(t.assignedUserIds)
-        : (t.assignedUserIds || []);
-      const isAssigned = assignedIds.some((id) => isUserMatch(id, currentUser));
-      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-      const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
-      if (!isAssigned && !isStageAssignee) {
+      const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const editorStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) => 
+        s && (
+          s.role === 'Editor' || 
+          s.taskType === 'Editing' || 
+          (s.name && String(s.name).toLowerCase().includes('edit')) ||
+          ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
+        )
+      ) : null;
+
+      let isAssignedAsEditor = false;
+      if (editorStage && (editorStage.userId || editorStage.userName)) {
+        isAssignedAsEditor = isUserMatch(editorStage.userId, currentUser) || isUserMatch(editorStage.userName, currentUser);
+      } else {
+        const assignedIds: string[] = typeof t.assignedUserIds === 'string'
+          ? JSON.parse(t.assignedUserIds)
+          : (t.assignedUserIds || []);
+        const isAssigned = assignedIds.some((id) => isUserMatch(id, currentUser));
+        const isStageAssignee = Array.isArray(parsedStages) && parsedStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+        isAssignedAsEditor = isAssigned || isStageAssignee;
+      }
+
+      if (!isAssignedAsEditor) {
         return false;
       }
     }
@@ -145,12 +161,29 @@ export default function EditingQueuePage() {
     // 4. PIC Filter
     if (selectedPic !== 'ALL') {
       const assignedIds = t.assignedUserIds ? (typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : t.assignedUserIds) : [];
-      if (selectedPic === 'ME') {
-        const isAssigned = assignedIds.includes(currentUser?.id) || assignedIds.includes(currentUser?.name);
-        if (!isAssigned) return false;
-      } else {
-        const isAssigned = assignedIds.includes(selectedPic);
-        if (!isAssigned) return false;
+      const stages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
+      const targetUser = selectedPic === 'ME' ? currentUser : allUsers.find((u) => u.id === selectedPic || isUserMatch(selectedPic, u));
+
+      if (targetUser) {
+        const editorStage = Array.isArray(stages) ? stages.find((s: any) => 
+          s && (
+            s.role === 'Editor' || 
+            s.taskType === 'Editing' || 
+            (s.name && String(s.name).toLowerCase().includes('edit')) ||
+            ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)
+          )
+        ) : null;
+
+        let isMatch = false;
+        if (editorStage && (editorStage.userId || editorStage.userName)) {
+          isMatch = isUserMatch(editorStage.userId, targetUser) || isUserMatch(editorStage.userName, targetUser);
+        } else {
+          const isAssigned = (Array.isArray(assignedIds) ? assignedIds : []).some((id: string) => isUserMatch(id, targetUser));
+          const isStageAssignee = Array.isArray(stages) && stages.some((s: any) => isUserMatch(s.userId, targetUser) || isUserMatch(s.userName, targetUser));
+          isMatch = isAssigned || isStageAssignee;
+        }
+
+        if (!isMatch) return false;
       }
     }
 
@@ -376,8 +409,10 @@ export default function EditingQueuePage() {
                     {(() => {
                       const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
                       const edStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) : null;
-                      return edStage?.format || t.format || 'Reels';
-                    })()} • PICs: {t.stages ? Array.from(new Set((typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages).map((s: any) => s.userName))).join(', ') : 'Unassigned'}
+                      const formatVal = edStage?.format || t.format || 'Reels';
+                      const editorPic = edStage?.userName || (Array.isArray(parsedStages) && parsedStages[0]?.userName) || 'Unassigned';
+                      return `${formatVal} • PICs: ${editorPic}`;
+                    })()}
                   </p>
                   {t.status === 'Revision' && t.comments && (typeof t.comments === 'string' ? JSON.parse(t.comments) : t.comments).length > 0 && (
                     <div className="mt-2 bg-rose-50 border border-rose-200 rounded-xl p-3 text-[11px] text-rose-900 leading-snug space-y-1">
@@ -426,11 +461,9 @@ export default function EditingQueuePage() {
                 <tbody className="divide-y divide-neutral-100 text-neutral-700">
                   {filteredTasks.map((t) => {
                     const parsedStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-                    const uniqueUserNames = Array.isArray(parsedStages)
-                      ? Array.from(new Set(parsedStages.map((s: any) => s.userName)))
-                      : [];
                     const edStage = Array.isArray(parsedStages) ? parsedStages.find((s: any) => s.role === 'Editor' || s.taskType === 'Editing' || ['Single Foto', 'Grafis', 'Story Video', 'Paket Static', 'Carousel', 'Reels'].includes(s.format)) : null;
                     const displayFormat = edStage?.format || t.format || 'Reels';
+                    const editorPic = edStage?.userName || (Array.isArray(parsedStages) && parsedStages[0]?.userName) || 'Unassigned';
 
                     return (
                       <tr key={t.id} onClick={() => handleOpenTask(t)} className="hover:bg-neutral-50 transition cursor-pointer">
@@ -468,7 +501,7 @@ export default function EditingQueuePage() {
                         </td>
                         <td className="px-4 py-3.5 font-mono text-neutral-500 font-bold">{t.deadline}</td>
                         <td className="px-4 py-3.5 font-semibold text-neutral-600">
-                          {uniqueUserNames.join(', ') || 'Unassigned'}
+                          {editorPic}
                         </td>
                         <td className="px-4 py-3.5 font-bold font-mono text-neutral-900">{t.score} pts</td>
                         <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
