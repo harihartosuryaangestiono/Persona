@@ -3,16 +3,18 @@
 import React, { useState } from 'react';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Trash2 } from 'lucide-react';
 import { hasPermission } from '@/lib/rbac';
 
 export default function LeaveRequestPage() {
-  const { currentUser } = useUser();
-  const { leaveRequests, submitLeave, approveLeave } = useData();
+  const { currentUser, allUsers } = useUser();
+  const { leaveRequests, submitLeave, approveLeave, deleteLeave } = useData();
 
+  const todayStr = new Date().toISOString().split('T')[0];
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-  const [startDate, setStartDate] = useState('2026-08-01');
-  const [endDate, setEndDate] = useState('2026-08-03');
+  const [targetUserId, setTargetUserId] = useState('');
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
   const [reason, setReason] = useState('');
   const [type, setType] = useState<'ANNUAL' | 'SICK' | 'EMERGENCY'>('ANNUAL');
 
@@ -39,9 +41,12 @@ export default function LeaveRequestPage() {
     e.preventDefault();
     if (!reason.trim()) return;
 
+    const chosenUserId = (canApprove && targetUserId) ? targetUserId : (currentUser?.id || 'u-devi');
+    const chosenUser = allUsers.find(u => u.id === chosenUserId) || currentUser;
+
     submitLeave({
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: chosenUser.id,
+      userName: chosenUser.name,
       startDate,
       endDate,
       reason,
@@ -64,8 +69,13 @@ export default function LeaveRequestPage() {
         </div>
 
         <button
-          onClick={() => setIsSubmitModalOpen(true)}
-          className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
+          onClick={() => {
+            setTargetUserId(currentUser?.id || '');
+            setStartDate(todayStr);
+            setEndDate(todayStr);
+            setIsSubmitModalOpen(true);
+          }}
+          className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs px-4 py-2 rounded-lg shadow-xs flex items-center gap-2 transition cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Request Leave
         </button>
@@ -147,18 +157,35 @@ export default function LeaveRequestPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {canApprove && l.status === 'PENDING' && l.userId !== currentUser?.id ? (
-                      <button
-                        onClick={() => approveLeave(l.id, currentUser.id)}
-                        className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] px-3 py-1 rounded-lg transition shadow-xs"
-                      >
-                        Approve
-                      </button>
-                    ) : (
-                      <span className="text-neutral-400 font-mono text-[10px]">
-                        {l.status === 'APPROVED' ? 'Approved' : 'Awaiting Approval'}
-                      </span>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      {canApprove && l.status === 'PENDING' && l.userId !== currentUser?.id ? (
+                        <button
+                          onClick={() => approveLeave(l.id, currentUser.id)}
+                          className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] px-3 py-1 rounded-lg transition shadow-xs cursor-pointer"
+                        >
+                          Approve
+                        </button>
+                      ) : (
+                        <span className="text-neutral-400 font-mono text-[10px]">
+                          {l.status === 'APPROVED' ? 'Approved' : 'Awaiting Approval'}
+                        </span>
+                      )}
+
+                      {(canApprove || l.userId === currentUser?.id) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Hapus pengajuan cuti ${l.userName || 'ini'} (${l.reason})?`)) {
+                              deleteLeave(l.id);
+                            }
+                          }}
+                          className="text-neutral-400 hover:text-red-600 p-1 transition rounded-md hover:bg-red-50 cursor-pointer"
+                          title="Hapus Pengajuan Cuti"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -194,6 +221,23 @@ export default function LeaveRequestPage() {
             </div>
 
             <div className="space-y-3 text-xs">
+              {canApprove && (
+                <div>
+                  <label className="block text-neutral-600 font-semibold mb-1">Employee</label>
+                  <select
+                    value={targetUserId}
+                    onChange={(e) => setTargetUserId(e.target.value)}
+                    className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
+                  >
+                    {allUsers.filter((u) => u.active !== false).map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} {u.id === currentUser?.id ? '(You)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-neutral-600 font-semibold mb-1">Start Date</label>

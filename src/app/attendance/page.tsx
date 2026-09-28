@@ -1,6 +1,5 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useUser } from '@/context/UserContext';
 import { useData } from '@/context/DataContext';
 import { 
@@ -19,7 +18,10 @@ import {
   Award, 
   Coffee, 
   LogOut, 
-  UserCheck 
+  UserCheck,
+  CalendarX,
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { 
   formatWorkingMinutes, 
@@ -45,6 +47,10 @@ export default function AttendancePage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
   const [filterLate, setFilterLate] = useState('');
+
+  // View mode for attendance records vs full daily employee status roster
+  const [viewMode, setViewMode] = useState<'LOGS' | 'ROSTER'>('LOGS');
+  const [rosterFilterStatus, setRosterFilterStatus] = useState<string>('');
 
   // Selected period for monthly metrics (Default to current month, e.g. "2026-08")
   const [selectedMonth, setSelectedMonth] = useState('2026-08');
@@ -177,6 +183,43 @@ export default function AttendancePage() {
       return !hasCheckedIn && !onLeave;
     }).length;
   }
+
+  // Daily Employee Status Roster calculation (Hadir, Cuti, Tidak Masuk)
+  const targetRosterDate = filterDate || todayJakartaStr;
+  const rosterItems = activeEmployees.map((u) => {
+    const attRecord = attendances.find(
+      (a) => a.userId === u.id && getJakartaDateString(new Date(a.date)) === targetRosterDate
+    );
+    const leaveRecord = leaveRequests.find((lr) => {
+      if (lr.userId !== u.id || lr.status !== 'APPROVED') return false;
+      const targetTime = new Date(targetRosterDate + 'T00:00:00.000Z').getTime();
+      const start = new Date(lr.startDate + 'T00:00:00.000Z').getTime();
+      const end = new Date(lr.endDate + 'T23:59:59.999Z').getTime();
+      return targetTime >= start && targetTime <= end;
+    });
+
+    let statusType: 'PRESENT' | 'ON_LEAVE' | 'ABSENT' = 'ABSENT';
+    if (attRecord) {
+      statusType = 'PRESENT';
+    } else if (leaveRecord) {
+      statusType = 'ON_LEAVE';
+    } else {
+      statusType = 'ABSENT';
+    }
+
+    return {
+      user: u,
+      attRecord,
+      leaveRecord,
+      statusType,
+    };
+  });
+
+  const filteredRosterItems = rosterItems.filter((item) => {
+    if (filterEmployee && item.user.id !== filterEmployee) return false;
+    if (rosterFilterStatus && item.statusType !== rosterFilterStatus) return false;
+    return true;
+  });
 
   // ----------------------------------------------------
   // METRICS: MONTHLY ANALYTICAL METRICS
@@ -458,27 +501,50 @@ export default function AttendancePage() {
       {/* 2. METRICS CARDS SECTION */}
       {isExecutive && (
         <div className="space-y-4">
-          <h3 className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider">
-            Today's Attendance Metrics ({formatJakartaFullDate(now)})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider">
+              Today's Attendance Metrics ({formatJakartaFullDate(now)})
+            </h3>
+            <span className="text-[11px] text-neutral-400">Click a card to filter status below</span>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs">
+            <div 
+              onClick={() => { setViewMode('ROSTER'); setRosterFilterStatus('PRESENT'); }}
+              className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs cursor-pointer hover:border-neutral-400 hover:shadow-xs transition"
+              title="Click to view present employees in Daily Roster"
+            >
               <span className="text-neutral-550 block text-[10px] font-bold text-neutral-400 uppercase">Present</span>
               <p className="text-2xl font-bold text-neutral-950 mt-1">{presentCount}</p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs">
+            <div 
+              onClick={() => { setViewMode('LOGS'); setFilterStatus('ACTIVE'); }}
+              className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs cursor-pointer hover:border-emerald-300 hover:shadow-xs transition"
+              title="Click to view currently active employees in Logs"
+            >
               <span className="text-neutral-550 block text-[10px] font-bold text-emerald-500 uppercase">Active</span>
               <p className="text-2xl font-bold text-emerald-600 mt-1">{activeCount}</p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs">
+            <div 
+              onClick={() => { setViewMode('LOGS'); setFilterStatus('COMPLETED'); }}
+              className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs cursor-pointer hover:border-neutral-400 hover:shadow-xs transition"
+              title="Click to view completed shifts in Logs"
+            >
               <span className="text-neutral-550 block text-[10px] font-bold text-neutral-500 uppercase">Completed</span>
               <p className="text-2xl font-bold text-neutral-700 mt-1">{completedCount}</p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs">
+            <div 
+              onClick={() => { setViewMode('LOGS'); setFilterLate('LATE'); }}
+              className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs cursor-pointer hover:border-amber-300 hover:shadow-xs transition"
+              title="Click to view late arrivals in Logs"
+            >
               <span className="text-neutral-550 block text-[10px] font-bold text-amber-600 uppercase">Late</span>
               <p className="text-2xl font-bold text-amber-700 mt-1">{lateCountToday}</p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs col-span-2 sm:col-span-1">
+            <div 
+              onClick={() => { setViewMode('ROSTER'); setRosterFilterStatus('ABSENT'); }}
+              className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs col-span-2 sm:col-span-1 cursor-pointer hover:border-red-300 hover:shadow-xs transition"
+              title="Click to view absent employees in Daily Roster"
+            >
               <span className="text-neutral-550 block text-[10px] font-bold text-neutral-400 uppercase">Absent</span>
               <p className="text-2xl font-bold text-neutral-900 mt-1">{absentCountToday}</p>
             </div>
@@ -564,20 +630,51 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {/* 4. ATTENDANCE HISTORY TABLE WITH FILTERS */}
+      {/* 4. ATTENDANCE HISTORY TABLE WITH FILTERS & ROSTER VIEW */}
       <div className="bg-white rounded-2xl border border-neutral-200/80 overflow-hidden shadow-xs">
         <div className="p-4 border-b border-neutral-100 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-xs text-neutral-900">
-              {isExecutive ? 'Recent Agency Attendance Records' : 'My Personal Attendance History'}
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {isExecutive ? (
+              <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-xl w-fit">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('LOGS')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    viewMode === 'LOGS'
+                      ? 'bg-white text-neutral-900 shadow-2xs'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  Clock-In Logs ({filteredAttendances.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('ROSTER')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'ROSTER'
+                      ? 'bg-white text-neutral-900 shadow-2xs'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Daily Status Roster (Hadir / Cuti / Absent)
+                </button>
+              </div>
+            ) : (
+              <span className="font-bold text-xs text-neutral-900">
+                My Personal Attendance History
+              </span>
+            )}
+
             <span className="text-[10px] font-bold text-neutral-400 font-mono">
-              Showing {filteredAttendances.length} record(s)
+              {viewMode === 'LOGS'
+                ? `Showing ${filteredAttendances.length} record(s)`
+                : `Date: ${targetRosterDate} (${filteredRosterItems.length} employees)`}
             </span>
           </div>
 
-          {/* Filtering row (Only for Admins/Executives) */}
-          {isExecutive && (
+          {/* Filtering row for LOGS view */}
+          {isExecutive && viewMode === 'LOGS' && (
             <div className="flex flex-wrap items-center gap-3 border-t border-neutral-50 pt-3 text-[11px] text-neutral-600 font-medium">
               <div className="flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-neutral-400" />
@@ -662,7 +759,78 @@ export default function AttendancePage() {
                     setFilterLocation('');
                     setFilterLate('');
                   }}
-                  className="text-red-500 hover:text-red-700 font-bold transition ml-auto text-[10px]"
+                  className="text-red-500 hover:text-red-700 font-bold transition ml-auto text-[10px] cursor-pointer"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Filtering row for ROSTER view */}
+          {isExecutive && viewMode === 'ROSTER' && (
+            <div className="flex flex-wrap items-center gap-3 border-t border-neutral-50 pt-3 text-[11px] text-neutral-600 font-medium">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-neutral-400" />
+                <span className="font-bold">Roster Date:</span>
+              </div>
+
+              {/* Date Filter */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={targetRosterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-0.5 text-neutral-800 focus:outline-hidden font-mono text-[10px] font-bold"
+                />
+                {filterDate && (
+                  <button
+                    onClick={() => setFilterDate('')}
+                    className="text-[10px] text-neutral-400 hover:text-neutral-600 underline ml-1 cursor-pointer"
+                  >
+                    Reset to Today
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter for Roster */}
+              <div className="flex items-center gap-1">
+                <span className="text-neutral-400">Roster Status:</span>
+                <select
+                  value={rosterFilterStatus}
+                  onChange={(e) => setRosterFilterStatus(e.target.value)}
+                  className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1 text-neutral-850 focus:outline-hidden font-semibold"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="PRESENT">🟢 Present / Hadir</option>
+                  <option value="ON_LEAVE">🟡 On Leave / Cuti / Izin</option>
+                  <option value="ABSENT">🔴 Absent / Tidak Masuk</option>
+                </select>
+              </div>
+
+              {/* Employee Filter */}
+              <div className="flex items-center gap-1">
+                <span className="text-neutral-400">Employee:</span>
+                <select
+                  value={filterEmployee}
+                  onChange={(e) => setFilterEmployee(e.target.value)}
+                  className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1 text-neutral-850 focus:outline-hidden"
+                >
+                  <option value="">All Employees</option>
+                  {activeEmployees.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(filterEmployee || rosterFilterStatus || filterDate) && (
+                <button
+                  onClick={() => {
+                    setFilterEmployee('');
+                    setRosterFilterStatus('');
+                    setFilterDate('');
+                  }}
+                  className="text-red-500 hover:text-red-700 font-bold transition ml-auto text-[10px] cursor-pointer"
                 >
                   Clear Filters
                 </button>
@@ -671,86 +839,202 @@ export default function AttendancePage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
-              <tr>
-                <th className="px-4 py-3">Employee</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Clock In</th>
-                <th className="px-4 py-3">Clock Out</th>
-                <th className="px-4 py-3">Location Mode</th>
-                <th className="px-4 py-3">Working Duration</th>
-                <th className="px-4 py-3 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100 text-neutral-700">
-              {filteredAttendances.length === 0 ? (
+        {viewMode === 'LOGS' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs whitespace-nowrap">
+              <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-neutral-400 font-medium">
-                    No attendance records found matching current query.
-                  </td>
+                  <th className="px-4 py-3">Employee</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Clock In</th>
+                  <th className="px-4 py-3">Clock Out</th>
+                  <th className="px-4 py-3">Location Mode</th>
+                  <th className="px-4 py-3">Working Duration</th>
+                  <th className="px-4 py-3 text-center">Status</th>
                 </tr>
-              ) : (
-                filteredAttendances.map((a) => {
-                  let workingDurationStr = '0m';
-                  if (a.status === 'ACTIVE' && !a.clockOut) {
-                    // Ticking timer for active table rows
-                    const elapsedMs = now.getTime() - new Date(a.clockIn).getTime();
-                    const elapsedMin = Math.max(0, Math.floor(elapsedMs / 60000));
-                    workingDurationStr = formatWorkingMinutes(elapsedMin);
-                  } else {
-                    workingDurationStr = formatWorkingMinutes(a.workingMinutes || 0);
-                  }
+              </thead>
+              <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                {filteredAttendances.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-neutral-400 font-medium">
+                      No attendance records found matching current query.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAttendances.map((a) => {
+                    let workingDurationStr = '0m';
+                    if (a.status === 'ACTIVE' && !a.clockOut) {
+                      // Ticking timer for active table rows
+                      const elapsedMs = now.getTime() - new Date(a.clockIn).getTime();
+                      const elapsedMin = Math.max(0, Math.floor(elapsedMs / 60000));
+                      workingDurationStr = formatWorkingMinutes(elapsedMin);
+                    } else {
+                      workingDurationStr = formatWorkingMinutes(a.workingMinutes || 0);
+                    }
 
-                  const isAttLate = a.isLate;
+                    const isAttLate = a.isLate;
 
-                  return (
-                    <tr key={a.id} className="hover:bg-neutral-50 transition">
-                      <td className="px-4 py-3 font-semibold text-neutral-900">
-                        {a.userName || 'Unknown User'}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-neutral-500">
-                        {getJakartaDateString(new Date(a.date))}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-neutral-900">
-                        {formatJakartaTime(a.clockIn)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-neutral-700">
-                        {a.clockOut ? formatJakartaTime(a.clockOut) : '—'}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-neutral-600 font-bold max-w-[150px] truncate">
-                        {a.locationMode}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-neutral-900">
-                        {workingDurationStr}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {a.status === 'ACTIVE' ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full">
-                              ● Working
+                    return (
+                      <tr key={a.id} className="hover:bg-neutral-50 transition">
+                        <td className="px-4 py-3 font-semibold text-neutral-900">
+                          {a.userName || 'Unknown User'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-neutral-500">
+                          {getJakartaDateString(new Date(a.date))}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-neutral-900">
+                          {formatJakartaTime(a.clockIn)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-neutral-700">
+                          {a.clockOut ? formatJakartaTime(a.clockOut) : '—'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-neutral-600 font-bold max-w-[150px] truncate">
+                          {a.locationMode}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-neutral-900">
+                          {workingDurationStr}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {a.status === 'ACTIVE' ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full">
+                                ● Working
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full">
+                                ✓ Completed
+                              </span>
+                            )}
+
+                            {isAttLate && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full" title={`Late by ${a.lateMinutes} minutes`}>
+                                Late {a.lateMinutes}m
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* DAILY STATUS ROSTER TABLE (HADIR / CUTI / ABSENT) */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs whitespace-nowrap">
+              <thead className="bg-neutral-50 text-neutral-500 font-semibold uppercase tracking-wider border-b border-neutral-200">
+                <tr>
+                  <th className="px-4 py-3">Employee</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3 text-center">Status Harian</th>
+                  <th className="px-4 py-3">Attendance / Leave Detail</th>
+                  <th className="px-4 py-3 text-right">Action / Reference</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                {filteredRosterItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-neutral-400 font-medium">
+                      No employees found for this roster view.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRosterItems.map((item) => {
+                    const { user, attRecord, leaveRecord, statusType } = item;
+
+                    return (
+                      <tr key={user.id} className="hover:bg-neutral-50 transition">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            {user.avatar ? (
+                              <img src={user.avatar} alt={user.name} className="w-6 h-6 rounded-full object-cover border border-neutral-200" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-neutral-200 text-neutral-700 flex items-center justify-center font-bold text-[10px]">
+                                {user.name?.[0] || 'U'}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-semibold text-neutral-900">{user.name}</p>
+                              <p className="text-[10px] text-neutral-400">{user.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-neutral-500">
+                          {targetRosterDate}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {statusType === 'PRESENT' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full">
+                              ● Hadir ({attRecord?.status === 'ACTIVE' ? 'Working' : 'Completed'})
                             </span>
+                          )}
+                          {statusType === 'ON_LEAVE' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">
+                              🏖️ Cuti / Izin ({leaveRecord?.type})
+                            </span>
+                          )}
+                          {statusType === 'ABSENT' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-full">
+                              ✕ Tidak Masuk (Absent)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {statusType === 'PRESENT' && attRecord && (
+                            <div className="space-y-0.5">
+                              <span className="font-mono text-neutral-900 font-semibold">
+                                In: {formatJakartaTime(attRecord.clockIn)}
+                                {attRecord.clockOut && ` • Out: ${formatJakartaTime(attRecord.clockOut)}`}
+                              </span>
+                              <span className="text-[10px] text-neutral-400 block font-mono">
+                                Mode: {attRecord.locationMode} • {formatWorkingMinutes(attRecord.workingMinutes || 0)}
+                                {attRecord.isLate && ` (Late ${attRecord.lateMinutes}m)`}
+                              </span>
+                            </div>
+                          )}
+                          {statusType === 'ON_LEAVE' && leaveRecord && (
+                            <div>
+                              <span className="font-semibold text-neutral-900">{leaveRecord.reason}</span>
+                              <span className="text-[10px] text-neutral-400 block font-mono">
+                                Periode: {leaveRecord.startDate} s/d {leaveRecord.endDate}
+                              </span>
+                            </div>
+                          )}
+                          {statusType === 'ABSENT' && (
+                            <span className="text-neutral-400 italic text-[11px]">
+                              Tidak ada catatan clock-in & tidak ada pengajuan cuti resmi.
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {statusType === 'ABSENT' ? (
+                            <Link
+                              href="/leave-request"
+                              className="inline-flex items-center gap-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[10px] font-semibold px-2.5 py-1 rounded-lg transition"
+                            >
+                              + Ajukan Cuti/Izin
+                            </Link>
+                          ) : statusType === 'ON_LEAVE' ? (
+                            <Link
+                              href="/leave-request"
+                              className="inline-flex items-center gap-1 text-neutral-500 hover:text-neutral-900 text-[10px] font-medium transition"
+                            >
+                              Lihat Leave Request <ExternalLink className="w-3 h-3" />
+                            </Link>
                           ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-full">
-                              ✓ Completed
-                            </span>
+                            <span className="text-neutral-400 text-[10px] font-mono">Recorded</span>
                           )}
-
-                          {isAttLate && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full" title={`Late by ${a.lateMinutes} minutes`}>
-                              Late {a.lateMinutes}m
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

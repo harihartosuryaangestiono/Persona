@@ -89,3 +89,23 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'Failed to update leave request' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Leave request ID required' }, { status: 400 });
+    }
+
+    await prisma.leaveRequest.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, id });
+  } catch (e: any) {
+    console.error('Error deleting leave request:', e);
+    return NextResponse.json({ error: 'Failed to delete leave request', message: e.message }, { status: 500 });
+  }
+}

@@ -46,6 +46,7 @@ interface DataContextType {
   clockOut: (userId: string) => Promise<{ success: boolean; error?: string }>;
   submitLeave: (leave: Partial<LeaveRequestItem>) => void;
   approveLeave: (leaveId: string, approvedByUserId: string) => void;
+  deleteLeave: (leaveId: string) => Promise<void>;
   approveTask: (taskId: string, nextStage: string, reviewerId: string, notes?: string) => void;
   addActivity: (userId: string, entityType: string, entityId: string, action: string, details: string) => void;
   saveClientBudget: (clientId: string, month: string, budget: number) => Promise<any>;
@@ -1092,6 +1093,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteLeave = async (leaveId: string) => {
+    setLeaveRequests((prev) => prev.filter((l) => l.id !== leaveId));
+
+    try {
+      await fetch(`/api/leave-request?id=${encodeURIComponent(leaveId)}`, {
+        method: 'DELETE',
+      });
+    } catch (e) {
+      console.error('Failed to delete leave request:', e);
+    }
+  };
+
   const approveTask = async (taskId: string, nextStage: string, reviewerId: string, notes?: string) => {
     await updateTaskStatus(taskId, (nextStage || 'Scheduling') as TaskItem['status']);
     addActivity(reviewerId || currentUser?.id || 'u-system', 'TASK', taskId, 'APPROVED', `Approved task and moved to ${nextStage || 'Scheduling'}`);
@@ -1205,6 +1218,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         clockOut,
         submitLeave,
         approveLeave,
+        deleteLeave,
         approveTask,
         addActivity,
         saveClientBudget,
