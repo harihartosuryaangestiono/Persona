@@ -428,9 +428,9 @@ export async function PATCH(req: Request) {
           updateData.handoverTime = new Date();
         }
 
-        // When a task is moved to Scheduling or Posted, ensure there's an explicit Scheduler stage and assignment if not present
+        // When a task is moved to Ready to Post, Scheduling or Posted, ensure there's an explicit Scheduler stage and assignment if not present
         const isProdCategory = ['production', 'assistant'].includes((categoryVal || '').toLowerCase()) || (taskTypeVal || '').toLowerCase().includes('production') || (taskTypeVal || '').toLowerCase().includes('shooting');
-        if ((dbStatus === 'Scheduling' || dbStatus === 'Posted') && !isProdCategory) {
+        if ((dbStatus === 'Ready to Post' || dbStatus === 'Scheduling' || dbStatus === 'Posted') && !isProdCategory) {
           if (dbStatus === 'Scheduling' && body.previewLink === undefined) {
             updateData.previewLink = '';
           }

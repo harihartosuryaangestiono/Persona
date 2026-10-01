@@ -616,10 +616,12 @@ export default function DynamicDashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {workspaceTasks
               .filter((t) => {
-                if (t.status !== 'Scheduling') return false;
+                const isReadyOrScheduling = t.status === 'Ready to Post' || t.status === 'Scheduling';
+                if (!isReadyOrScheduling) return false;
                 const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
                 const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-                return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+                const isAssigned = assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+                return isScheduler || isAssigned;
               })
               .slice(0, 4)
               .map((t) => (
@@ -641,10 +643,12 @@ export default function DynamicDashboardPage() {
                 </div>
               ))}
             {workspaceTasks.filter((t) => {
-              if (t.status !== 'Scheduling') return false;
+              const isReadyOrScheduling = t.status === 'Ready to Post' || t.status === 'Scheduling';
+              if (!isReadyOrScheduling) return false;
               const assignedIds = typeof t.assignedUserIds === 'string' ? JSON.parse(t.assignedUserIds) : (t.assignedUserIds || []);
               const logStages = t.stages ? (typeof t.stages === 'string' ? JSON.parse(t.stages) : t.stages) : [];
-              return assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+              const isAssigned = assignedIds.some((id: string) => isUserMatch(id, currentUser)) || logStages.some((s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser));
+              return isScheduler || isAssigned;
             }).length === 0 && (
               <p className="col-span-2 text-neutral-400 text-center py-8 italic">No contents ready to post.</p>
             )}

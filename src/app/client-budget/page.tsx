@@ -75,7 +75,7 @@ export default function ClientBudgetPage() {
   // Derive displayed budgets dynamically based on month & client onboarding month
   const displayedBudgets = useMemo(() => {
     const monthsToDisplay = selectedMonth === 'ALL'
-      ? ['2026-07', '2026-08', '2026-09']
+      ? ['2026-07', '2026-08', '2026-09', '2026-10']
       : [selectedMonth];
 
     const items: ClientMonthlyBudgetItem[] = [];
@@ -184,6 +184,14 @@ export default function ClientBudgetPage() {
             }`}
           >
             September 2026
+          </button>
+          <button
+            onClick={() => setSelectedMonth('2026-10')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
+              selectedMonth === '2026-10' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+            }`}
+          >
+            Oktober 2026
           </button>
         </div>
 

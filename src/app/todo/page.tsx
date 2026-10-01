@@ -130,6 +130,39 @@ export default function ToDoPage() {
             originalTask: t,
           });
         });
+
+        const hasSchedulerStage = stages.some((s: any) => {
+          const role = (s.role || '').toLowerCase();
+          const taskType = (s.taskType || '').toLowerCase();
+          return role.includes('scheduler') || role.includes('scheduling') || taskType.includes('scheduling');
+        });
+
+        if (!hasSchedulerStage && (t.status === 'Ready to Post' || t.status === 'Scheduling' || t.status === 'Posted')) {
+          const isMotoDW = (t.clientName && t.clientName.toLowerCase().includes('motodw')) || (t.clientId && (t.clientId.toLowerCase().includes('motodw') || t.clientId === '98451aed-8a97-4164-9c34-9e6186619613'));
+          const isTeamAnggi = t.workspaceId === 'ws-team-anggi' || isMotoDW;
+          const schedulerPic = isTeamAnggi ? 'Dinda' : 'Gigi';
+
+          rows.push({
+            rowId: `${t.id}-sched-row`,
+            originalTaskId: t.id,
+            clientId: t.clientId,
+            postingDate: t.postingDate,
+            deadline: t.deadline,
+            month: t.month,
+            year: t.year,
+            title: t.title,
+            picName: schedulerPic,
+            category: 'Scheduler',
+            taskType: 'Scheduling',
+            format: 'Per Post',
+            status: t.status === 'Posted' ? 'Posted' : t.status === 'Ready to Post' ? 'Ready to Post' : 'Scheduling',
+            score: 5 * (t.qty || 1),
+            qty: t.qty || 1,
+            previewLink: t.previewLink,
+            driveLink: t.driveLink,
+            originalTask: t,
+          });
+        }
       } else {
         // Derive roles from assignedUserIds or task properties
         const isSchedulerId = (id: string) => {
@@ -312,7 +345,7 @@ export default function ToDoPage() {
   };
 
   const availableMonths = useMemo(() => {
-    const set = new Set<string>(['2026-07', '2026-08', '2026-09']);
+    const set = new Set<string>(['2026-07', '2026-08', '2026-09', '2026-10']);
     allRows.forEach((r) => {
       const m = getRowMonthFormat(r);
       if (m) set.add(m);

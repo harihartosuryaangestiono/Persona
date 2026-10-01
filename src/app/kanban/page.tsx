@@ -316,7 +316,13 @@ export default function KanbanPage() {
     const isStageAssigneeToCurrentUser = currentUser && Array.isArray(logStages) && logStages.some(
       (s: any) => isUserMatch(s.userId, currentUser) || isUserMatch(s.userName, currentUser)
     );
-    const isExplicitlyAssigned = isAssignedToCurrentUser || isStageAssigneeToCurrentUser;
+    const isScheduler = currentUser && currentUser.roles.includes('Scheduler');
+    const isSchedulingStage = ['Ready to Post', 'Scheduling', 'Posted'].includes(t.status);
+    const hasSchedulingStage = Array.isArray(logStages) && logStages.some(
+      (s: any) => s.role === 'Scheduler' || s.role === 'Scheduling' || (s.taskType && String(s.taskType).toLowerCase().includes('scheduling'))
+    );
+
+    const isExplicitlyAssigned = isAssignedToCurrentUser || isStageAssigneeToCurrentUser || (isScheduler && (isSchedulingStage || hasSchedulingStage));
 
     // Filter by Active Board type (Requirement 5: Correct Workflow Detection based on Task Category)
     // Assigned tasks bypass board category filters so team members never miss tasks assigned to them
@@ -362,6 +368,8 @@ export default function KanbanPage() {
     // Role & Task Visibility Constraint:
     const isManager = currentUser.roles.includes('Admin') || currentUser.roles.includes('Owner') || currentUser.roles.includes('Strategist');
     if (isManager) return true;
+
+    if (isScheduler && (isSchedulingStage || hasSchedulingStage)) return true;
 
     const isCreator = (t as any).createdBy === currentUser.id || (t as any).createdBy === currentUser.name;
 
