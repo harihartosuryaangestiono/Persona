@@ -1164,27 +1164,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const saveClientBudget = async (clientId: string, month: string, budget: number) => {
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (currentUser) {
+        headers['X-User-Id'] = currentUser.id;
+      }
       const res = await fetch('/api/client-budget', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ clientId, month, budget }),
       });
-      if (res.ok) {
-        const saved = await res.json();
-        setBudgets((prev) => {
-          const exists = prev.some((b) => b.clientId === clientId && b.month === month);
-          if (exists) {
-            return prev.map((b) => (b.clientId === clientId && b.month === month ? saved : b));
-          } else {
-            return [...prev, saved];
-          }
-        });
-        return saved;
-      } else {
-        console.error('Failed to save monthly budget on server');
+      const result = await res.json();
+      if (!res.ok) {
+        showToast(result.error || 'Gagal menyimpan budget bulanan', 'error');
+        return;
       }
+
+      const saved = result as ClientMonthlyBudgetItem;
+      setBudgets((prev) => {
+        const exists = prev.some((b) => b.clientId === clientId && b.month === month);
+        if (exists) {
+          return prev.map((b) => (b.clientId === clientId && b.month === month ? saved : b));
+        } else {
+          return [...prev, saved];
+        }
+      });
+      return saved;
     } catch (e) {
       console.error('Error saving client budget:', e);
+      showToast('Terjadi kesalahan saat menyimpan budget bulanan', 'error');
     }
   };
 

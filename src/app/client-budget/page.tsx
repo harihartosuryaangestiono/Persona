@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
 import { Plus, Edit3, X, Save } from 'lucide-react';
 import { ClientMonthlyBudgetItem } from '@/lib/types';
+import { useUser } from '@/context/UserContext';
 
 // Helper to convert task period to budget month string format (e.g. July 2026 -> 2026-07)
 const getBudgetMonthFormat = (month: string, year: number) => {
@@ -58,8 +59,12 @@ const getClientOnboardingMonth = (client: any) => {
   return `${y}-${m}`;
 };
 
+const isBudgetMonth = (month: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+
 export default function ClientBudgetPage() {
   const { clients, budgets, tasks, saveClientBudget } = useData();
+  const { currentUser } = useUser();
+  const canManageBudgets = currentUser?.roles.some((role) => ['Admin', 'Owner'].includes(role)) ?? false;
   const [selectedMonth, setSelectedMonth] = useState('ALL');
 
   // Modal State for Add & Edit Budget
@@ -69,13 +74,27 @@ export default function ClientBudgetPage() {
 
   // New Budget Form State
   const [newClientId, setNewClientId] = useState(clients[0]?.id || '');
-  const [newMonth, setNewMonth] = useState('2026-09');
-  const [newBudgetPoints, setNewBudgetPoints] = useState(5000);
+  const [newMonth, setNewMonth] = useState('2026-11');
+  const [newBudgetPoints, setNewBudgetPoints] = useState(clients[0]?.monthlyPointBudget || 5000);
+
+  const availableMonths = useMemo(() => {
+    const months = new Set(['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12']);
+    budgets.forEach((budget) => {
+      if (isBudgetMonth(budget.month)) months.add(budget.month);
+    });
+    tasks.forEach((task) => {
+      if (!task.isArchived) {
+        const month = getBudgetMonthFormat(task.month, task.year);
+        if (isBudgetMonth(month)) months.add(month);
+      }
+    });
+    return Array.from(months).sort();
+  }, [budgets, tasks]);
 
   // Derive displayed budgets dynamically based on month & client onboarding month
   const displayedBudgets = useMemo(() => {
     const monthsToDisplay = selectedMonth === 'ALL'
-      ? ['2026-07', '2026-08', '2026-09', '2026-10']
+      ? availableMonths
       : [selectedMonth];
 
     const items: ClientMonthlyBudgetItem[] = [];
@@ -111,20 +130,23 @@ export default function ClientBudgetPage() {
     }
 
     return items;
-  }, [selectedMonth, clients, budgets, tasks]);
+  }, [selectedMonth, availableMonths, clients, budgets, tasks]);
 
   const handleAddBudget = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageBudgets) return;
     const targetClient = clients.find((c) => c.id === newClientId) || clients[0];
     if (!targetClient) return;
-    await saveClientBudget(targetClient.id, newMonth, newBudgetPoints);
+    const saved = await saveClientBudget(targetClient.id, newMonth, newBudgetPoints);
+    if (!saved) return;
     setIsAddModalOpen(false);
   };
 
   const handleUpdateBudget = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingBudget) return;
-    await saveClientBudget(editingBudget.clientId, editingBudget.month, editingBudget.budget);
+    if (!canManageBudgets || !editingBudget) return;
+    const saved = await saveClientBudget(editingBudget.clientId, editingBudget.month, editingBudget.budget);
+    if (!saved) return;
     setIsEditModalOpen(false);
     setEditingBudget(null);
   };
@@ -142,12 +164,14 @@ export default function ClientBudgetPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition"
-        >
-          <Plus className="w-4 h-4" /> Add Monthly Budget
-        </button>
+        {canManageBudgets && (
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition"
+          >
+            <Plus className="w-4 h-4" /> Add Monthly Budget
+          </button>
+        )}
       </div>
 
       {/* Month Filter Tabs */}
@@ -161,38 +185,17 @@ export default function ClientBudgetPage() {
           >
             All Months ({displayedBudgets.length})
           </button>
-          <button
-            onClick={() => setSelectedMonth('2026-07')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
-              selectedMonth === '2026-07' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            Juli 2026
-          </button>
-          <button
-            onClick={() => setSelectedMonth('2026-08')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
-              selectedMonth === '2026-08' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            Agustus 2026
-          </button>
-          <button
-            onClick={() => setSelectedMonth('2026-09')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
-              selectedMonth === '2026-09' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            September 2026
-          </button>
-          <button
-            onClick={() => setSelectedMonth('2026-10')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
-              selectedMonth === '2026-10' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            Oktober 2026
-          </button>
+          {availableMonths.map((month) => (
+            <button
+              key={month}
+              onClick={() => setSelectedMonth(month)}
+              className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition ${
+                selectedMonth === month ? 'bg-neutral-900 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              {formatMonthDisplay(month)}
+            </button>
+          ))}
         </div>
 
         <span className="text-xs text-neutral-500 font-mono">Client Point: 1 Point = Rp1.500 Budget</span>
@@ -211,7 +214,7 @@ export default function ClientBudgetPage() {
                 <th className="px-4 py-3.5 text-right">Sisa (pts)</th>
                 <th className="px-4 py-3.5 text-center">% Terpakai</th>
                 <th className="px-4 py-3.5 text-center">Status</th>
-                <th className="px-4 py-3.5 text-center">Actions</th>
+                {canManageBudgets && <th className="px-4 py-3.5 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 text-neutral-700">
@@ -254,18 +257,20 @@ export default function ClientBudgetPage() {
                         {isWarning ? 'Menuju batas' : 'Aman'}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-center">
-                      <button
-                        onClick={() => {
-                          setEditingBudget({ ...b, used: usedPoints, remaining: remainingPoints });
-                          setIsEditModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition"
-                        title="Edit Budget"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                    </td>
+                    {canManageBudgets && (
+                      <td className="px-4 py-3.5 text-center">
+                        <button
+                          onClick={() => {
+                            setEditingBudget({ ...b, used: usedPoints, remaining: remainingPoints });
+                            setIsEditModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition"
+                          title="Edit Budget"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -299,7 +304,12 @@ export default function ClientBudgetPage() {
                 <label className="block text-neutral-600 font-semibold mb-1">Select Client</label>
                 <select
                   value={newClientId}
-                  onChange={(e) => setNewClientId(e.target.value)}
+                  onChange={(e) => {
+                    const clientId = e.target.value;
+                    const client = clients.find((item) => item.id === clientId);
+                    setNewClientId(clientId);
+                    setNewBudgetPoints(client?.monthlyPointBudget || 5000);
+                  }}
                   className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900 focus:outline-none"
                 >
                   {clients.map((c) => (
@@ -312,16 +322,13 @@ export default function ClientBudgetPage() {
 
               <div>
                 <label className="block text-neutral-600 font-semibold mb-1">Month</label>
-                <select
+                <input
+                  type="month"
                   value={newMonth}
                   onChange={(e) => setNewMonth(e.target.value)}
                   className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
-                >
-                  <option value="2026-07">Juli 2026</option>
-                  <option value="2026-08">Agustus 2026</option>
-                  <option value="2026-09">September 2026</option>
-                  <option value="2026-10">Oktober 2026</option>
-                </select>
+                  required
+                />
               </div>
 
               <div>
